@@ -40,6 +40,13 @@ composer.lock
 # Database credentials and config
 application/config/database.php
 
+# ── User uploads (live only; never commit) ────────────────────
+assets/uploads/*
+!assets/uploads/.htaccess
+uploads/*
+!uploads/index.html
+!uploads/.htaccess
+
 # ── Environment / Secrets ─────────────────────────────────────
 .env
 .env.local
