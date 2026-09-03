@@ -10,25 +10,25 @@ cd "$APP_DIR"
 
 git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 
-# Keep live secrets / uploads across reset (reset --hard would delete untracked removals)
+# Move live secrets/uploads out of the tree so reset --hard cannot wipe them
+# and dirty tracked upload files cannot block checkout.
 tmpdir=$(mktemp -d)
 [[ -f "$APP_DIR/application/config/database.php" ]] && cp -a "$APP_DIR/application/config/database.php" "$tmpdir/database.php"
-[[ -d "$APP_DIR/assets/uploads" ]] && cp -a "$APP_DIR/assets/uploads" "$tmpdir/assets_uploads"
-[[ -d "$APP_DIR/uploads" ]] && cp -a "$APP_DIR/uploads" "$tmpdir/uploads"
+[[ -d "$APP_DIR/assets/uploads" ]] && mv "$APP_DIR/assets/uploads" "$tmpdir/assets_uploads"
+[[ -d "$APP_DIR/uploads" ]] && mv "$APP_DIR/uploads" "$tmpdir/uploads"
 
 git fetch --prune "$REMOTE" "$BRANCH"
-git checkout -B "$BRANCH" "$REMOTE/$BRANCH"
 git reset --hard "$REMOTE/$BRANCH"
 git clean -fd -e application/config/database.php -e uploads -e assets/uploads -e application/cache -e application/logs
 
 [[ -f "$tmpdir/database.php" ]] && cp -a "$tmpdir/database.php" "$APP_DIR/application/config/database.php"
 if [[ -d "$tmpdir/assets_uploads" ]]; then
-  mkdir -p "$APP_DIR/assets/uploads"
-  cp -a "$tmpdir/assets_uploads/." "$APP_DIR/assets/uploads/"
+  rm -rf "$APP_DIR/assets/uploads"
+  mv "$tmpdir/assets_uploads" "$APP_DIR/assets/uploads"
 fi
 if [[ -d "$tmpdir/uploads" ]]; then
-  mkdir -p "$APP_DIR/uploads"
-  cp -a "$tmpdir/uploads/." "$APP_DIR/uploads/"
+  rm -rf "$APP_DIR/uploads"
+  mv "$tmpdir/uploads" "$APP_DIR/uploads"
 fi
 rm -rf "$tmpdir"
 
