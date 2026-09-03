@@ -22,12 +22,12 @@
           </td>
           <td><?= ucfirst($p['type']) ?></td>
           <td>
-            <?= $p['type']==='percent' ? $p['value'].'%' : 'RM'.number_format($p['value'],2) ?>
+            <?= $p['type']==='percent' ? $p['value'].'%' : sk_currency_symbol($settings).number_format($p['value'],2) ?>
             <?php if ($p['max_discount']): ?>
-              <small class="text-muted d-block">Max RM<?= number_format($p['max_discount'],2) ?></small>
+              <small class="text-muted d-block">Max <?= sk_currency_symbol($settings) ?><?= number_format($p['max_discount'],2) ?></small>
             <?php endif; ?>
           </td>
-          <td>RM<?= number_format($p['min_order'],2) ?></td>
+          <td><?= sk_currency_symbol($settings) ?><?= number_format($p['min_order'],2) ?></td>
           <td>
             <?= $p['usage_count'] ?><?= $p['usage_limit'] ? '/' . $p['usage_limit'] : '' ?>
           </td>
@@ -76,7 +76,7 @@
             <label class="form-label">Discount Type</label>
             <select name="type" id="promoType" class="form-select">
               <option value="percent">Percentage (%)</option>
-              <option value="fixed">Fixed Amount (RM)</option>
+              <option value="fixed">Fixed Amount (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</option>
             </select>
           </div>
           <div class="col-md-4">
@@ -84,11 +84,11 @@
             <input type="number" name="value" id="promoValue" class="form-control" step="0.01" min="0" required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Max Discount (RM)</label>
+            <label class="form-label">Max Discount (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label>
             <input type="number" name="max_discount" id="promoMaxDisc" class="form-control" step="0.01">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Min Order (RM)</label>
+            <label class="form-label">Min Order (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label>
             <input type="number" name="min_order" id="promoMinOrder" class="form-control" value="0" min="0">
           </div>
           <div class="col-md-4">

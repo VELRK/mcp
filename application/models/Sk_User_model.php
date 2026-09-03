@@ -488,8 +488,6 @@ class Sk_User_model extends CI_Model {
         // Personal / wallet data — delete
         $this->_delete_rows_for_user('customer_wallet_transactions', $userId);
         $this->_delete_rows_for_user('customer_wallets', $userId);
-        $this->_delete_rows_for_user('customer_royalty_transactions', $userId);
-        $this->_delete_rows_for_user('customer_royalty', $userId);
 
         foreach ([
             'addresses',

@@ -12,7 +12,7 @@ class Dashboard extends Sk_Base {
 
     public function index() {
         $vid = $this->current_vendor_id();
-        $currency = $this->Sk_Admin_model->get_setting('currency_symbol') ?: 'RM';
+        $currency = sk_currency_symbol($this->Sk_Admin_model->get_settings());
 
         if ($vid) {
             $vendor = $this->Sk_Vendor_model->get_by_id($vid, false);

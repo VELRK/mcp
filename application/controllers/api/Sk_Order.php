@@ -133,13 +133,10 @@ class Sk_Order extends Sk_Base_Api {
             return $this->error($msg, 400, ['stock_issues' => $stock_issues]);
         }
 
-        // Promo — regular coupon or affiliate market code
+        // Promo — regular coupon
         $discount = 0;
         $promo_code = null;
-        $affiliate_id = null;
-        $affiliate_promo = null;
         $check = null;
-        $affCheck = null;
 
         if (!empty($data['promo_code'])) {
             $code = $data['promo_code'];
@@ -147,141 +144,39 @@ class Sk_Order extends Sk_Base_Api {
             if ($check['valid']) {
                 $discount   = $check['discount'];
                 $promo_code = strtoupper(trim($code));
-            } else {
-                $this->load->model('Sk_Affiliate_model');
-                $affCheck = $this->Sk_Affiliate_model->validate_checkout_code($code, $subtotal);
-                if ($affCheck['valid']) {
-                    $discount        = $affCheck['discount'];
-                    $promo_code      = $affCheck['code'];
-                    $affiliate_id    = (int)$affCheck['affiliate']['id'];
-                    $affiliate_promo = $affCheck['code'];
-                }
             }
         }
 
         $payment_method = strtolower(trim((string)($data['payment_method'] ?? 'razorpay')));
-        // Wallet is a separate full-pay method only — no partial wallet + gateway.
         if ($payment_method === 'wallet') {
-            $use_wallet = true;
-        } else {
-            $use_wallet = false;
+            return $this->error('Wallet payments are no longer available. Please pay with Razorpay or COD.');
         }
-        $use_royalty    = !empty($data['use_royalty']) || !empty($data['apply_royalty']);
-        $royalty_points_req = (int)($data['royalty_points'] ?? 0);
-        $wallet_discount = 0;
-        $wallet_amount   = 0.0;
-        $royalty_used_points = 0;
-        $royalty_used_rm     = 0.0;
-
-        $this->load->model(['Sk_Customer_wallet_model', 'Sk_Royalty_model']);
-        $this->load->helper('sk_royalty');
-        sk_royalty_ensure_schema();
-        $wallet_enabled = $this->Sk_Customer_wallet_model->is_enabled();
-        $settingsAll = $settings;
-        $royalty_enabled = sk_royalty_enabled($settingsAll);
-        $minRoyaltyPts = sk_royalty_min_redeem_points($settingsAll);
-        $minRoyaltyRm = sk_royalty_min_redeem_rm($settingsAll);
-
-        $uses_wallet = ($payment_method === 'wallet' && $wallet_enabled);
-
-        if ($payment_method === 'wallet' && !$wallet_enabled) {
-            return $this->error('Wallet payments are not enabled.');
+        if (!in_array($payment_method, ['razorpay', 'cod'], true)) {
+            $payment_method = 'razorpay';
         }
 
         $code_discount = $discount;
 
-        if ($uses_wallet) {
-            $wallet_discount = $this->Sk_Customer_wallet_model->calc_wallet_discount(max(0, $subtotal - $discount));
-            if ($wallet_discount > 0) {
-                $discount += $wallet_discount;
-            }
-        }
-
-        // Normal shipping from admin settings (threshold uses goods after promo — same as web).
-        // Wallet free delivery only when the admin checkbox is on.
         $goodsAfterPromo = max(0, $subtotal - $code_discount);
         $shipping = ($goodsAfterPromo <= 0)
             ? 0
             : ($goodsAfterPromo >= ($settings['free_shipping_above'] ?? 999) ? 0 : ($settings['shipping_charge'] ?? 50));
-        if ($uses_wallet && $this->Sk_Customer_wallet_model->is_wallet_free_shipping()) {
-            $shipping = 0;
-        }
         $taxable_amount = max(0, $subtotal - $discount);
         // Storefront does not charge/show GST
         $tax      = 0;
         $total    = round($taxable_amount + $shipping + $tax, 2);
 
-        // Royalty can stack with coupon/affiliate and wallet; remainder is paid by wallet / COD / online.
-        if ($use_royalty && $royalty_enabled) {
-            $availPts = $this->Sk_Royalty_model->get_points($user_id);
-            $availRm = $this->Sk_Royalty_model->points_to_rm($availPts);
-            $testUnlock = sk_royalty_test_unlock($settingsAll);
-            $needPts = $testUnlock ? 1 : $minRoyaltyPts;
-            $needRm = $testUnlock ? 0.01 : $minRoyaltyRm;
-            if ($availPts < $needPts || round($availRm, 2) < round($needRm, 2)) {
-                return $this->error(
-                    $testUnlock
-                        ? ('No royalty points to apply. You have ' . $availPts . ' pts.')
-                        : ('Need at least RM ' . number_format($minRoyaltyRm, 0)
-                            . ' (' . $minRoyaltyPts . ' pts) royalty to pay with points. You have '
-                            . $availPts . ' pts (RM ' . number_format($availRm, 2) . ').')
-                );
-            }
-            if ($total <= 0) {
-                return $this->error('Cart is empty.');
-            }
-            $ptsToUse = $royalty_points_req > 0 ? min($royalty_points_req, $availPts) : $availPts;
-            $wantRm = $this->Sk_Royalty_model->points_to_rm($ptsToUse);
-            $royalty_used_rm = round(min($wantRm, $total), 2);
-            $royalty_used_points = $this->Sk_Royalty_model->rm_to_points($royalty_used_rm);
-            if ($royalty_used_rm <= 0 || $royalty_used_points < 1) {
-                return $this->error('Could not apply royalty points to this order.');
-            }
-        }
+        $gateway_amount = $total;
+        $is_paid_now    = false;
+        $is_cod         = $payment_method === 'cod';
+        $confirm_now    = $is_cod;
+        $is_razorpay_due = !$confirm_now && $payment_method === 'razorpay';
 
-        $dueAfterRoyalty = round(max(0, $total - $royalty_used_rm), 2);
-
-        if ($uses_wallet && $dueAfterRoyalty > 0) {
-            $walletInfo = $this->Sk_Customer_wallet_model->get_checkout_info($user_id);
-            $balance = round((float)($walletInfo['balance'] ?? 0), 2);
-            // Wallet method: balance must cover the remainder after royalty (and any promo).
-            if ($balance + 0.009 < $dueAfterRoyalty) {
-                return $this->error(
-                    'Insufficient wallet balance. Need RM ' . number_format($dueAfterRoyalty, 2)
-                    . ' (you have RM ' . number_format($balance, 2) . ').'
-                    . ($royalty_used_rm > 0 ? ' After royalty, wallet must cover the remaining amount.' : ' Wallet pays the full order only — no payment gateway.')
-                );
-            }
-            $wallet_amount = $dueAfterRoyalty;
-        }
-
-        if ($payment_method === 'wallet') {
-            if (round($wallet_amount + $royalty_used_rm, 2) + 0.009 < $total) {
-                return $this->error('Insufficient wallet balance for this order.');
-            }
-            // Force method + paid state — never open Razorpay for wallet.
-            $payment_method = 'wallet';
-        }
-
-        $gateway_amount = round(max(0, $total - $royalty_used_rm - $wallet_amount), 2);
-        // Fully covered by royalty and/or wallet → paid now (no COD/online remainder)
-        $is_paid_now    = ($gateway_amount <= 0.009);
-        // COD + fully paid (wallet/royalty) → Confirmed immediately.
-        // Unpaid Razorpay → payment_attempt until verify succeeds (no cancel on modal close).
-        $is_cod         = strtolower((string)$payment_method) === 'cod';
-        $confirm_now    = $is_paid_now || $is_cod;
-        $is_razorpay_due = !$confirm_now && strtolower((string)$payment_method) === 'razorpay';
-
-        // Safety: wallet method must never leave a gateway remainder.
-        if ($payment_method === 'wallet' && !$is_paid_now) {
-            return $this->error('Insufficient wallet balance for this order.');
-        }
         $this->_ensure_order_wallet_schema();
         $this->_ensure_order_discount_schema();
         $this->_ensure_order_source_schema();
         $this->Sk_Order_model->ensure_payment_attempt_status();
-        $this->load->helper(['sk_jt_express', 'sk_vendor_dashboard']);
-        sk_jt_express_ensure_schema();
+        $this->load->helper('sk_vendor_dashboard');
         sk_vendor_dashboard_ensure_schema();
         $now = date('Y-m-d H:i:s');
         $order_data = [
@@ -290,26 +185,17 @@ class Sk_Order extends Sk_Base_Api {
             'shipping'         => $shipping,
             'tax'              => $tax,
             'discount'         => $discount,
-            'affiliate_discount' => $affiliate_id ? $code_discount : 0,
-            'wallet_discount'  => $wallet_discount,
+            'wallet_discount'  => 0,
             'promo_code'       => $promo_code,
-            'affiliate_id'     => $affiliate_id,
-            'affiliate_promo'  => $affiliate_promo,
             'total'            => $total,
-            'wallet_amount'    => $wallet_amount,
-            'royalty_used_points' => $royalty_used_points,
-            'royalty_used_rm'     => $royalty_used_rm,
+            'wallet_amount'    => 0,
             'order_source'     => $this->_resolve_order_source($data),
             'payment_method'   => $payment_method,
             'payment_status'   => $is_paid_now ? 'paid' : 'pending',
             'status'           => $confirm_now ? 'confirmed' : ($is_razorpay_due ? 'payment_attempt' : 'pending'),
             'status_updated_at'=> $now,
             'confirmed_at'     => $confirm_now ? $now : null,
-            'notes'            => trim(
-                ($data['note'] ?? $data['notes'] ?? '')
-                . ($wallet_discount > 0 ? ' [Wallet discount: ' . $wallet_discount . ']' : '')
-                . ($royalty_used_points > 0 ? ' [Royalty redeemed: ' . $royalty_used_points . ' pts / RM ' . number_format($royalty_used_rm, 2) . ']' : '')
-            ) ?: null,
+            'notes'            => trim($data['note'] ?? $data['notes'] ?? '') ?: null,
             'shipping_name'    => $addr['full_name'],
             'shipping_phone'   => $shippingPhone,
             'shipping_line1'   => $addr['line1'],
@@ -317,7 +203,7 @@ class Sk_Order extends Sk_Base_Api {
             'shipping_city'    => $addr['city'],
             'shipping_state'   => $addr['state'],
             'shipping_pincode' => $addr['pincode'],
-            'shipping_country' => $addr['country'] ?? ($settings['default_country'] ?? 'Malaysia'),
+            'shipping_country' => $addr['country'] ?? ($settings['default_country'] ?? 'India'),
         ];
 
         // Billing address (optional) — checkbox "same as shipping" sends billing_same=true
@@ -338,7 +224,7 @@ class Sk_Order extends Sk_Base_Api {
         $order_data['billing_city']     = $bill['city'] ?? $addr['city'];
         $order_data['billing_state']    = $bill['state'] ?? $addr['state'];
         $order_data['billing_pincode']  = $bill['pincode'] ?? $addr['pincode'];
-        $order_data['billing_country']  = $bill['country'] ?? ($addr['country'] ?? 'Malaysia');
+        $order_data['billing_country']  = $bill['country'] ?? ($addr['country'] ?? 'India');
 
         // Keep My Addresses in sync for first-time checkout (OTP / new accounts)
         $this->Sk_User_model->ensure_default_shipping_address($user_id, [
@@ -349,7 +235,7 @@ class Sk_Order extends Sk_Base_Api {
             'city'         => $addr['city'],
             'state'        => $addr['state'],
             'pincode'      => $addr['pincode'],
-            'country'      => $addr['country'] ?? ($settings['default_country'] ?? 'Malaysia'),
+            'country'      => $addr['country'] ?? ($settings['default_country'] ?? 'India'),
             'company_name' => $addr['company_name'] ?? '',
         ]);
 
@@ -358,53 +244,12 @@ class Sk_Order extends Sk_Base_Api {
 
         $order_id = $this->Sk_Order_model->create($order_data, $order_items);
 
-        if ($wallet_amount > 0) {
-            $payDesc = 'Wallet full payment for order #' . $order_id;
-            if (!$this->Sk_Customer_wallet_model->apply_wallet_payment(
-                $user_id,
-                $wallet_amount,
-                $order_id,
-                $payDesc
-            )) {
-                $this->db->where('id', $order_id)->delete('orders');
-                $this->db->where('order_id', $order_id)->delete('order_items');
-                return $this->error('Insufficient wallet balance for this order.');
-            }
-        }
-
-        // Redeem royalty only when order is confirmed now (COD / wallet / fully paid).
-        // Unpaid Razorpay (payment_attempt) keeps points until payment verify confirms.
-        if ($confirm_now && $royalty_used_points > 0 && $royalty_used_rm > 0) {
-            $orderForRoyalty = array_merge($order_data, [
-                'id' => $order_id,
-                'user_id' => $user_id,
-                'royalty_used_points' => $royalty_used_points,
-                'royalty_used_rm' => $royalty_used_rm,
-                'status' => 'confirmed',
-            ]);
-            $debitRes = sk_royalty_debit_for_order($orderForRoyalty);
-            if (empty($debitRes['success'])) {
-                if ($wallet_amount > 0) {
-                    $this->Sk_Customer_wallet_model->refund_order_payment($user_id, $order_id, $wallet_amount);
-                }
-                $this->db->where('id', $order_id)->delete('orders');
-                $this->db->where('order_id', $order_id)->delete('order_items');
-                return $this->error($debitRes['message'] ?? 'Insufficient royalty points for this order.');
-            }
-        }
-
         // Record promo usage
         if ($promo_code && !empty($check['valid']) && !empty($check['promo'])) {
             $this->Sk_Promo_model->record_usage($check['promo']['id'], $user_id, $order_id);
         }
 
-        // Affiliate commission when market code used
-        if ($affiliate_id) {
-            $this->load->model('Sk_Affiliate_model');
-            $this->Sk_Affiliate_model->record_order_commission($affiliate_id, $order_id, $subtotal, $user_id);
-        }
-
-        // Clear paid products from cart (wallet / COD / fully paid). App must also drop these from local cache.
+        // Clear paid products from cart (COD / fully paid). App must also drop these from local cache.
         $this->load->helper('sk_razorpay');
         $cartClearLines = [];
         if ($confirm_now) {
@@ -414,48 +259,25 @@ class Sk_Order extends Sk_Base_Api {
 
         $order = $this->Sk_Order_model->get_by_id($order_id, $user_id);
 
-        // Royalty earn after paid order, or immediately for COD
-        if (($order['payment_status'] ?? '') === 'paid'
-            || strtolower((string)($order['payment_method'] ?? '')) === 'cod') {
-            sk_royalty_credit_for_order($order);
-            $order = $this->Sk_Order_model->get_by_id($order_id, $user_id);
-        }
-
-        // Email + WhatsApp only when order is paid now or COD/wallet.
+        // Email + WhatsApp only when order is paid now or COD.
         // Unpaid Razorpay (payment_attempt): notify after payment/verify only.
         $this->load->helper(['sk_mailer', 'sk_invoice', 'sk_whatsapp']);
         sk_invoice_ensure_vendor_schema();
         $settings = $this->get_settings();
-        if (in_array($payment_method, ['cod', 'wallet'], true) || $is_paid_now) {
+        if ($payment_method === 'cod' || $is_paid_now) {
             sk_mail_order_invoice($order, $settings);
             $waStatus = ($order['status'] ?? '') ?: 'confirmed';
             sk_whatsapp_notify_order_status($order, $waStatus, $settings);
         }
 
-        $confirmMsg = 'Order placed successfully.';
-        if ($confirm_now && $payment_method === 'wallet') {
-            $confirmMsg = 'Paid with wallet. Your order is confirmed.';
-        } elseif ($is_razorpay_due) {
-            $confirmMsg = 'Order saved. Complete Curlec payment to confirm.';
-        }
+        $confirmMsg = $is_razorpay_due
+            ? 'Order saved. Complete Razorpay payment to confirm.'
+            : 'Order placed successfully.';
 
         $this->success([
             'order' => $order,
             'confirmed' => $confirm_now,
             'cart_clear_lines' => $cartClearLines,
-            'wallet' => [
-                'amount'                     => round((float)$wallet_amount, 2),
-                'discount'                   => round((float)$wallet_discount, 2),
-                'discount_percent'           => $uses_wallet
-                    ? (float)$this->Sk_Customer_wallet_model->get_wallet_discount_percent()
-                    : 0,
-                'discount_min_rm'            => (float)$this->Sk_Customer_wallet_model->get_wallet_discount_min_rm(),
-                'discount_eligible'          => $uses_wallet && $wallet_discount > 0,
-                'effective_discount_percent' => ($uses_wallet && $wallet_discount > 0)
-                    ? (float)$this->Sk_Customer_wallet_model->get_wallet_discount_percent()
-                    : 0,
-                'free_shipping'              => $uses_wallet && $this->Sk_Customer_wallet_model->is_wallet_free_shipping(),
-            ],
             'payment' => [
                 'requires_gateway' => $is_razorpay_due,
                 'gateway_amount'   => $gateway_amount,
@@ -466,8 +288,6 @@ class Sk_Order extends Sk_Base_Api {
 
     public function index() {
         $this->auth_required();
-        $this->load->helper('sk_jt_express');
-        sk_jt_express_ensure_schema();
         $page   = max(1, (int)($this->input->get('page') ?? 1));
         $limit  = 10;
         $offset = ($page - 1) * $limit;
@@ -475,7 +295,6 @@ class Sk_Order extends Sk_Base_Api {
         // Attach items to each order for frontend display
         foreach ($orders as &$o) {
             $o['items'] = $this->Sk_Order_model->get_items($o['id']);
-            sk_order_attach_tracking($o);
         }
         unset($o);
         $this->success($orders);
@@ -483,11 +302,8 @@ class Sk_Order extends Sk_Base_Api {
 
     public function show($id) {
         $this->auth_required();
-        $this->load->helper('sk_jt_express');
-        sk_jt_express_ensure_schema();
         $order = $this->Sk_Order_model->get_by_id($id, $this->user['user_id']);
         if (!$order) return $this->error('Order not found.', 404);
-        sk_order_attach_tracking($order);
         $this->success($order);
     }
 
@@ -498,7 +314,6 @@ class Sk_Order extends Sk_Base_Api {
             return $this->error('Order not found.', 404);
         }
 
-        $this->_jt_cancel_if_needed($order);
         $this->_ensure_order_wallet_schema();
 
         $result = $this->Sk_Order_model->cancel_order(
@@ -560,32 +375,6 @@ class Sk_Order extends Sk_Base_Api {
         header('Cache-Control: private, max-age=0, must-revalidate');
         echo $pdf;
         exit;
-    }
-
-    private function _jt_cancel_if_needed(array $order) {
-        $txId = $order['jt_txlogistic_id'] ?? $order['order_number'] ?? '';
-        $billCode = trim((string)($order['jt_bill_code'] ?? $order['tracking_number'] ?? ''));
-        if ($txId === '' && $billCode === '') {
-            return;
-        }
-        if (($order['jt_courier_status'] ?? '') === 'cancelled') {
-            return;
-        }
-        $settings = $this->get_settings();
-        if (empty($settings['jt_express_enabled']) || $settings['jt_express_enabled'] === '0') {
-            return;
-        }
-        $this->load->library('Jt_express', $settings);
-        if (!$this->jt_express->is_enabled()) {
-            return;
-        }
-        $result = $this->jt_express->cancel_order($txId, 'Cancelled by customer', $billCode);
-        if (!empty($result['success'])) {
-            $this->Sk_Order_model->update_jt_shipment((int)$order['id'], [
-                'jt_courier_status' => 'cancelled',
-                'jt_bill_code'      => null,
-            ]);
-        }
     }
 
     private function _ensure_order_wallet_schema(): void {

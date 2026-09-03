@@ -1,4 +1,4 @@
-<?php $currency = $settings['currency_symbol'] ?? 'RM'; ?>
+<?php $currency = sk_currency_symbol($settings); ?>
 
 <div class="sk-page-header">
   <h5 class="sk-page-title"><i class="bi bi-person me-2 text-warning"></i><?= htmlspecialchars($customer['name']) ?></h5>
@@ -11,7 +11,7 @@
               var name = <?= json_encode($customer['name']) ?>;
               var url = <?= json_encode(site_url('admin/customers/delete/'.(int)$customer['id'])) ?>;
               var listUrl = <?= json_encode(site_url('admin/customers')) ?>;
-              if (!confirm('Permanently delete \"' + name + '\"?\n\n• Account, addresses, cart, wallet and reviews will be removed.\n• Order history is KEPT for reports/invoices (customer link removed).\n\nThis cannot be undone.')) return;
+              if (!confirm('Permanently delete \"' + name + '\"?\n\n• Account, addresses, cart and reviews will be removed.\n• Order history is KEPT for reports/invoices (customer link removed).\n\nThis cannot be undone.')) return;
               $.ajax({
                 url: url,
                 method: 'POST',

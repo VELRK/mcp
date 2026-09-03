@@ -6,21 +6,13 @@ require_once APPPATH . 'controllers/admin/Sk_Base.php';
 class Settings extends Sk_Base {
 
     public function index() {
-        $this->load->helper(['sk_invoice', 'sk_jt_express', 'sk_isms', 'sk_whatsapp']);
+        $this->load->helper(['sk_invoice', 'sk_isms', 'sk_whatsapp', 'sk_whatsapp_cloud']);
         sk_invoice_ensure_vendor_schema();
-        sk_jt_express_ensure_schema();
         sk_isms_ensure_schema();
         sk_whatsapp_ensure_settings();
+        sk_wa_cloud_ensure_schema();
         $data['title']    = 'Settings - 2DEAL Admin';
         $data['settings'] = $this->Sk_Admin_model->get_settings();
-        $data['jt_config'] = sk_jt_express_config();
-        $testUser = $this->_find_test_user($data['settings']);
-        $data['test_wallet_user'] = $testUser;
-        $data['test_wallet_balance'] = 0.0;
-        if ($testUser) {
-            $this->load->model('Sk_Customer_wallet_model');
-            $data['test_wallet_balance'] = $this->Sk_Customer_wallet_model->resolve_wallet_balance((int)$testUser['id']);
-        }
         $this->render('settings/index', $data);
     }
 
@@ -29,31 +21,30 @@ class Settings extends Sk_Base {
             redirect('admin/settings');
             return;
         }
-        $this->load->helper(['sk_isms', 'sk_whatsapp']);
+        $this->load->helper(['sk_isms', 'sk_whatsapp', 'sk_whatsapp_cloud']);
         sk_whatsapp_ensure_settings();
+        sk_wa_cloud_ensure_schema();
         $fields = [
             'site_name', 'site_email', 'site_phone', 'site_address',
-            'currency', 'currency_symbol', 'tax_rate', 'shipping_charge',
+            'currency', 'currency_symbol', 'currency_code', 'tax_rate', 'shipping_charge',
             'free_shipping_above', 'razorpay_key_id', 'razorpay_key_secret',
             'razorpay_webhook_secret', 'razorpay_mode', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass',
             'smtp_from_name', 'admin_email', 'meta_title', 'meta_desc', 'meta_keywords', 'seo_og_image',
             'head_scripts', 'footer_scripts', 'google_analytics', 'top_bar_text',
             'whatsapp_number',
             'askeva_api_url', 'askeva_api_token', 'askeva_order_template', 'askeva_template_lang',
+            'wa_cloud_phone_number_id', 'wa_cloud_waba_id', 'wa_cloud_access_token',
+            'wa_cloud_app_secret', 'wa_cloud_verify_token', 'wa_cloud_api_version',
+            'wa_mcp_url', 'wa_mcp_token', 'wa_mcp_timeout',
             'company_legal_name', 'gstin', 'pan_no', 'state_code', 'invoice_prefix', 'invoice_footer',
-            'jt_express_api_account', 'jt_express_private_key', 'jt_express_customer_code',
-            'jt_express_customer_name', 'jt_express_customer_password', 'jt_express_demo_uuid',
-            'jt_express_default_weight', 'jt_express_sender_name', 'jt_express_sender_phone',
-            'jt_express_sender_address', 'jt_express_sender_city', 'jt_express_sender_state',
-            'jt_express_sender_postcode',
             'isms_username', 'isms_password', 'isms_api_key', 'isms_sender_id', 'isms_message',
             'isms_country_code', 'isms_otp_interval', 'isms_test_otp', 'isms_test_phone',
         ];
         $raw_fields = [
             'isms_password', 'isms_api_key', 'smtp_pass', 'razorpay_key_secret',
             'razorpay_webhook_secret',
-            'jt_express_private_key', 'jt_express_customer_password',
-            'askeva_api_token',
+            'askeva_api_token', 'wa_cloud_access_token', 'wa_cloud_app_secret',
+            'wa_mcp_token',
         ];
         $preserve_if_empty = $raw_fields;
 
@@ -78,14 +69,21 @@ class Settings extends Sk_Base {
             }
             $data[$f] = is_string($val) ? trim($val) : $val;
         }
+        if (isset($data['currency_code'])) {
+            $data['currency_code'] = strtoupper(preg_replace('/[^A-Za-z]/', '', $data['currency_code']) ?: 'INR');
+        }
+        $data['payment_gateway'] = 'razorpay';
         // Checkbox: absent when unchecked, present with value "1" when checked
         $data['newsletter_popup_enabled'] = $this->input->post('newsletter_popup_enabled') ? '1' : '0';
         $data['top_bar_enabled'] = $this->input->post('top_bar_enabled') ? '1' : '0';
         $data['whatsapp_enabled'] = $this->input->post('whatsapp_enabled') ? '1' : '0';
         $data['askeva_whatsapp_enabled'] = $this->input->post('askeva_whatsapp_enabled') ? '1' : '0';
-        $data['jt_express_enabled'] = $this->input->post('jt_express_enabled') ? '1' : '0';
-        $data['jt_express_sandbox'] = $this->input->post('jt_express_sandbox') ? '1' : '0';
         $data['isms_enabled'] = $this->input->post('isms_enabled') ? '1' : '0';
+        $settingsTab = trim((string)$this->input->post('settings_tab'));
+        if ($settingsTab === 'wacloud' || $this->input->post('wa_cloud_phone_number_id') !== null) {
+            $data['wa_cloud_enabled'] = $this->input->post('wa_cloud_enabled') ? '1' : '0';
+            $data['wa_mcp_enabled'] = $this->input->post('wa_mcp_enabled') ? '1' : '0';
+        }
 
         // Always persist Askeva text fields when present (including empty template).
         foreach (['askeva_api_url', 'askeva_order_template', 'askeva_template_lang'] as $askevaField) {
@@ -290,83 +288,5 @@ class Settings extends Sk_Base {
         $this->Sk_Admin_model->save_settings($data);
         $this->session->set_flashdata('success', 'iSMS credentials saved. Click "Test iSMS connection" to verify.');
         redirect('admin/settings?tab=sms');
-    }
-
-    public function credit_test_wallet() {
-        if (strtoupper((string)$this->input->server('REQUEST_METHOD')) !== 'POST') {
-            redirect('admin/settings?tab=sms');
-            return;
-        }
-        if (!$this->is_super_admin() || $this->current_vendor_id()) {
-            show_error('Access denied.', 403);
-        }
-
-        $this->load->helper('sk_isms');
-        $this->load->model('Sk_Customer_wallet_model');
-        $settings = $this->Sk_Admin_model->get_settings();
-        $amount = (float)$this->input->post('test_wallet_amount');
-        if ($amount <= 0) {
-            $amount = 500;
-        }
-        if ($amount > 50000) {
-            $amount = 50000;
-        }
-
-        $user = $this->_find_test_user($settings);
-        if (!$user) {
-            $phone = sk_isms_canonical_test_phone($settings);
-            $this->Sk_User_model->ensure_otp_user_schema();
-            $userId = $this->Sk_User_model->create([
-                'name'     => 'Test Account',
-                'email'    => null,
-                'password' => bin2hex(random_bytes(16)),
-                'phone'    => $phone,
-                'status'   => 1,
-            ]);
-            $user = $this->Sk_User_model->get_by_id($userId);
-        }
-        if (!$user) {
-            $this->session->set_flashdata('error', 'Could not find or create the test account.');
-            redirect('admin/settings?tab=sms');
-            return;
-        }
-
-        $ok = $this->Sk_Customer_wallet_model->add_funds(
-            (int)$user['id'],
-            $amount,
-            'QA test wallet credit',
-            (int)($this->admin['id'] ?? 0) ?: null
-        );
-        if ($ok) {
-            $bal = $this->Sk_Customer_wallet_model->resolve_wallet_balance((int)$user['id']);
-            $this->session->set_flashdata(
-                'success',
-                'Added RM ' . number_format($amount, 2) . ' to test account wallet (user #' . (int)$user['id']
-                . '). New balance RM ' . number_format($bal, 2)
-                . '. Login with 0180000000 + OTP 1234 and pay with wallet at checkout.'
-            );
-        } else {
-            $this->session->set_flashdata('error', 'Failed to add wallet funds.');
-        }
-        redirect('admin/settings?tab=sms');
-    }
-
-    private function _find_test_user(array $settings): ?array {
-        $this->load->helper('sk_isms');
-        $candidates = sk_isms_test_phone_aliases($settings);
-        $found = [];
-        foreach ($candidates as $phone) {
-            $user = $this->Sk_User_model->get_by_phone($phone);
-            if ($user && empty($user['deleted_at'])) {
-                $found[(int)$user['id']] = $user;
-            }
-        }
-        if (!$found) {
-            return null;
-        }
-        uasort($found, static function ($a, $b) {
-            return ((int)$a['id']) <=> ((int)$b['id']);
-        });
-        return reset($found) ?: null;
     }
 }

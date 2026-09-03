@@ -11,7 +11,7 @@ function Gallery() {
   return (
     <div className="themesFlat px-10 pb-40">
       <div className="sect-heading sect-heading-classic text-center wow fadeInUp">
-        <h3 className="s-title">Special Curations</h3>
+        <h3 className="s-title">Curated for you</h3>
         <p className="s-desc text-muted">Handpicked exclusively for you</p>
       </div>
 

@@ -4,8 +4,6 @@ import { useCategories } from "@/hooks/useApi";
 import type { ApiCategory } from "@/services/api";
 import { useAuthStore } from "@/store/authStore";
 import { useModalStore } from "@/store/modalStore";
-import WalletHeaderIcon from "../headers/WalletHeaderIcon";
-
 function catUrl(c: ApiCategory) { return `/shop-default?category_id=${c.id}`; }
 function subUrl(s: ApiCategory) { return `/shop-default?subcategory_id=${s.id}`; }
 
@@ -214,21 +212,6 @@ export default function MobileMenu({
                   <span className="fw-medium">Account</span>
                 </button>
               )}
-            </li>
-            <li>
-              <div
-                onClick={() => {
-                  const el = elRef.current;
-                  if (el) {
-                    import("bootstrap").then(({ Offcanvas }) => {
-                      Offcanvas.getInstance(el)?.hide();
-                    }).catch(() => { });
-                  }
-                }}
-                className="w-100 d-flex align-items-center"
-              >
-                <WalletHeaderIcon />
-              </div>
             </li>
           </ul>
 

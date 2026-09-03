@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useCategories, useNavProducts, apiImageUrl } from "@/hooks/useApi";
 import type { ApiCategory } from "@/services/api";
+import { formatPrice } from "@/utils/formatPrice";
 
 function catLink(c: ApiCategory) {
   return `/shop-default?category_id=${c.id}`;
@@ -95,11 +96,11 @@ export default function Nav({ variant2: _v2 = false, variant3: _v3 = false }: { 
                               </span>
                               <div>
                                 <span style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b" }}>
-                                  RM{Number(prod.sale_price ?? prod.price).toLocaleString()}
+                                  {formatPrice(Number(prod.sale_price ?? prod.price))}
                                 </span>
                                 {prod.sale_price != null && (
                                   <span style={{ fontSize: 11, color: "#999", textDecoration: "line-through", marginLeft: 5 }}>
-                                    RM{Number(prod.price).toLocaleString()}
+                                    {formatPrice(Number(prod.price))}
                                   </span>
                                 )}
                               </div>

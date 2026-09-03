@@ -5,18 +5,16 @@ import "./Checkout.css";
 import { useContextElement, type CartProduct } from "@/context/Context";
 import type { ProductId } from "@/context/store";
 import { apiImageUrl } from "@/hooks/useApi";
-import { formatPrice } from "@/utils/formatPrice";
+import { formatPrice, getCurrencySymbol } from "@/utils/formatPrice";
 import { useAuthStore } from "@/store/authStore";
 import { useModalStore } from "@/store/modalStore";
 import { userAPI, cartAPI, ordersAPI, promoAPI, paymentAPI, siteSettingsAPI } from "@/services/api";
-import type { ApiAddress, RoyaltyCartInfo } from "@/services/api";
+import type { ApiAddress } from "@/services/api";
 import { loadStoredPromo, saveStoredPromo } from "@/utils/promoStorage";
-import { loadUseRoyalty, saveUseRoyalty } from "@/utils/royaltyStorage";
-import { royaltyIsUnlocked, royaltyRemainingToUnlock, royaltyUnlockMessage, royaltyUnlockMinRm } from "@/utils/royaltyUnlock";
 import { removeLineFromCart, removePaidProductsFromCart } from "@/utils/cartSync";
 import { isPlaceholderEmail, isPlaceholderName, isProfileIncomplete } from "@/utils/userProfile";
 import { toMalaysiaE164 } from "@/utils/malaysiaPhone";
-import { curlecCheckoutRedirect, curlecUserMessage } from "@/utils/curlecPayment";
+import { razorpayUserMessage } from "@/utils/razorpay";
 
 /* Razorpay global type */
 declare global {
@@ -205,6 +203,7 @@ export default function Checkout() {
   /* ── Site Settings (shipping only; GST hidden on storefront) ── */
   const [shippingCharge, setShippingCharge] = useState(50);
   const [freeShippingAbove, setFreeShippingAbove] = useState(999);
+  const [currencyCode, setCurrencyCode] = useState("INR");
 
   useEffect(() => {
     siteSettingsAPI.get().then(res => {
@@ -212,22 +211,10 @@ export default function Checkout() {
         const s = res.data.data;
         if (typeof s.shipping_charge === 'number') setShippingCharge(s.shipping_charge);
         if (typeof s.free_shipping_above === 'number') setFreeShippingAbove(s.free_shipping_above);
+        if (s.currency_code) setCurrencyCode(s.currency_code);
       }
     }).catch(err => console.error("Failed to load site settings", err));
   }, []);
-
-  const [walletInfo, setWalletInfo] = useState<{
-    enabled: boolean;
-    balance: number;
-    discount_percent: number;
-    discount_min_rm?: number;
-    discount_promo_text?: string;
-    discount_below_text?: string;
-    free_shipping?: boolean;
-    points?: number;
-    royalty?: RoyaltyCartInfo;
-  } | null>(null);
-  const [useRoyalty, setUseRoyalty] = useState(() => loadUseRoyalty());
 
   /* Billing address */
   const [billingSame, setBillingSame] = useState(true);
@@ -239,60 +226,6 @@ export default function Checkout() {
   const [billingState, setBillingState] = useState("");
   const [billingZip, setBillingZip] = useState("");
 
-  useEffect(() => {
-    if (!isLoggedIn) { setWalletInfo(null); return; }
-    let cancelled = false;
-    const load = () => {
-      userAPI.getWallet()
-        .then((res) => {
-          if (cancelled) return;
-          const d = res.data?.data;
-          if (d) {
-            setWalletInfo(d);
-            const roy = d.royalty;
-            if (roy && !royaltyIsUnlocked(roy) && useRoyalty) {
-              setUseRoyalty(false);
-              saveUseRoyalty(false);
-            }
-            return;
-          }
-          return userAPI.getRoyalty().then((rres) => {
-            if (cancelled) return;
-            const roy = rres.data?.data as RoyaltyCartInfo | undefined;
-            if (roy) setWalletInfo({ enabled: false, balance: 0, discount_percent: 0, royalty: roy });
-          });
-        })
-        .catch(() => {
-          userAPI.getRoyalty()
-            .then((rres) => {
-              if (cancelled) return;
-              const roy = rres.data?.data as RoyaltyCartInfo | undefined;
-              if (roy) setWalletInfo({ enabled: false, balance: 0, discount_percent: 0, royalty: roy });
-              else setWalletInfo(null);
-            })
-            .catch(() => { if (!cancelled) setWalletInfo(null); });
-        });
-    };
-    load();
-    const onVis = () => {
-      if (document.visibilityState === "visible") load();
-    };
-    window.addEventListener("focus", load);
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", load);
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, [isLoggedIn, totalPrice, cartProducts.length]);
-
-  const royaltyInfo: RoyaltyCartInfo | null = walletInfo?.royalty ?? null;
-
-  const toggleRoyalty = (on: boolean) => {
-    setUseRoyalty(on);
-    saveUseRoyalty(on);
-  };
-
   const handleApplyPromo = async (e: FormEvent) => {
     e.preventDefault();
     const code = promoInput.trim().toUpperCase();
@@ -301,11 +234,10 @@ export default function Checkout() {
     setPromoLoading(true); setPromoError("");
     try {
       const res = await promoAPI.apply({ code, order_amount: totalPrice });
-      const r = res.data as { success?: boolean; data?: { discount: number; code: string; source?: string }; message?: string };
+      const r = res.data as { success?: boolean; data?: { discount: number; code: string }; message?: string };
       if (r.success && r.data) {
         setAppliedCode(r.data.code); setPromoDiscount(r.data.discount); setPromoInput("");
         saveStoredPromo({ code: r.data.code, discount: r.data.discount });
-        if (r.data.source === 'affiliate') setPromoError("");
       } else setPromoError(r.message ?? "Invalid promo code.");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -321,24 +253,19 @@ export default function Checkout() {
     saveStoredPromo(null);
   };
 
-  /* Restore promo code from cart storage or affiliate ?ref= (discount is refreshed below). */
+  /* Restore promo code from cart storage (discount is refreshed below). */
   useEffect(() => {
     if (!isLoggedIn || appliedCode || totalPrice <= 0) return;
 
     const stored = loadStoredPromo();
     if (stored?.code) {
       setAppliedCode(stored.code);
-      // Show stored discount immediately so wallet/order totals update before API refresh
+      // Show stored discount immediately so order totals update before API refresh
       if (stored.discount > 0) setPromoDiscount(stored.discount);
-      return;
     }
-
-    const refCode = sessionStorage.getItem("sk_affiliate_ref");
-    if (!refCode) return;
-    setAppliedCode(refCode.toUpperCase());
   }, [isLoggedIn, appliedCode, totalPrice]);
 
-  /* Keep coupon discount (and wallet payable) in sync when cart total changes. */
+  /* Keep coupon discount in sync when cart total changes. */
   useEffect(() => {
     if (!isLoggedIn || !appliedCode || totalPrice <= 0) return;
 
@@ -379,78 +306,15 @@ export default function Checkout() {
     };
   }, [isLoggedIn, appliedCode, totalPrice]);
 
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "razorpay" | "wallet">(() => {
-    const saved = sessionStorage.getItem("checkout_payment_method");
-    // COD hidden on website — only razorpay / wallet
-    return (saved === "wallet" ? "wallet" : "razorpay") as "cod" | "razorpay" | "wallet";
-  });
-  useEffect(() => {
-    sessionStorage.setItem("checkout_payment_method", paymentMethod);
-  }, [paymentMethod]);
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "razorpay">("razorpay");
 
-  // Shipping / free-shipping threshold use amount after coupon or affiliate discount
+  // Shipping / free-shipping threshold use amount after coupon
   const subtotalAfterPromo = Math.max(0, totalPrice - promoDiscount);
-  const baseShippingCost = subtotalAfterPromo <= 0
+  const shippingCost = subtotalAfterPromo <= 0
     ? 0
     : (subtotalAfterPromo >= freeShippingAbove ? 0 : shippingCharge);
-  // Wallet is a separate full-pay method: optional % off (from min RM) + free delivery only if admin enabled it.
-  // Works alone or together with coupon / affiliate / royalty (wallet covers the remainder).
-  const walletPct = walletInfo?.discount_percent ?? 0;
-  const walletMinRm = Number(walletInfo?.discount_min_rm ?? 100);
-  const walletDiscountEligible =
-    !!walletInfo?.enabled
-    && walletPct > 0
-    && subtotalAfterPromo + 0.0001 >= walletMinRm;
-  const walletDiscountPreview = walletDiscountEligible
-    ? Math.round(subtotalAfterPromo * walletPct / 100 * 100) / 100
-    : 0;
-  const walletFreeShipping = !!walletInfo?.enabled && !!walletInfo?.free_shipping;
-  const walletShippingCost = walletFreeShipping ? 0 : baseShippingCost;
-
-  const walletDiscount = paymentMethod === "wallet" ? walletDiscountPreview : 0;
-  const shippingCost = paymentMethod === "wallet" ? walletShippingCost : baseShippingCost;
-  const billTotal = Math.max(0, subtotalAfterPromo - walletDiscount) + shippingCost;
-
-  const royaltyEligible =
-    !!royaltyInfo
-    && royaltyInfo.enabled !== false
-    && (
-      !!royaltyInfo.show_on_cart
-      || !!royaltyInfo.can_redeem
-      || Number(royaltyInfo.points) > 0
-    );
-  const royaltyUnlocked = royaltyEligible && royaltyIsUnlocked(royaltyInfo);
-  const royaltyNeedRm = royaltyRemainingToUnlock(royaltyInfo);
-  const royaltyUnlockHint = !royaltyUnlocked ? royaltyUnlockMessage(royaltyInfo) : "";
-  const canPayWithRoyalty =
-    royaltyUnlocked
-    && billTotal > 0;
-  const royaltyRm = useRoyalty && canPayWithRoyalty
-    ? Math.min(Number(royaltyInfo?.balance_rm || 0), billTotal)
-    : 0;
-  const amountDue = Math.max(0, billTotal - royaltyRm); // remaining → wallet / online
-
-  // Wallet charge if user selects wallet (promo + wallet % when eligible − royalty ± shipping).
-  const walletBillPreview = Math.max(0, subtotalAfterPromo - walletDiscountPreview) + walletShippingCost;
-  const walletRoyaltyPreview = useRoyalty && canPayWithRoyalty
-    ? Math.min(Number(royaltyInfo?.balance_rm || 0), walletBillPreview)
-    : 0;
-  const walletPayablePreview = Math.round(Math.max(0, walletBillPreview - walletRoyaltyPreview) * 100) / 100;
-  const walletBalance = Number(walletInfo?.balance || 0);
-  const walletShortfall = Math.max(0, Math.round((walletPayablePreview - walletBalance) * 100) / 100);
-  // Enable wallet when balance covers full wallet charge (after promo/royalty, and shipping if free delivery is off).
-  const walletBalanceOk =
-    !!walletInfo?.enabled
-    && walletPayablePreview > 0
-    && walletBalance + 0.009 >= walletPayablePreview;
-
-  // If wallet was selected but balance no longer covers full payable, fall back to online.
-  // Also clear any stale COD selection (COD is hidden on website).
-  useEffect(() => {
-    if (paymentMethod === "cod" || (paymentMethod === "wallet" && !walletBalanceOk)) {
-      setPaymentMethod("razorpay");
-    }
-  }, [paymentMethod, walletBalanceOk]);
+  const billTotal = Math.max(0, subtotalAfterPromo) + shippingCost;
+  const amountDue = billTotal;
   /* ── Place order ── */
   const [orderError, setOrderError] = useState("");
   const [orderPlacing, setOrderPlacing] = useState(false);
@@ -529,18 +393,6 @@ export default function Checkout() {
     if (!billingSame) {
       if (!billing.full_name || !billing.line1 || !billing.city || !billing.state || !billing.pincode) {
         setOrderError("Please complete the billing address.");
-        return;
-      }
-    }
-
-    if (paymentMethod === "wallet") {
-      if (!walletInfo?.enabled) { setOrderError("Wallet payments are not available."); return; }
-      if (!walletBalanceOk) {
-        setOrderError(
-          walletShortfall > 0
-            ? `Low balance in wallet. You need ${formatPrice(walletShortfall)} more to pay this order with wallet.`
-            : "Low balance in wallet. Please top up or choose another payment method.",
-        );
         return;
       }
     }
@@ -663,9 +515,6 @@ export default function Checkout() {
         billing_same: billingSame,
         billing_address: billing,
         payment_method: paymentMethod,
-        use_wallet: paymentMethod === "wallet" ? 1 : 0,
-        use_royalty: useRoyalty && royaltyRm > 0 ? 1 : 0,
-        apply_royalty: useRoyalty && royaltyRm > 0 ? 1 : 0,
         promo_code: appliedCode || undefined,
         coupon: appliedCode || undefined,
         coupon_code: appliedCode || undefined,
@@ -705,10 +554,9 @@ export default function Checkout() {
         variant_id: p.selectedVariantId ?? null,
       }));
 
-      // ── COD, Wallet, or fully paid by royalty: done ─────────────────
-      if (paymentMethod === "cod" || paymentMethod === "wallet" || amountDue <= 0.009) {
+      // ── COD or already paid: done ─────────────────
+      if (paymentMethod === "cod" || amountDue <= 0.009) {
         saveStoredPromo(null);
-        saveUseRoyalty(false);
         await removePaidProductsFromCart(paidLines);
         setCartProducts([]);
         navigate("/account-orders");
@@ -718,7 +566,7 @@ export default function Checkout() {
       // ── Razorpay online payment ─────────────────────────────
       const loaded = await loadRazorpayScript();
       if (!loaded) {
-        setOrderError("Failed to load payment gateway. Please try again or pay with Wallet.");
+        setOrderError("Failed to load payment gateway. Please try again.");
         return;
       }
 
@@ -732,7 +580,7 @@ export default function Checkout() {
       });
 
       if (!payData.success || !payData.data?.razorpay_order_id) {
-        setOrderError(payData.message ?? "Payment gateway error. Try again or pay with Wallet.");
+        setOrderError(payData.message ?? "Payment gateway error. Please try again.");
         return;
       }
 
@@ -752,9 +600,6 @@ export default function Checkout() {
         image: checkoutLogo,
         prefill: { name: pd.prefill.name, email: pd.prefill.email, contact: pd.prefill.contact },
         theme: { color: "#3EC1BC" },
-        ...curlecCheckoutRedirect(pd.callback_url),
-        // Do not pass method/config filters — Curlec only shows methods
-        // enabled on the merchant (FPX must be enabled in Dashboard Live mode).
         handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
           try {
             const verifyRes = await paymentAPI.verify({
@@ -774,17 +619,16 @@ export default function Checkout() {
               };
             };
             if (body?.data?.pending) {
-              setOrderError(body.message || curlecUserMessage({ reason: "payment_pending_gateway" }).message);
+              setOrderError(body.message || razorpayUserMessage({ reason: "payment_pending_gateway" }).message);
               setOrderPlacing(false);
               return;
             }
             if (body?.data?.failed || body?.success === false) {
-              setOrderError(body.message || curlecUserMessage().message);
+              setOrderError(body.message || razorpayUserMessage().message);
               setOrderPlacing(false);
               return;
             }
             saveStoredPromo(null);
-            saveUseRoyalty(false);
             await removePaidProductsFromCart(
               body?.data?.cart_clear_lines?.length ? body.data.cart_clear_lines : paidLines,
             );
@@ -810,13 +654,11 @@ export default function Checkout() {
       };
 
       const rzp = new window.Razorpay(rzpOptions);
-      // Curlec often surfaces bank/auth failures as "Login Failed" inside its iframe —
-      // map them to a clear shop message so checkout is not a dead end.
       rzp.on("payment.failed", (response: unknown) => {
         const err = (response as {
           error?: { description?: string; reason?: string; code?: string };
         })?.error;
-        setOrderError(curlecUserMessage(err).message);
+        setOrderError(razorpayUserMessage(err).message);
         setOrderPlacing(false);
       });
       rzp.open();
@@ -1272,160 +1114,26 @@ export default function Checkout() {
                     {paymentMethod === 'razorpay' && <div className="radio-inner" />}
                   </div>
                   <div>
-                    <div className="payment-card-title">💳 Online Payment (Malaysia)</div>
-                    <div className="payment-card-desc">Net Banking (FPX) · Credit/Debit Card · E-Wallets</div>
+                    <div className="payment-card-title">💳 Online Payment (Razorpay)</div>
+                    <div className="payment-card-desc">UPI · Credit/Debit Card · Net Banking</div>
                   </div>
                 </div>
                 {paymentMethod === 'razorpay' && (
                   <div className="payment-details-razorpay animate-fade-in">
                     <div className="d-flex gap-2 flex-wrap">
-                      {["Net Banking (FPX)", "Visa", "Mastercard", "Touch n Go", "GrabPay"].map((m) => (
+                      {["UPI", "Visa", "Mastercard", "RuPay", "Net Banking"].map((m) => (
                         <span key={m} className="payment-badge">
                           {m}
                         </span>
                       ))}
                     </div>
                     <p className="payment-secure-text mb-0">
-                      Secure checkout in MYR (RM)
+                      Secure checkout in {currencyCode} ({getCurrencySymbol()})
                       🔒 Secured by Razorpay — 256-bit SSL encryption
                     </p>
                   </div>
                 )}
               </div>
-
-              {walletInfo?.enabled && (
-                <div
-                  className={`payment-card mb-0 ${paymentMethod === 'wallet' ? 'selected' : ''}`}
-                  onClick={() => {
-                    if (walletBalanceOk) {
-                      setPaymentMethod("wallet");
-                    }
-                  }}
-                >
-                  <div className="d-flex align-items-start gap-3">
-                    <div className="radio-circle mt-1">
-                      {paymentMethod === 'wallet' && <div className="radio-inner" />}
-                    </div>
-                    <div className="flex-grow-1">
-                      <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-1">
-                        <div>
-                          <div className="payment-card-title">👛 Pay with MY Wallet</div>
-                          <div className="payment-card-desc">
-                            Balance: {formatPrice(walletBalance)}
-                          </div>
-                        </div>
-                        {/* <Link
-                          to="/account-wallet/topup"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn-wallet-add-funds"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                          title="Add funds to your wallet (opens in new tab)"
-                        >
-                          <span>➕</span> ADD FUNDS
-                        </Link> */}
-                      </div>
-                      {walletPct > 0 && (
-                        <div className="payment-wallet-promo">
-                          <div>
-                            {walletInfo?.discount_promo_text
-                              || `Pay via MY Wallet & Get ${Number(walletPct.toFixed(2))}% OFF on Orders RM${Number(walletMinRm.toFixed(2))}+`}
-                          </div>
-                          {(walletInfo?.discount_below_text || walletMinRm > 0) && (
-                            <div className="payment-wallet-promo-sub">
-                              {walletInfo?.discount_below_text
-                                || `Orders below RM${Number(walletMinRm.toFixed(2))}: Wallet payment available, but no ${Number(walletPct.toFixed(2))}% discount`}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <div className="payment-card-desc fw-semibold text-dark mt-1">
-                        Payable: {formatPrice(walletPayablePreview)}
-                        {useRoyalty && walletRoyaltyPreview > 0
-                          ? ` (after royalty −${formatPrice(walletRoyaltyPreview)}${walletDiscountPreview > 0 ? ` · ${walletPct}% off` : ""}${walletFreeShipping ? " · " : ""})`
-                          : walletDiscountPreview > 0
-                            ? ` (${walletPct}% off${walletFreeShipping ? " · " : ""})`
-                            : promoDiscount > 0 && appliedCode
-                              ? ` (after ${appliedCode}${walletFreeShipping ? " · " : ""})`
-                              : walletFreeShipping
-                                ? ""
-                                : ""}
-                      </div>
-                      {!walletBalanceOk && walletPayablePreview > 0 && (
-                        <div className="payment-wallet-error">
-                          {walletBalance <= 0
-                            ? `Low balance in wallet. Add ${formatPrice(walletPayablePreview)} to pay this order with wallet.`
-                            : `Low balance in wallet. You have ${formatPrice(walletBalance)}; need ${formatPrice(walletShortfall)} more (payable ${formatPrice(walletPayablePreview)}).`}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {royaltyEligible && (
-                <div
-                  className="payment-card mb-0 mt-3"
-                  style={{
-                    background: useRoyalty ? '#fffbeb' : (!royaltyUnlocked ? '#f8fafc' : undefined),
-                    borderColor: useRoyalty ? '#fcd34d' : (!royaltyUnlocked ? '#e2e8f0' : undefined),
-                    opacity: royaltyUnlocked || useRoyalty ? 1 : 0.95,
-                  }}
-                >
-                  <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-                    <div>
-                      <div className="payment-card-title">⭐ Pay with Royalty Points</div>
-                      <div className="payment-card-desc">
-                        {royaltyInfo!.points} pts ({formatPrice(royaltyInfo!.balance_rm)})
-                        {billTotal <= 0
-                          ? ' · Add items to apply'
-                          : !royaltyUnlocked
-                            ? ` · Unlocks at ${formatPrice(royaltyUnlockMinRm(royaltyInfo))} and above`
-                            : useRoyalty && royaltyRm > 0
-                              ? ` · Paying ${formatPrice(royaltyRm)}; remaining ${formatPrice(amountDue)} via ${paymentMethod === 'wallet' ? 'wallet' : 'online'
-                              }`
-                              : ' · Deducts from bill; pay remainder with wallet / online'}
-                      </div>
-                      <div className="payment-royalty-rate">
-                        <span>💡</span>
-                        <strong className="payment-royalty-title">How points are calculate?</strong>
-                        <span>Earn 1 Point / RM10 • Redeem 5 Points = RM1 Discount</span>
-                      </div>
-                      {!royaltyUnlocked && royaltyUnlockHint && (
-                        <div
-                          className="mt-2 small fw-semibold"
-                          style={{
-                            color: '#92400e',
-                            background: '#fffbeb',
-                            border: '1px solid #fde68a',
-                            borderRadius: 8,
-                            padding: '8px 10px',
-                          }}
-                        >
-                          {royaltyNeedRm > 0
-                            ? `You have ${formatPrice(royaltyNeedRm)} left to unlock royalty points.`
-                            : royaltyUnlockHint}
-                        </div>
-                      )}
-                    </div>
-                    {useRoyalty ? (
-                      <button type="button" className="btn btn-sm btn-link text-danger p-0 fw-semibold" onClick={() => toggleRoyalty(false)}>Remove</button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="tf-btn btn-sm animate-btn"
-                        disabled={!canPayWithRoyalty}
-                        title={!royaltyUnlocked ? royaltyUnlockHint : undefined}
-                        onClick={() => toggleRoyalty(true)}
-                      >
-                        {royaltyUnlocked ? 'Apply' : 'Locked'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -1478,19 +1186,13 @@ export default function Checkout() {
                   <span>−{formatPrice(promoDiscount)}</span>
                 </div>
               )}
-              {walletDiscount > 0 && (
-                <div className="summary-row text-success fw-semibold">
-                  <span>Wallet discount ({walletInfo?.discount_percent}%)</span>
-                  <span>−{formatPrice(walletDiscount)}</span>
-                </div>
-              )}
               <div className="summary-row">
                 <span>Shipping</span>
                 <span className="fw-semibold text-dark">{
                   totalPrice <= 0
                     ? formatPrice(0)
                     : shippingCost === 0
-                      ? <span className="text-success">{paymentMethod === 'wallet' && walletFreeShipping ? 'Free (wallet)' : 'Free'}</span>
+                      ? <span className="text-success">Free</span>
                       : formatPrice(shippingCost)
                 }</span>
               </div>
@@ -1498,28 +1200,10 @@ export default function Checkout() {
                 <span>Bill total</span>
                 <span>{formatPrice(billTotal)}</span>
               </div>
-              {royaltyRm > 0 && (
-                <div className="summary-row fw-semibold" style={{ color: '#b45309' }}>
-                  <span>Royalty points payment</span>
-                  <span>−{formatPrice(royaltyRm)}</span>
-                </div>
-              )}
-              {paymentMethod === 'wallet' && (
-                <div className="summary-row fw-semibold text-success">
-                  <span>Wallet charge</span>
-                  <span>{formatPrice(walletPayablePreview)}</span>
-                </div>
-              )}
 
               <div className="summary-total">
-                <span>
-                  {paymentMethod === 'wallet'
-                    ? 'Pay from wallet'
-                    : royaltyRm > 0
-                      ? 'Amount due'
-                      : 'Total'}
-                </span>
-                <span>{formatPrice(paymentMethod === 'wallet' ? walletPayablePreview : amountDue)}</span>
+                <span>Total</span>
+                <span>{formatPrice(amountDue)}</span>
               </div>
 
               {orderError && (
@@ -1531,9 +1215,7 @@ export default function Checkout() {
                 <button type="submit" className="btn-premium mt-4" disabled={cartProducts.length === 0 || orderPlacing}>
                   {orderPlacing
                     ? "Processing..."
-                    : amountDue <= 0.009 && royaltyRm > 0
-                      ? `Place Order • Paid with points`
-                      : `Place Order • ${formatPrice(paymentMethod === "wallet" ? walletPayablePreview : amountDue)}`}
+                    : `Place Order • ${formatPrice(amountDue)}`}
                   {!orderPlacing && <i className="icon-arrow-right ms-2" />}
                 </button>
               ) : (

@@ -79,11 +79,11 @@ $rows = !empty($product_variants)
             <input type="text" name="product_variants[<?= $vi ?>][label]" class="form-control form-control-sm" value="<?= htmlspecialchars($vr['label'] ?? '') ?>" placeholder="Auto">
           </div>
           <div class="col-md-1">
-            <label class="form-label small">Price RM</label>
+            <label class="form-label small">Price (<?= htmlspecialchars(sk_currency_symbol($settings ?? null)) ?>)</label>
             <input type="text" inputmode="decimal" name="product_variants[<?= $vi ?>][price]" class="form-control form-control-sm variant-price" value="<?= htmlspecialchars($vr['price'] ?? '') ?>" placeholder="Main">
           </div>
           <div class="col-md-1">
-            <label class="form-label small">Sale RM</label>
+            <label class="form-label small">Sale (<?= htmlspecialchars(sk_currency_symbol($settings ?? null)) ?>)</label>
             <input type="text" inputmode="decimal" name="product_variants[<?= $vi ?>][sale_price]" class="form-control form-control-sm" value="<?= htmlspecialchars($vr['sale_price'] ?? '') ?>">
           </div>
           <div class="col-md-1">
@@ -173,8 +173,8 @@ $rows = !empty($product_variants)
         <div class="col-md-2"><label class="form-label small">Unit *</label>${unitSelectHtml(idx, defaultUnit)}</div>
         <div class="col-md-1"><label class="form-label small">Qty</label><input type="text" inputmode="decimal" name="product_variants[${idx}][unit_value]" class="form-control form-control-sm" value="${defaultQty}"></div>
         <div class="col-md-2"><label class="form-label small">Label</label><input type="text" name="product_variants[${idx}][label]" class="form-control form-control-sm" placeholder="Auto"></div>
-        <div class="col-md-1"><label class="form-label small">Price RM</label><input type="text" inputmode="decimal" name="product_variants[${idx}][price]" class="form-control form-control-sm variant-price" placeholder="Main"></div>
-        <div class="col-md-1"><label class="form-label small">Sale RM</label><input type="text" inputmode="decimal" name="product_variants[${idx}][sale_price]" class="form-control form-control-sm"></div>
+        <div class="col-md-1"><label class="form-label small">Price <?= htmlspecialchars(sk_currency_symbol($settings ?? null)) ?></label><input type="text" inputmode="decimal" name="product_variants[${idx}][price]" class="form-control form-control-sm variant-price" placeholder="Main"></div>
+        <div class="col-md-1"><label class="form-label small">Sale <?= htmlspecialchars(sk_currency_symbol($settings ?? null)) ?></label><input type="text" inputmode="decimal" name="product_variants[${idx}][sale_price]" class="form-control form-control-sm"></div>
         <div class="col-md-1"><label class="form-label small">Stock</label><input type="text" inputmode="numeric" name="product_variants[${idx}][stock]" class="form-control form-control-sm variant-stock" placeholder="Main"></div>
         <div class="col-md-1"><label class="form-label small">SKU</label><input type="text" name="product_variants[${idx}][sku]" class="form-control form-control-sm"></div>
         <div class="col-md-1"><div class="form-check mt-4"><input class="form-check-input variant-default" type="radio" name="variant_default" value="${idx}"><label class="form-check-label small">Def</label></div><input type="hidden" name="product_variants[${idx}][is_default]" class="variant-is-default" value="0"></div>

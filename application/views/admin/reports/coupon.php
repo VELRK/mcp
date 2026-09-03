@@ -1,4 +1,4 @@
-<?php $currency = $settings['currency_symbol'] ?? 'RM'; ?>
+<?php $currency = sk_currency_symbol($settings); ?>
 
 <div class="sk-page-header">
   <h5 class="sk-page-title"><i class="bi bi-ticket-perforated me-2 text-warning"></i>Coupon Usage Report</h5>
@@ -56,7 +56,7 @@
         <?php foreach ($summaries as $s): ?>
         <tr>
           <td><span class="badge bg-warning text-dark fs-6"><?= htmlspecialchars($s['code']) ?></span></td>
-          <td><?= $s['type'] === 'percent' ? 'Percent (%)' : 'Fixed (RM)' ?></td>
+          <td><?= $s['type'] === 'percent' ? 'Percent (%)' : 'Fixed ('.htmlspecialchars($currency).')' ?></td>
           <td><?= $s['type'] === 'percent' ? $s['value'].'%' : $currency.number_format($s['value'],2) ?></td>
           <td><span class="fw-semibold"><?= (int)$s['times_used'] ?></span></td>
           <td><?= $s['usage_limit'] ? $s['usage_limit'] : '∞' ?></td>

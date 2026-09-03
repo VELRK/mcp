@@ -1,4 +1,5 @@
 import type { ProductCardItem } from "@/types/productCard";
+import { formatPrice } from "@/utils/formatPrice";
 
 type Props = {
   wrapperClassName?: string;
@@ -61,7 +62,7 @@ export function ProductReturnPolicies({
               </li>
               <li className="cl-text-2 mb-3 d-flex align-items-start" style={{ lineHeight: '1.6' }}>
                 <span className="me-2 text-dark opacity-50">•</span>
-                <span>Free shipping on orders above RM999.</span>
+                <span>Free shipping on orders above {formatPrice(999)}.</span>
               </li>
             </ul>
           )}

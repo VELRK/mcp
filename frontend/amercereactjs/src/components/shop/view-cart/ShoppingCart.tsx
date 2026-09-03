@@ -5,11 +5,9 @@ import { useStore, type CartProduct } from "@/context/store";
 import { useAuthStore } from "@/store/authStore";
 import type { ProductId } from "@/context/store";
 import { formatPrice } from "@/utils/formatPrice";
-import { promoAPI, siteSettingsAPI, cartAPI, userAPI, type RoyaltyCartInfo } from "@/services/api";
+import { promoAPI, siteSettingsAPI, cartAPI } from "@/services/api";
 import { useModalStore } from "@/store/modalStore";
 import { loadStoredPromo, saveStoredPromo } from "@/utils/promoStorage";
-import { saveUseRoyalty } from "@/utils/royaltyStorage";
-import { royaltyIsUnlocked, royaltyRemainingToUnlock, royaltyUnlockMessage, royaltyUnlockMinRm } from "@/utils/royaltyUnlock";
 import { removeLineFromCart } from "@/utils/cartSync";
 
 export default function ShoppingCart() {
@@ -24,10 +22,6 @@ export default function ShoppingCart() {
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [promoError, setPromoError] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
-
-  /* ── Royalty points ── */
-  const [royalty, setRoyalty] = useState<RoyaltyCartInfo | null>(null);
-  const [useRoyalty, setUseRoyalty] = useState(false);
 
   /* ── Site Settings ── */
   const [shippingCharge, setShippingCharge] = useState(50);
@@ -49,60 +43,8 @@ export default function ShoppingCart() {
     if (stored) {
       setAppliedCode(stored.code);
       setPromoDiscount(stored.discount);
-      return;
     }
-    const refCode = sessionStorage.getItem("sk_affiliate_ref");
-    if (!refCode) return;
-    let cancelled = false;
-    setPromoLoading(true);
-    promoAPI.apply({ code: refCode, order_amount: totalPrice })
-      .then((res) => {
-        if (cancelled) return;
-        const r = res.data as { success?: boolean; data?: { discount: number; code: string }; message?: string };
-        if (r.success && r.data) {
-          setAppliedCode(r.data.code);
-          setPromoDiscount(r.data.discount);
-          saveStoredPromo({ code: r.data.code, discount: r.data.discount });
-        } else {
-          setPromoError(r.message ?? "Invalid affiliate promo code.");
-        }
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        setPromoError(msg ?? "Could not apply affiliate promo code.");
-      })
-      .finally(() => { if (!cancelled) setPromoLoading(false); });
-    return () => { cancelled = true; };
   }, [isLoggedIn, totalPrice]);
-
-  useEffect(() => {
-    if (!isLoggedIn) { setRoyalty(null); return; }
-    let cancelled = false;
-    const applyRoyalty = (r: RoyaltyCartInfo | null) => {
-      if (cancelled) return;
-      setRoyalty(r);
-      if (r && !royaltyIsUnlocked(r) && useRoyalty) { setUseRoyalty(false); saveUseRoyalty(false); }
-    };
-    userAPI.getRoyalty()
-      .then((res) => {
-        const r = (res.data?.data as RoyaltyCartInfo | undefined) ?? null;
-        if (r) { applyRoyalty(r); return; }
-        return cartAPI.get().then((cres) => { applyRoyalty(cres.data?.data?.summary?.royalty ?? null); });
-      })
-      .catch(() => {
-        cartAPI.get()
-          .then((cres) => applyRoyalty(cres.data?.data?.summary?.royalty ?? null))
-          .catch(() => { if (!cancelled) setRoyalty(null); });
-      });
-    return () => { cancelled = true; };
-  }, [isLoggedIn, cartProducts.length, totalPrice]);
-
-  const toggleRoyalty = (on: boolean) => { setUseRoyalty(on); saveUseRoyalty(on); };
-
-  useEffect(() => {
-    if (cartProducts.length === 0 && useRoyalty) { setUseRoyalty(false); saveUseRoyalty(false); }
-  }, [cartProducts.length, useRoyalty]);
 
   const handleApplyPromo = async () => {
     const code = promoInput.trim().toUpperCase();
@@ -111,7 +53,7 @@ export default function ShoppingCart() {
     setPromoLoading(true); setPromoError("");
     try {
       const res = await promoAPI.apply({ code, order_amount: totalPrice });
-      const r = res.data as { success?: boolean; data?: { discount: number; code: string; source?: string }; message?: string };
+      const r = res.data as { success?: boolean; data?: { discount: number; code: string }; message?: string };
       if (r.success && r.data) {
         setAppliedCode(r.data.code);
         setPromoDiscount(r.data.discount);
@@ -137,17 +79,7 @@ export default function ShoppingCart() {
   const shippingCost = totalPrice <= 0 ? 0 : (totalPrice >= freeShippingAbove ? 0 : shippingCharge);
   const subtotalAfterPromo = Math.max(0, totalPrice - discount);
   const billTotal = subtotalAfterPromo + shippingCost;
-  const royaltyEligible =
-    !!royalty
-    && royalty.enabled !== false
-    && (!!royalty.show_on_cart || !!royalty.can_redeem || Number(royalty.points) > 0);
-  const royaltyUnlocked = royaltyEligible && royaltyIsUnlocked(royalty);
-  const royaltyNeedRm = royaltyRemainingToUnlock(royalty);
-  const royaltyUnlockHint = !royaltyUnlocked ? royaltyUnlockMessage(royalty) : "";
-  const canPayWithRoyalty = royaltyUnlocked && billTotal > 0;
-  const royaltyRm = useRoyalty && canPayWithRoyalty
-    ? Math.min(Number(royalty?.balance_rm || 0), billTotal) : 0;
-  const amountDue = Math.max(0, billTotal - royaltyRm);
+  const amountDue = billTotal;
   const amountToFreeship = Math.max(0, freeShippingAbove - totalPrice);
 
   const removeLine = (id: ProductId, variantId?: number, index?: number) => {
@@ -334,7 +266,7 @@ export default function ShoppingCart() {
           color: #1a202c;
         }
 
-        /* Promo + Royalty */
+        /* Promo */
         .classic-promo-wrap {
           background: #ffffff;
           border: 1px solid #e8ecf0;
@@ -404,47 +336,6 @@ export default function ShoppingCart() {
           font-weight: 700;
         }
         .promo-error { font-size: 12px; color: #dc2626; margin-top: 8px; }
-        .royalty-box {
-          margin-top: 12px;
-          border: 1px solid #fcd34d;
-          border-radius: 8px;
-          padding: 14px;
-        }
-        .royalty-box.active { background: #fffbeb; }
-        .royalty-box.locked { border-color: #e2e8f0; background: #f8fafc; }
-        .royalty-box .royalty-title { font-size: 13px; font-weight: 700; color: #92400e; }
-        .royalty-box .royalty-sub { font-size: 12px; color: #78350f; margin-top: 3px; }
-        .royalty-unlock-note {
-          margin-top: 8px;
-          font-size: 12px;
-          font-weight: 600;
-          color: #92400e;
-          background: #fffbeb;
-          border: 1px solid #fde68a;
-          border-radius: 8px;
-          padding: 8px 10px;
-        }
-        .royalty-apply-btn {
-          font-size: 12px;
-          font-weight: 700;
-          border-radius: 6px;
-          padding: 6px 14px;
-          border: none;
-          cursor: pointer;
-          background: #f59e0b;
-          color: white;
-          transition: background 0.15s;
-        }
-        .royalty-apply-btn:hover { background: #d97706; }
-        .royalty-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .royalty-remove-btn {
-          font-size: 12px;
-          font-weight: 700;
-          background: none;
-          border: none;
-          cursor: pointer;
-          color: #dc2626;
-        }
 
         /* Order Summary Sidebar */
         .classic-summary-card {
@@ -483,7 +374,6 @@ export default function ShoppingCart() {
         .summary-line .value { font-weight: 600; color: #2d3748; }
         .summary-line .value.free { color: #38a169; }
         .summary-line .value.discount { color: #38a169; }
-        .summary-line .value.royalty { color: #d97706; }
         .summary-freeship-note {
           font-size: 11px;
           color: #a0aec0;
@@ -843,47 +733,6 @@ export default function ShoppingCart() {
                       </div>
                     )}
                     {promoError && <p className="promo-error">{promoError}</p>}
-
-                    {royaltyEligible && (
-                      <div className={`royalty-box${useRoyalty ? " active" : ""}${!royaltyUnlocked ? " locked" : ""}`}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
-                          <div>
-                            <div className="royalty-title">💎 Pay with Royalty Points</div>
-                            <div className="royalty-sub">
-                              You have <strong>{royalty!.points}</strong> pts ({formatPrice(royalty!.balance_rm)})
-                              &nbsp;·&nbsp;{royalty!.conversion_label ?? "500 pts = RM 100"}
-                              {billTotal <= 0
-                                ? " · Add items to apply"
-                                : !royaltyUnlocked
-                                  ? ` · Unlocks at ${formatPrice(royaltyUnlockMinRm(royalty))} and above`
-                                  : useRoyalty && royaltyRm > 0
-                                    ? ` · Pays ${formatPrice(royaltyRm)}; due ${formatPrice(amountDue)} (wallet / online at checkout)`
-                                    : " · Deducts from bill; pay remainder with wallet / online at checkout"}
-                            </div>
-                            {!royaltyUnlocked && royaltyUnlockHint && (
-                              <div className="royalty-unlock-note">
-                                {royaltyNeedRm > 0
-                                  ? `You have ${formatPrice(royaltyNeedRm)} left to unlock royalty points.`
-                                  : royaltyUnlockHint}
-                              </div>
-                            )}
-                          </div>
-                          {useRoyalty ? (
-                            <button type="button" className="royalty-remove-btn" onClick={() => toggleRoyalty(false)}>Remove</button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="royalty-apply-btn"
-                              disabled={!canPayWithRoyalty}
-                              title={!royaltyUnlocked ? royaltyUnlockHint : undefined}
-                              onClick={() => toggleRoyalty(true)}
-                            >
-                              {royaltyUnlocked ? "Apply" : "Locked"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -920,18 +769,11 @@ export default function ShoppingCart() {
                         </div>
                       )}
 
-                      {royaltyRm > 0 && (
-                        <div className="summary-line">
-                          <span className="label">Royalty Points</span>
-                          <span className="value royalty">−{formatPrice(royaltyRm)}</span>
-                        </div>
-                      )}
-
                       <div className="summary-divider" />
 
                       <div className="summary-total-row">
                         <span className="summary-total-label">
-                          {royaltyRm > 0 ? "Amount Due" : "Total"}
+                          Total
                         </span>
                         <span className="summary-total-value">{formatPrice(amountDue)}</span>
                       </div>
@@ -944,8 +786,6 @@ export default function ShoppingCart() {
                           if (!isLoggedIn) {
                             e.preventDefault();
                             useModalStore.getState().openModal("signIn", { redirect: "/checkout" });
-                          } else {
-                            saveUseRoyalty(useRoyalty);
                           }
                         }}
                       >
@@ -973,7 +813,7 @@ export default function ShoppingCart() {
       {cartProducts.length > 0 && (
         <div className="mobile-cart-sticky-bar">
           <div className="mobile-bar-info">
-            <span className="mobile-bar-label">{royaltyRm > 0 ? "Amount Due" : "Total"}</span>
+            <span className="mobile-bar-label">Total</span>
             <span className="mobile-bar-total">{formatPrice(amountDue)}</span>
           </div>
           <Link
@@ -983,8 +823,6 @@ export default function ShoppingCart() {
               if (!isLoggedIn) {
                 e.preventDefault();
                 useModalStore.getState().openModal("signIn", { redirect: "/checkout" });
-              } else {
-                saveUseRoyalty(useRoyalty);
               }
             }}
           >

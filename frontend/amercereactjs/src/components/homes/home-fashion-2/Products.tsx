@@ -3,9 +3,12 @@ import ProductCard from "@/components/ui/ProductCard";
 import { useProducts, toProductCard } from "@/hooks/useApi";
 
 function Products() {
-  const { products, loading } = useProducts({ sort: "newest", limit: 16 });
+  const { products, loading } = useProducts({ featured: 1, limit: 16 });
 
   const cards = products.map(toProductCard);
+
+  if (loading) return null;
+  if (!cards.length) return null;
 
   return (
     <div className="flat-spacing pt-4 pb-5 flat-animate-tab">
@@ -38,9 +41,6 @@ function Products() {
 
         <div className="tab-content">
           <div className="tab-pane fade active show" role="tabpanel">
-            {loading ? (
-              <div className="text-center py-40 text-muted">Loading fresh arrivals…</div>
-            ) : (
               <TfSwiper
                 className="wrap-sw-over"
                 preview={4}
@@ -70,7 +70,6 @@ function Products() {
                   />
                 ))}
               </TfSwiper>
-            )}
           </div>
         </div>
       </div>

@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { useModalStore } from "@/store/modalStore";
 import {
   footerStore,
   footerCompanyLinks,
@@ -14,8 +13,6 @@ import FooterAccordionWrapper, {
 export default function Footer9({
   parentClass = "tf-footer footer-s5",
 }) {
-  const { openModal } = useModalStore();
-
   const formatTitle = (str: string) => {
     return str
       .split(" ")
@@ -348,15 +345,6 @@ export default function Footer9({
                         </Link>
                       </li>
                     ))}
-                    <li>
-                      <button
-                        type="button"
-                        className="luxury-footer-link bg-transparent border-0 p-0 text-start"
-                        onClick={() => openModal("affiliateEnquiry")}
-                      >
-                        Affiliate Enquiry
-                      </button>
-                    </li>
                   </ul>
                 </FooterAccordionItem>
               </div>

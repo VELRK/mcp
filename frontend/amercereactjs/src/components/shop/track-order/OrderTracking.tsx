@@ -421,9 +421,6 @@ function OrderTracking() {
                     {result.order_status}
                   </span>
                 )}
-                {result.courier === "jt_express" && (
-                  <span className="ot-badge ot-badge--carrier">JT Express</span>
-                )}
               </div>
 
               {!result.has_tracking && !result.tracking_number ? (

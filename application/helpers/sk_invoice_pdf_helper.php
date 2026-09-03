@@ -40,7 +40,7 @@ function sk_invoice_pdf_sanitize(string $s): string {
     $map = [
         '–' => '-', '—' => '-', '−' => '-',
         '‘' => "'", '’' => "'", '“' => '"', '”' => '"',
-        '₹' => 'RM', 'Rs' => 'RM', 'Rs.' => 'RM', '€' => 'EUR', '£' => 'GBP',
+        '₹' => 'Rs', 'Rs' => 'Rs', 'Rs.' => 'Rs', '€' => 'EUR', '£' => 'GBP',
         '•' => '-', '…' => '...', "\xC2\xA0" => ' ',
     ];
     $s = strtr($s, $map);
@@ -138,7 +138,7 @@ function sk_invoice_build_pdf(array $invoice): string {
     $cRate = $L + 400;
     $cAmt  = $R - 4;
 
-    $cur = sk_invoice_pdf_sanitize((string)($invoice['currency'] ?? 'RM'));
+    $cur = sk_invoice_pdf_sanitize((string)($invoice['currency'] ?? sk_currency_symbol()));
     $seller = $invoice['seller'] ?? [];
     $buyer  = $invoice['buyer'] ?? [];
 
@@ -350,25 +350,6 @@ function sk_invoice_build_pdf(array $invoice): string {
     $y -= 2;
     $ops .= sk_invoice_pdf_rect($L + $W - 220, $y - 4, 220, 20, '0.97 0.98 0.99', true);
     $addTotal('Grand Total', $cur . number_format((float)($invoice['total'] ?? 0), 2), true);
-
-    // Royalty note
-    $royEarn = (int)($invoice['royalty_earned_points'] ?? 0);
-    $royUsed = (int)($invoice['royalty_used_points'] ?? 0);
-    if ($royEarn > 0 || $royUsed > 0) {
-        $need(36);
-        $ops .= sk_invoice_pdf_rect($L, $y - 28, $W, 34, '1 0.98 0.92', true);
-        $ops .= sk_invoice_pdf_text($L + 8, $y - 4, 'Royalty Points', 9, 'F2');
-        $y -= 16;
-        if ($royEarn > 0) {
-            $ops .= sk_invoice_pdf_text($L + 8, $y, 'Earned: ' . $royEarn . ' pts', 8);
-            $y -= 11;
-        }
-        if ($royUsed > 0) {
-            $ops .= sk_invoice_pdf_text($L + 8, $y, 'Redeemed: ' . $royUsed . ' pts', 8);
-            $y -= 11;
-        }
-        $y -= 8;
-    }
 
     $y -= 10;
     $need(40);

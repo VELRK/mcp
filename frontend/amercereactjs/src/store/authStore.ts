@@ -44,7 +44,9 @@ export const useAuthStore = create<AuthState>()(
         set({ token: null, user: null, isLoggedIn: false });
         // Best-effort server blacklist (send old token in header after local clear)
         if (token) {
-          const base = import.meta.env.VITE_API_BASE_URL ?? "/shopkart-api";
+          const envBase = import.meta.env.VITE_API_BASE_URL ?? "/shopkart-api";
+          const prefix = window.location.pathname.match(/^\/(mcp|deal)(?=\/|$)/);
+          const base = prefix && envBase.startsWith("/") ? `/${prefix[1]}${envBase}` : envBase;
           void fetch(`${base}/logout`, {
             method: "POST",
             headers: {

@@ -2,11 +2,15 @@ Options -MultiViews
 DirectoryIndex index.php index.html
 
 RewriteEngine On
-RewriteBase /
+# Do not set RewriteBase / — that sends /mcp/ rewrites to htdocs root.
+# Relative [R=301] on Windows Apache becomes C:/xampp/htdocs/... (403 Forbidden).
+# Compute the URL prefix (/ or /mcp/) and use it for every external redirect.
+RewriteCond %{REQUEST_URI}::$1 ^(.*?/)(.*)::\2$
+RewriteRule ^(.*)$ - [E=APP_BASE:%1]
 
 # Browser: /index.php/admin/login → /admin/login (one root index.php only)
 RewriteCond %{THE_REQUEST} \s/+index\.php/([^\s?]*) [NC]
-RewriteRule ^index\.php/(.*)$ /$1 [R=301,L,QSA]
+RewriteRule ^index\.php/(.*)$ %{ENV:APP_BASE}$1 [R=301,L,QSA]
 
 # Pass Authorization to PHP (Apache often strips it otherwise → JWT/royalty fail)
 RewriteCond %{HTTP:Authorization} .
@@ -32,12 +36,12 @@ RewriteRule ^firebase-messaging-sw\.js$ firebase-messaging-sw.php [L]
     Header set Expires "0"
 </Files>
 
-# Legacy path redirects
-RewriteRule ^ilf/frontend/assets/(.*)$ frontend/assets/$1 [R=301,L]
-RewriteRule ^ilf/assets/(.*)$ assets/$1 [R=301,L]
-RewriteRule ^ecomm/(.*)$ $1 [R=301,L]
-RewriteRule ^deal/assets/(.*)$ /assets/$1 [R=301,L]
-RewriteRule ^deal/(.*)$ /$1 [R=301,L]
+# Legacy path redirects (APP_BASE keeps these on /mcp/ locally and / in production)
+RewriteRule ^ilf/frontend/assets/(.*)$ %{ENV:APP_BASE}frontend/assets/$1 [R=301,L]
+RewriteRule ^ilf/assets/(.*)$ %{ENV:APP_BASE}assets/$1 [R=301,L]
+RewriteRule ^ecomm/(.*)$ %{ENV:APP_BASE}$1 [R=301,L]
+RewriteRule ^deal/assets/(.*)$ %{ENV:APP_BASE}assets/$1 [R=301,L]
+RewriteRule ^deal/(.*)$ %{ENV:APP_BASE}$1 [R=301,L]
 # Legacy /shopkart/... URLs
 # POST must NOT use external 301 (browsers turn POST→GET and drop the body → "settings not saved").
 RewriteCond %{REQUEST_METHOD} !^(GET|HEAD)$ [NC]
@@ -45,8 +49,8 @@ RewriteRule ^shopkart/?$ index.php?/admin [L,QSA]
 RewriteCond %{REQUEST_METHOD} !^(GET|HEAD)$ [NC]
 RewriteRule ^shopkart/(.+)$ index.php?/admin/$1 [L,QSA]
 # GET: send browsers to /admin/...
-RewriteRule ^shopkart/?$ /admin [R=301,L]
-RewriteRule ^shopkart/(.+)$ /admin/$1 [R=301,L]
+RewriteRule ^shopkart/?$ %{ENV:APP_BASE}admin [R=301,L]
+RewriteRule ^shopkart/(.+)$ %{ENV:APP_BASE}admin/$1 [R=301,L]
 
 <Files "frontend/index.html">
     <IfModule mod_headers.c>
@@ -60,7 +64,7 @@ RewriteRule ^shopkart/(.+)$ /admin/$1 [R=301,L]
 RewriteRule ^(frontend|assets|images|css|js|fonts|webfonts|uploads)/ - [L]
 
 # Missing hashed frontend assets must NOT become SPA HTML (breaks module MIME)
-RewriteCond %{REQUEST_URI} ^/frontend/assets/
+RewriteCond %{REQUEST_URI} /frontend/assets/
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ - [R=404,L]
 

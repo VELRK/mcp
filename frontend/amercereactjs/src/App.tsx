@@ -139,18 +139,6 @@ function AuthReturnTracker() {
   return null;
 }
 
-/** Stores ?ref=PROMOCODE from affiliate links for checkout auto-apply */
-function AffiliateRefCapture() {
-  const location = useLocation();
-  useEffect(() => {
-    const ref = new URLSearchParams(location.search).get("ref");
-    if (ref?.trim()) {
-      sessionStorage.setItem("sk_affiliate_ref", ref.trim().toUpperCase());
-    }
-  }, [location.search]);
-  return null;
-}
-
 /** Loads wishlist from API on login/logout */
 function WishlistSync() {
   const { isLoggedIn } = useAuthStore();
@@ -273,9 +261,6 @@ const AccountSetting = lazy(
   () => import("./pages/account/account-setting/index"),
 );
 const AccountPage = lazy(() => import("./pages/account/account-page/index"));
-const AccountWallet = lazy(() => import("./pages/account/account-wallet/index"));
-const AccountWalletTopup = lazy(() => import("./pages/account/account-wallet-topup/index"));
-const AccountRoyalty = lazy(() => import("./pages/account/account-royalty/index"));
 const AccountOrders = lazy(
   () => import("./pages/account/account-orders/index"),
 );
@@ -393,8 +378,17 @@ const ProductSwatchDropdownColor = lazy(
   () => import("./pages/shop-details/product-swatch-dropdown-color/index"),
 );
 
+// XAMPP copies live under /mcp or /deal; production (2deal.my) is document root.
+function detectInstallPrefix(): string {
+  if (typeof window === "undefined") return "";
+  const match = window.location.pathname.match(/^\/(mcp|deal)(?=\/|$)/);
+  return match ? `/${match[1]}` : "";
+}
+
 // When VITE_ROUTER_BASENAME is set (even "/" for domain root), do not fall back to VITE_BASE (/frontend/).
 const routerBasename = (() => {
+  const install = detectInstallPrefix();
+  if (install) return install;
   const fromEnv = import.meta.env.VITE_ROUTER_BASENAME as string | undefined;
   if (fromEnv !== undefined) {
     return String(fromEnv).replace(/\/$/, "") || "/";
@@ -545,15 +539,11 @@ function App() {
           />
           <Route
             path="/account-wallet"
-            element={<AccountRoute Page={AccountWallet} />}
+            element={<Navigate to="/account-orders" replace />}
           />
           <Route
             path="/account-wallet/topup"
-            element={<AccountRoute Page={AccountWalletTopup} />}
-          />
-          <Route
-            path="/account-royalty"
-            element={<AccountRoute Page={AccountRoyalty} />}
+            element={<Navigate to="/account-orders" replace />}
           />
 
           {/* Blog */}
@@ -736,7 +726,6 @@ function App() {
           <Route path="*" element={<PagesSectionRoute Page={Page404} />} />
         </Routes>
       </Suspense>
-      <AffiliateRefCapture />
       <AuthHydrationBootstrap />
       <AuthReturnTracker />
       <AuthSessionGuard />

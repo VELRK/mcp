@@ -123,17 +123,24 @@ class Sk_Admin_model extends CI_Model {
             || strpos($a, '123 main street') !== false;
     }
 
-    /** Keep currency_symbol as RM across admin + APIs. */
+    /** Persist Indian Rupee from settings when empty or leftover RM/MYR. */
     private function _ensure_currency_symbol(array &$settings): void {
         static $done = false;
         $sym = trim((string)($settings['currency_symbol'] ?? ''));
-        if ($sym === '' || $sym === '₹' || strcasecmp($sym, 'Rs') === 0
-            || strcasecmp($sym, 'Rs.') === 0 || strcasecmp($sym, 'INR') === 0) {
-            $settings['currency_symbol'] = 'RM';
-            if (!$done) {
-                $done = true;
-                $this->save_settings(['currency_symbol' => 'RM']);
-            }
+        $code = strtoupper(trim((string)($settings['currency_code'] ?? '')));
+        $patch = [];
+
+        if ($sym === '' || strcasecmp($sym, 'RM') === 0 || strcasecmp($sym, 'MYR') === 0) {
+            $patch['currency_symbol'] = '₹';
+            $settings['currency_symbol'] = '₹';
+        }
+        if ($code === '' || $code === 'MYR' || $code === 'RM') {
+            $patch['currency_code'] = 'INR';
+            $settings['currency_code'] = 'INR';
+        }
+        if ($patch && !$done) {
+            $done = true;
+            $this->save_settings($patch);
             return;
         }
         $done = true;
@@ -212,10 +219,8 @@ class Sk_Admin_model extends CI_Model {
 
             $row = ['key' => $key, 'value' => $value];
             if ($hasGroup) {
-                if (strpos($key, 'askeva_') === 0) {
+                if (strpos($key, 'askeva_') === 0 || strpos($key, 'wa_cloud_') === 0) {
                     $row['group'] = 'whatsapp';
-                } elseif (strpos($key, 'jt_express_') === 0) {
-                    $row['group'] = 'shipping';
                 } elseif (strpos($key, 'isms_') === 0) {
                     $row['group'] = 'sms';
                 } else {

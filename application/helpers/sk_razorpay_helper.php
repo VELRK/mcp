@@ -327,81 +327,6 @@ function sk_cart_remove_items_for_paid_order(int $userId, int $orderId): array {
 }
 
 /**
- * Confirm captured Razorpay payment matches a pending wallet top-up row.
- */
-function sk_razorpay_topup_payment_trusted(
-    array $pending,
-    string $rzpOrderId,
-    string $rzpPaymentId,
-    array $settings = null
-): bool {
-    $pay = sk_razorpay_fetch_payment($rzpPaymentId, $settings);
-    if (!$pay) {
-        return false;
-    }
-
-    $status = strtolower((string)($pay['status'] ?? ''));
-    if (!in_array($status, ['captured', 'authorized'], true)) {
-        return false;
-    }
-
-    if ((string)($pay['order_id'] ?? '') !== $rzpOrderId) {
-        return false;
-    }
-
-    $expectedSen = (int)round((float)($pending['amount'] ?? 0) * 100);
-    $paidSen = (int)($pay['amount'] ?? 0);
-    if ($expectedSen > 0 && $paidSen !== $expectedSen) {
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Build a consistent wallet top-up success payload for mobile apps.
- */
-function sk_razorpay_wallet_topup_response(array $wallet, string $reference, string $message): array {
-    return [
-        'credited'   => true,
-        'pending'    => false,
-        'failed'     => false,
-        'confirmed'  => true,
-        'reference'  => $reference,
-        'balance'    => (float)($wallet['balance'] ?? $wallet['balance_rm'] ?? 0),
-        'balance_rm' => (float)($wallet['balance_rm'] ?? $wallet['balance'] ?? 0),
-        'points'     => (int)($wallet['points'] ?? 0),
-        'wallet'     => $wallet,
-        'message'    => $message,
-    ];
-}
-
-function sk_razorpay_pending_wallet_response(string $reference, string $message): array {
-    return [
-        'credited'  => false,
-        'pending'   => true,
-        'failed'    => false,
-        'confirmed' => false,
-        'reference' => $reference,
-        'message'   => $message,
-    ];
-}
-
-function sk_razorpay_failed_wallet_response(string $reference, array $outcome): array {
-    return [
-        'credited'      => false,
-        'pending'       => false,
-        'failed'        => true,
-        'confirmed'     => false,
-        'retry_allowed' => !empty($outcome['retry_allowed']),
-        'error_reason'  => (string)($outcome['reason'] ?? ''),
-        'error_code'    => (string)($outcome['code'] ?? ''),
-        'reference'     => $reference,
-        'message'       => (string)($outcome['message'] ?? ''),
-    ];
-}
-
-/**
  * Build Curlec/Razorpay prefill for web + mobile SDKs.
  *
  * @return array{name:string,contact:string,contact_digits:string,contact_local:string,email?:string}
@@ -472,8 +397,6 @@ function sk_razorpay_finalize_order_payment(
     }
 
     if (($order['payment_status'] ?? '') === 'paid') {
-        $CI->load->helper('sk_royalty');
-        sk_royalty_credit_for_order($order);
         $order = $CI->Sk_Order_model->get_by_id($orderId, $userId);
         $msg = 'Payment successful! Your order is confirmed.';
         return [
@@ -533,7 +456,7 @@ function sk_razorpay_finalize_order_payment(
             'razorpay_payment_id' => $rzpPaymentId,
             'razorpay_signature'  => $rzpSignature,
             'amount'              => (float)($order['total'] ?? 0),
-            'currency'            => strtoupper((string)($order['currency'] ?? 'MYR')),
+            'currency'            => strtoupper((string)($order['currency'] ?? sk_currency_code($settings))),
             'status'              => 'captured',
         ]);
     }
@@ -541,14 +464,6 @@ function sk_razorpay_finalize_order_payment(
     $CI->Sk_Order_model->update_payment_status($orderId, 'paid');
     $CI->Sk_Order_model->update_status($orderId, 'confirmed');
 
-    $order = $CI->Sk_Order_model->get_by_id($orderId, $userId);
-
-    $CI->load->helper('sk_royalty');
-    $debitRes = sk_royalty_debit_for_order($order);
-    if (empty($debitRes['success']) && (int)($order['royalty_used_points'] ?? 0) > 0) {
-        log_message('error', 'Royalty redeem failed after payment for order #' . $orderId . ': ' . ($debitRes['message'] ?? ''));
-    }
-    sk_royalty_credit_for_order($order);
     $order = $CI->Sk_Order_model->get_by_id($orderId, $userId);
 
     if (!isset($CI->Sk_Admin_model)) {
@@ -571,125 +486,6 @@ function sk_razorpay_finalize_order_payment(
         'message'  => $msg,
         'order'    => $order,
         'response' => sk_razorpay_order_payment_response($order, $msg),
-    ];
-}
-
-/**
- * Credit wallet after Razorpay top-up capture (verify API or webhook).
- *
- * @return array{success:bool,message:string,wallet?:array}
- */
-function sk_razorpay_finalize_wallet_topup(
-    string $reference,
-    string $rzpOrderId,
-    string $rzpPaymentId,
-    string $rzpSignature,
-    int $userId,
-    array $settings = null,
-    bool $skipSignatureCheck = false
-): array {
-    $CI =& get_instance();
-    $CI->load->model('Sk_Customer_wallet_model');
-
-    $reference = trim($reference);
-    $rzpOrderId = trim($rzpOrderId);
-    $rzpPaymentId = trim($rzpPaymentId);
-
-    if ($reference === '' && $rzpOrderId !== '') {
-        $pendingByOrder = $CI->Sk_Customer_wallet_model->find_topup_pending('', $userId, $rzpOrderId);
-        if ($pendingByOrder) {
-            $reference = (string)($pendingByOrder['reference'] ?? '');
-        }
-    }
-
-    if ($reference !== '' && strpos($reference, 'TOPUP-') !== 0) {
-        return ['success' => false, 'message' => 'Invalid wallet top-up reference.'];
-    }
-
-    if ($reference !== '' && $CI->Sk_Customer_wallet_model->is_topup_completed($reference, $userId)) {
-        $wallet = $CI->Sk_Customer_wallet_model->get_checkout_info($userId);
-        return [
-            'success'  => true,
-            'message'  => 'Wallet topped up successfully!',
-            'wallet'   => $wallet,
-            'response' => sk_razorpay_wallet_topup_response($wallet, $reference, 'Wallet topped up successfully!'),
-        ];
-    }
-
-    $pending = null;
-    if ($reference !== '') {
-        $pending = $CI->Sk_Customer_wallet_model->find_topup_pending($reference, $userId, $rzpOrderId);
-    } elseif ($rzpOrderId !== '') {
-        $pending = $CI->Sk_Customer_wallet_model->find_topup_pending('', $userId, $rzpOrderId);
-        if ($pending) {
-            $reference = (string)($pending['reference'] ?? $reference);
-        }
-    }
-
-    if (!$pending) {
-        if ($reference !== '' && !preg_match('/^TOPUP-' . $userId . '-/', $reference)) {
-            return ['success' => false, 'message' => 'Invalid top-up reference for your account.'];
-        }
-        return ['success' => false, 'message' => 'Top-up session expired. Please try again.'];
-    }
-
-    if ($reference === '') {
-        $reference = (string)($pending['reference'] ?? '');
-    }
-
-    if (!$skipSignatureCheck) {
-        $sigOk = ($rzpSignature !== '')
-            && sk_razorpay_payment_signature_valid($rzpOrderId, $rzpPaymentId, $rzpSignature, $settings);
-        if (!$sigOk) {
-            if (sk_razorpay_topup_payment_trusted($pending, $rzpOrderId, $rzpPaymentId, $settings)) {
-                $skipSignatureCheck = true;
-                log_message('info', 'Wallet topup verified via Razorpay API fallback: ' . $reference);
-            } else {
-                log_message('error', 'Razorpay wallet topup signature mismatch: ' . $reference);
-                $pay = $rzpPaymentId !== '' ? sk_razorpay_fetch_payment($rzpPaymentId, $settings) : null;
-                if (sk_razorpay_is_gateway_pending($pay)) {
-                    $msg = sk_razorpay_pending_message();
-                    return [
-                        'success'  => false,
-                        'pending'  => true,
-                        'message'  => $msg,
-                        'response' => sk_razorpay_pending_wallet_response($reference, $msg),
-                    ];
-                }
-                $outcome = sk_razorpay_outcome_from_gateway($pay);
-                if ($outcome['kind'] === 'failed') {
-                    return [
-                        'success'  => false,
-                        'failed'   => true,
-                        'message'  => $outcome['message'],
-                        'response' => sk_razorpay_failed_wallet_response($reference, $outcome),
-                    ];
-                }
-                return ['success' => false, 'message' => 'Payment verification failed. Please contact support with ref ' . $reference];
-            }
-        }
-    }
-
-    $refToCredit = $pending['reference'] ?? $reference;
-    if (!$CI->Sk_Customer_wallet_model->complete_topup_by_reference($refToCredit, $userId)) {
-        if ($CI->Sk_Customer_wallet_model->is_topup_completed($refToCredit, $userId)) {
-            $wallet = $CI->Sk_Customer_wallet_model->get_checkout_info($userId);
-            return [
-                'success'  => true,
-                'message'  => 'Wallet topped up successfully!',
-                'wallet'   => $wallet,
-                'response' => sk_razorpay_wallet_topup_response($wallet, $refToCredit, 'Wallet topped up successfully!'),
-            ];
-        }
-        return ['success' => false, 'message' => 'Could not credit wallet. Contact support with ref ' . $reference];
-    }
-
-    $wallet = $CI->Sk_Customer_wallet_model->get_checkout_info($userId);
-    return [
-        'success'  => true,
-        'message'  => 'Wallet topped up successfully!',
-        'wallet'   => $wallet,
-        'response' => sk_razorpay_wallet_topup_response($wallet, $refToCredit, 'Wallet topped up successfully!'),
     ];
 }
 
@@ -737,34 +533,7 @@ function sk_razorpay_handle_webhook_event(array $event, array $settings = null):
         return ['handled' => true, 'type' => 'order', 'result' => $result];
     }
 
-    // Wallet top-up: reference stored on pending tx or Razorpay order notes.
-    $CI->load->model('Sk_Customer_wallet_model');
-    $pending = $CI->db->like('description', 'Pending Razorpay ' . $orderId, 'after')
-        ->order_by('id', 'DESC')
-        ->get('customer_wallet_transactions')
-        ->row_array();
-
-    if (!$pending) {
-        return ['handled' => false, 'message' => 'No matching shop order or wallet top-up for ' . $orderId];
-    }
-
-    $reference = (string)($pending['reference'] ?? '');
-    $userId = (int)($pending['user_id'] ?? 0);
-    if ($reference === '' || $userId <= 0) {
-        return ['handled' => false, 'message' => 'Invalid wallet top-up row for ' . $orderId];
-    }
-
-    $result = sk_razorpay_finalize_wallet_topup(
-        $reference,
-        $orderId,
-        $paymentId,
-        '',
-        $userId,
-        $settings,
-        true
-    );
-
-    return ['handled' => true, 'type' => 'wallet_topup', 'result' => $result];
+    return ['handled' => false, 'message' => 'No matching shop order for ' . $orderId];
 }
 
 /**

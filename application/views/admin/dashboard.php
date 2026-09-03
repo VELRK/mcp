@@ -1,4 +1,4 @@
-<?php $currency = $currency ?? ($settings['currency_symbol'] ?? 'RM'); ?>
+<?php $currency = $currency ?? sk_currency_symbol($settings); ?>
 
 <div class="sk-page-header">
   <h5 class="sk-page-title"><i class="bi bi-speedometer2 me-2 text-warning"></i>
@@ -46,7 +46,6 @@
   <div class="col-auto"><span class="badge bg-danger"><?= $s['pending_orders'] ?> pending orders</span></div>
   <div class="col-auto"><span class="badge bg-secondary"><?= $s['low_stock'] ?> low stock</span></div>
   <div class="col-auto"><a href="<?= site_url('admin/stores/edit/'.$vendor['id']) ?>" class="btn btn-sm btn-outline-primary">Store Settings</a></div>
-  <div class="col-auto"><a href="<?= site_url('admin/customer-wallets') ?>" class="btn btn-sm btn-outline-success">Customer Wallets</a></div>
 </div>
 <?php else: ?>
 <div class="row g-3 mb-4">

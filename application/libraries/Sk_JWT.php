@@ -80,18 +80,6 @@ class Sk_JWT {
         return $payload;
     }
 
-    /** Affiliate JWT payload (affiliate_id + type=affiliate). Not interchangeable with customer tokens. */
-    public function get_affiliate_from_request() {
-        $payload = $this->get_payload_from_request();
-        if (!$payload || empty($payload['affiliate_id'])) {
-            return null;
-        }
-        if (!empty($payload['type']) && $payload['type'] !== 'affiliate') {
-            return null;
-        }
-        return $payload;
-    }
-
     /** Store token hash until exp so logout invalidates it. */
     public function blacklist($token, $userId = null): bool {
         $payload = $this->decode_ignore_blacklist($token);

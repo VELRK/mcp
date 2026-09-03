@@ -28,77 +28,12 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
           <i class="bi bi-shop-window me-2"></i> Vendors
         </a>
       </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/wallet') ?>" class="nav-link sk-nav-link <?= sk_active($uri,'wallet') ?>">
-          <i class="bi bi-wallet2 me-2"></i> Vendor Wallets
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/affiliates') ?>" class="nav-link sk-nav-link <?= sk_active($uri,'affiliates') ?>">
-          <i class="bi bi-megaphone me-2"></i> Affiliates
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/affiliate-payouts') ?>" class="nav-link sk-nav-link <?= $uri==='affiliate-payouts'?'active':'' ?>">
-          <i class="bi bi-cash-stack me-2"></i> Affiliate Payouts
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/customer-wallets') ?>" class="nav-link sk-nav-link <?= $uri==='customer-wallets'?'active':'' ?>">
-          <i class="bi bi-credit-card me-2"></i> Customer Wallets
-        </a>
-        <a href="<?= site_url('shopkart/wallet-recharge') ?>" class="nav-link sk-nav-link <?= $uri==='wallet-recharge'?'active':'' ?>">
-          <i class="bi bi-graph-up-arrow me-2"></i> Wallet Recharge Report
-        </a>
-        <a href="<?= site_url('shopkart/royalty-report') ?>" class="nav-link sk-nav-link <?= in_array($uri, ['royalty-report','royalty'], true)?'active':'' ?>">
-          <i class="bi bi-stars me-2"></i> Royalty Points Report
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/affiliate-reports') ?>" class="nav-link sk-nav-link <?= $uri==='affiliate-reports'?'active':'' ?>">
-          <i class="bi bi-graph-up me-2"></i> Affiliate Reports
-        </a>
-      </li>
       <?php endif; ?>
 
       <?php if (!empty($impersonating) || !empty($vendor_context) && $vendor_context->vendor_id()): ?>
-      <li class="nav-item mt-2">
-        <small class="text-uppercase text-white-50 fw-bold px-2" style="font-size:.65rem;letter-spacing:.08em;">Affiliates</small>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/affiliates') ?>" class="nav-link sk-nav-link <?= sk_active($uri,'affiliates') ?>">
-          <i class="bi bi-megaphone me-2"></i> My Affiliates
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/affiliate-reports') ?>" class="nav-link sk-nav-link <?= $uri==='affiliate-reports'?'active':'' ?>">
-          <i class="bi bi-graph-up me-2"></i> Affiliate Reports
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/affiliate-payouts') ?>" class="nav-link sk-nav-link <?= $uri==='affiliate-payouts'?'active':'' ?>">
-          <i class="bi bi-cash-stack me-2"></i> Affiliate Payouts
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/customer-wallets') ?>" class="nav-link sk-nav-link <?= $uri==='customer-wallets'?'active':'' ?>">
-          <i class="bi bi-credit-card me-2"></i> Customer Wallets
-        </a>
-        <a href="<?= site_url('shopkart/wallet-recharge') ?>" class="nav-link sk-nav-link <?= $uri==='wallet-recharge'?'active':'' ?>">
-          <i class="bi bi-graph-up-arrow me-2"></i> Wallet Recharge Report
-        </a>
-        <a href="<?= site_url('shopkart/royalty-report') ?>" class="nav-link sk-nav-link <?= in_array($uri, ['royalty-report','royalty'], true)?'active':'' ?>">
-          <i class="bi bi-stars me-2"></i> Royalty Points Report
-        </a>
-      </li>
       <li class="nav-item">
         <a href="<?= site_url('shopkart/stores/edit/'.($vendor_context->vendor_id() ?? '')) ?>" class="nav-link sk-nav-link <?= sk_active($uri,'stores') ?>">
           <i class="bi bi-shop me-2"></i> My Store
-        </a>
-      </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/wallet/vendor/'.($vendor_context->vendor_id() ?? '')) ?>" class="nav-link sk-nav-link <?= sk_active($uri,'wallet') ?>">
-          <i class="bi bi-wallet2 me-2"></i> My Wallet
         </a>
       </li>
       <?php if (!empty($vendor_logged_in)): ?>
@@ -141,13 +76,6 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
           <i class="bi bi-shop me-2"></i> Brands
         </a>
       </li>
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/banks') ?>"
-           class="nav-link sk-nav-link <?= $uri==='banks'?'active':'' ?>">
-          <i class="bi bi-bank me-2"></i> Banks
-        </a>
-      </li>
-
       <li class="nav-item">
         <a href="<?= site_url('shopkart/variant-units') ?>"
            class="nav-link sk-nav-link <?= $uri==='variant-units'?'active':'' ?>">
@@ -205,13 +133,6 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
       </li>
 
       <li class="nav-item">
-        <a href="<?= site_url('shopkart/jt-express') ?>"
-           class="nav-link sk-nav-link <?= in_array($uri, ['jt-express','jt_express'], true) ? 'active' : '' ?>">
-          <i class="bi bi-truck me-2"></i> JT Express
-        </a>
-      </li>
-
-      <li class="nav-item">
         <a href="<?= site_url('shopkart/customers') ?>"
            class="nav-link sk-nav-link <?= sk_active($uri,'customers') ?>">
           <i class="bi bi-people me-2"></i> Customers
@@ -250,9 +171,27 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
       <?php endif; ?>
 
       <li class="nav-item">
+        <a href="<?= site_url('shopkart/whatsapp') ?>"
+           class="nav-link sk-nav-link <?= ($uri === 'whatsapp' && !$this->uri->segment(3)) ? 'active' : '' ?>">
+          <i class="bi bi-whatsapp me-2"></i> WhatsApp Inbox
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="<?= site_url('shopkart/whatsapp/templates') ?>"
+           class="nav-link sk-nav-link <?= ($this->uri->segment(3)==='templates') ? 'active' : '' ?>">
+          <i class="bi bi-file-earmark-richtext me-2"></i> WA Templates
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="<?= site_url('shopkart/whatsapp/campaigns') ?>"
+           class="nav-link sk-nav-link <?= ($this->uri->segment(3)==='campaigns') ? 'active' : '' ?>">
+          <i class="bi bi-megaphone me-2"></i> WA Campaigns
+        </a>
+      </li>
+      <li class="nav-item">
         <a href="<?= site_url('shopkart/whatsapp-report') ?>"
            class="nav-link sk-nav-link <?= $uri==='whatsapp-report'?'active':'' ?>">
-          <i class="bi bi-whatsapp me-2"></i> WhatsApp Report
+          <i class="bi bi-clipboard-data me-2"></i> WhatsApp Report
         </a>
       </li>
 

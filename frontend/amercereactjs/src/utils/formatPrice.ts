@@ -1,6 +1,18 @@
-export function formatPrice(value: number, symbol = "RM"): string {
+let cachedSymbol = "₹";
+
+export function setCurrencySymbol(symbol?: string | null): void {
+  if (symbol != null && String(symbol).trim() !== "") {
+    cachedSymbol = String(symbol).trim();
+  }
+}
+
+export function getCurrencySymbol(): string {
+  return cachedSymbol;
+}
+
+export function formatPrice(value: number, symbol?: string): string {
   return (
-    symbol +
+    (symbol ?? cachedSymbol) +
     Number(value || 0).toLocaleString("en-IN", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,

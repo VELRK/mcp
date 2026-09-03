@@ -1,5 +1,5 @@
 <?php
-$currency = $settings['currency_symbol'] ?? 'RM';
+$currency = sk_currency_symbol($settings);
 $f = $filters ?? [];
 $show_vendor_col = !empty($show_vendor_col);
 ?>
@@ -53,12 +53,12 @@ $show_vendor_col = !empty($show_vendor_col);
         </select>
       </div>
       <div style="min-width:80px;flex:0 0 80px;">
-        <label class="form-label small mb-1">Min RM</label>
+        <label class="form-label small mb-1">Min <?= htmlspecialchars($currency) ?></label>
         <input type="number" name="min_price" class="form-control form-control-sm sk-product-filter-delay" step="0.01" min="0"
                value="<?= htmlspecialchars((string)($f['min_price'] ?? '')) ?>" placeholder="0">
       </div>
       <div style="min-width:80px;flex:0 0 80px;">
-        <label class="form-label small mb-1">Max RM</label>
+        <label class="form-label small mb-1">Max <?= htmlspecialchars($currency) ?></label>
         <input type="number" name="max_price" class="form-control form-control-sm sk-product-filter-delay" step="0.01" min="0"
                value="<?= htmlspecialchars((string)($f['max_price'] ?? '')) ?>" placeholder="Any">
       </div>

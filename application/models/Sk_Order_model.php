@@ -82,7 +82,6 @@ class Sk_Order_model extends CI_Model {
     }
 
     public function update_status($order_id, $status) {
-        $this->ensure_jt_schema();
         $order_id = (int)$order_id;
         $prev = $this->db->select('status')->where('id', $order_id)->get('orders')->row_array();
         $prevStatus = (string)($prev['status'] ?? '');
@@ -113,47 +112,11 @@ class Sk_Order_model extends CI_Model {
         }
     }
 
-    public function update_jt_shipment($order_id, array $data) {
-        $this->ensure_jt_schema();
-        $allowed = [
-            'courier_provider', 'jt_txlogistic_id', 'jt_bill_code', 'jt_courier_status',
-            'jt_label_data', 'jt_track_data', 'jt_shipment_created_at', 'tracking_number', 'status',
-            'confirmed_at', 'processing_at', 'status_updated_at', 'shipped_at', 'delivered_at',
-        ];
-        $update = [];
-        foreach ($allowed as $k) {
-            if (array_key_exists($k, $data)) {
-                $update[$k] = $data[$k];
-            }
-        }
-        if (!$update) {
-            return;
-        }
-        $this->db->where('id', (int)$order_id)->update('orders', $update);
-    }
-
-    public function clear_jt_shipment($order_id) {
-        $this->ensure_jt_schema();
-        $this->db->where('id', (int)$order_id)->update('orders', [
-            'courier_provider'        => null,
-            'jt_txlogistic_id'        => null,
-            'jt_bill_code'            => null,
-            'jt_courier_status'       => 'cancelled',
-            'jt_label_data'           => null,
-            'jt_track_data'           => null,
-            'jt_shipment_created_at'  => null,
-        ]);
-    }
-
     public function get_by_tracking($tracking_number) {
         if ($tracking_number === '') {
             return null;
         }
-        $this->ensure_jt_schema();
-        $order = $this->db->group_start()
-            ->where('tracking_number', $tracking_number)
-            ->or_where('jt_bill_code', $tracking_number)
-            ->group_end()
+        $order = $this->db->where('tracking_number', $tracking_number)
             ->order_by('id', 'DESC')
             ->limit(1)
             ->get('orders')->row_array();
@@ -162,11 +125,6 @@ class Sk_Order_model extends CI_Model {
         }
         $order['items'] = $this->get_items($order['id']);
         return $order;
-    }
-
-    public function ensure_jt_schema() {
-        $this->load->helper('sk_jt_express');
-        sk_jt_express_ensure_schema();
     }
 
     public function update_payment_status($order_id, $status) {
@@ -255,48 +213,6 @@ class Sk_Order_model extends CI_Model {
             return 'Unknown';
         }
         return $map[$key];
-    }
-
-    /**
-     * Orders for JT Express module: shipments created, or ready to create.
-     * @return array{rows:array,total:int}
-     */
-    public function get_jt_shipments(array $filters = [], int $limit = 20, int $offset = 0): array {
-        $this->db->from('orders o');
-        $this->_jt_shipments_where($filters);
-        $total = (int)$this->db->count_all_results();
-
-        $this->db->select('o.*, u.name as customer_name, u.email as customer_email, u.phone as customer_phone')
-            ->from('orders o')
-            ->join('users u', 'u.id = o.user_id', 'left');
-        $this->_jt_shipments_where($filters);
-        $this->db->order_by('o.id', 'DESC')->limit($limit, $offset);
-        $rows = $this->db->get()->result_array();
-        return ['rows' => $rows, 'total' => $total];
-    }
-
-    private function _jt_shipments_where(array $filters): void {
-        $this->db->where_not_in('o.status', ['cancelled', 'returned']);
-        $scope = $filters['scope'] ?? 'all';
-        if ($scope === 'created') {
-            $this->db->where("o.jt_bill_code IS NOT NULL AND o.jt_bill_code != ''", null, false);
-        } elseif ($scope === 'pending') {
-            $this->db->group_start()
-                ->where('o.jt_bill_code IS NULL', null, false)
-                ->or_where('o.jt_bill_code', '')
-                ->group_end();
-            $this->db->where_in('o.status', ['confirmed', 'processing', 'shipped', 'pending', 'payment_attempt']);
-        }
-        if (!empty($filters['search'])) {
-            $q = $filters['search'];
-            $this->db->group_start()
-                ->like('o.order_number', $q)
-                ->or_like('o.jt_bill_code', $q)
-                ->or_like('o.tracking_number', $q)
-                ->or_like('o.shipping_name', $q)
-                ->or_like('o.shipping_phone', $q)
-                ->group_end();
-        }
     }
 
     // Stats
@@ -540,19 +456,11 @@ class Sk_Order_model extends CI_Model {
             return ['ok' => false, 'message' => 'Delivered or returned orders cannot be cancelled.'];
         }
 
-        $walletRefund = (float)($order['wallet_amount'] ?? 0);
-        if ($walletRefund <= 0 && ($order['payment_method'] ?? '') === 'wallet' && ($order['payment_status'] ?? '') === 'paid') {
-            $walletRefund = (float)$order['total'];
-        }
-
-        $royaltyRefundPts = (int)($order['royalty_used_points'] ?? 0);
-        $royaltyRefundRm  = round((float)($order['royalty_used_rm'] ?? 0), 2);
-
         $onlineRefund = 0.0;
         $payment = $order['payment'] ?? $this->get_payment($orderId);
         $wasPaid = ($order['payment_status'] ?? '') === 'paid';
         if ($wasPaid && ($order['payment_method'] ?? '') === 'razorpay') {
-            $onlineRefund = round(max(0, (float)$order['total'] - $walletRefund - $royaltyRefundRm), 2);
+            $onlineRefund = round(max(0, (float)$order['total']), 2);
         }
 
         if ($onlineRefund > 0) {
@@ -566,28 +474,6 @@ class Sk_Order_model extends CI_Model {
             }
         }
 
-        if ($walletRefund > 0) {
-            $this->load->model('Sk_Customer_wallet_model');
-            if (!$this->Sk_Customer_wallet_model->refund_order_payment((int)$order['user_id'], $orderId, $walletRefund)) {
-                return ['ok' => false, 'message' => 'Could not refund wallet balance. Please contact support.'];
-            }
-        }
-
-        if ($royaltyRefundPts > 0 && $royaltyRefundRm > 0) {
-            $this->load->model('Sk_Royalty_model');
-            // Only restore points if they were actually redeemed (confirmed orders).
-            if ($this->Sk_Royalty_model->was_redeemed_for_order((int)$order['user_id'], $orderId)) {
-                $this->Sk_Royalty_model->credit(
-                    (int)$order['user_id'],
-                    $royaltyRefundPts,
-                    $royaltyRefundRm,
-                    'ORD-' . $orderId . '-ROYALTY-REFUND',
-                    'Royalty refund ' . $royaltyRefundPts . ' pts (RM ' . number_format($royaltyRefundRm, 2) . ') for cancelled order #' . $orderId,
-                    $orderId
-                );
-            }
-        }
-
         $this->restore_stock_for_order($orderId);
 
         $newPaymentStatus = $wasPaid ? 'refunded' : 'failed';
@@ -598,8 +484,6 @@ class Sk_Order_model extends CI_Model {
         $msg = 'Order cancelled.';
         if ($wasPaid) {
             $msg = 'Order cancelled and refund initiated.';
-        } elseif ($walletRefund > 0) {
-            $msg = 'Order cancelled. Wallet balance has been restored.';
         }
 
         return ['ok' => true, 'message' => $msg];
@@ -616,7 +500,7 @@ class Sk_Order_model extends CI_Model {
             return ['ok' => false, 'message' => 'Payment gateway not configured for refund.'];
         }
 
-        $currency = strtoupper($settings['currency_code'] ?? 'MYR');
+        $currency = strtoupper(sk_currency_code($settings));
         $payload = json_encode([
             'amount'   => (int)round($amountRm * 100),
             'currency' => $currency,

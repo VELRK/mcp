@@ -16,18 +16,7 @@ class Sk_Promo extends Sk_Base_Api {
         $result = $this->Sk_Promo_model->validate($code, $this->user['user_id'], $order_amount);
 
         if (!$result['valid']) {
-            $this->load->model('Sk_Affiliate_model');
-            $affResult = $this->Sk_Affiliate_model->validate_checkout_code($code, $order_amount);
-            if ($affResult['valid']) {
-                return $this->success([
-                    'discount' => $affResult['discount'],
-                    'code'     => $affResult['code'],
-                    'type'     => $affResult['type'],
-                    'value'    => $affResult['value'],
-                    'source'   => 'affiliate',
-                ], 'Affiliate code applied! You save RM ' . number_format($affResult['discount'], 2));
-            }
-            return $this->error($affResult['message'] ?? $result['message']);
+            return $this->error($result['message']);
         }
 
         $this->success([
@@ -36,6 +25,6 @@ class Sk_Promo extends Sk_Base_Api {
             'type'     => $result['promo']['type'],
             'value'    => $result['promo']['value'],
             'source'   => 'promo',
-        ], 'Promo code applied! You save RM ' . number_format($result['discount'], 2));
+        ], 'Promo code applied! You save ' . sk_money($result['discount']) . '.');
     }
 }

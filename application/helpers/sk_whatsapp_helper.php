@@ -437,7 +437,7 @@ function sk_whatsapp_order_message(array $order, string $status, array $settings
         $lines[] = "Tracking / AWB: {$awb}";
     }
     $total = isset($order['total']) ? number_format((float)$order['total'], 2) : '';
-    $cur = $settings['currency_symbol'] ?? 'RM';
+    $cur = sk_currency_symbol($settings);
     if ($total !== '') {
         $lines[] = "Amount: {$cur}{$total}";
     }

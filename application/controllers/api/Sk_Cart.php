@@ -448,35 +448,6 @@ class Sk_Cart extends Sk_Base_Api {
             ],
         ];
 
-        // Royalty points (separate ledger from wallet) — show when logged in
-        $this->load->helper('sk_royalty');
-        sk_royalty_ensure_schema();
-        $userId = (int)($this->user['user_id'] ?? 0);
-        if ($userId < 1) {
-            $jwt = $this->sk_jwt->get_user_from_request();
-            $userId = (int)($jwt['user_id'] ?? 0);
-        }
-        if ($userId > 0) {
-            $this->load->model('Sk_Royalty_model');
-            $summary['royalty'] = $this->Sk_Royalty_model->get_info($userId);
-            $this->load->model('Sk_Customer_wallet_model');
-            $walletOffer = $this->Sk_Customer_wallet_model->get_wallet_offer_settings();
-            $preview = $this->Sk_Customer_wallet_model->get_discount_preview((float)$summary['subtotal']);
-            $summary['wallet'] = array_merge($walletOffer, $preview);
-        } else {
-            $summary['royalty'] = [
-                'enabled'      => sk_royalty_enabled($settings),
-                'show_on_cart' => false,
-                'points'       => 0,
-                'balance_rm'   => 0,
-                'hint'         => 'Login to see and redeem royalty points.',
-            ];
-            $this->load->model('Sk_Customer_wallet_model');
-            $walletOffer = $this->Sk_Customer_wallet_model->get_wallet_offer_settings();
-            $preview = $this->Sk_Customer_wallet_model->get_discount_preview((float)$summary['subtotal']);
-            $summary['wallet'] = array_merge($walletOffer, $preview);
-        }
-
         return $summary;
     }
 }

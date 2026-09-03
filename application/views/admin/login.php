@@ -56,8 +56,7 @@
       &copy; <?= date('Y') ?> 2DEAL. All rights reserved.
     </p>
     <p class="text-center small mb-0">
-      <a href="<?= site_url('admin/vendor/login') ?>">Vendor login</a> ·
-      <a href="<?= site_url('admin/affiliate/login') ?>">Affiliate login</a>
+      <a href="<?= site_url('admin/vendor/login') ?>">Vendor login</a>
     </p>
   </div>
 </div>

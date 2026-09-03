@@ -46,7 +46,7 @@ class Sk_Promo_model extends CI_Model {
             return ['valid' => false, 'message' => 'Promo code has expired.'];
 
         if ($promo['min_order'] > 0 && $order_amount < $promo['min_order'])
-            return ['valid' => false, 'message' => 'Minimum order RM' . $promo['min_order'] . ' required.'];
+            return ['valid' => false, 'message' => 'Minimum order ' . sk_money($promo['min_order']) . ' required.'];
 
         if ($promo['usage_limit'] && $promo['usage_count'] >= $promo['usage_limit'])
             return ['valid' => false, 'message' => 'Promo code usage limit reached.'];

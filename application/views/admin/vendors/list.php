@@ -61,7 +61,6 @@ $status_badges = [
           <th>Vendor</th>
           <th>Contact</th>
           <th>Commission</th>
-          <th>Wallet</th>
           <th>Status</th>
           <th>Joined</th>
           <th></th>
@@ -69,7 +68,7 @@ $status_badges = [
       </thead>
       <tbody>
         <?php if (empty($vendors)): ?>
-        <tr><td colspan="7" class="text-center text-muted py-4">No vendors found.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-4">No vendors found.</td></tr>
         <?php endif; ?>
         <?php foreach ($vendors as $v): ?>
         <tr>
@@ -82,7 +81,6 @@ $status_badges = [
             <small class="text-muted"><?= htmlspecialchars($v['email']) ?></small>
           </td>
           <td><?= number_format((float)$v['commission_rate'], 2) ?>%</td>
-          <td>RM<?= number_format((float)($v['wallet_balance'] ?? 0), 2) ?></td>
           <td>
             <span class="badge <?= $status_badges[$v['status']] ?? 'bg-secondary' ?>">
               <?= ucfirst($v['status']) ?>

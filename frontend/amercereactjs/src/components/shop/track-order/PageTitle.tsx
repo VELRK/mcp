@@ -17,7 +17,7 @@ function PageTitle() {
             <p className="text-body-1 cl-text-2">
               Enter your tracking ID (AWB) or order number and press Track.
               <br className="d-none d-lg-block" />
-              Tracking appears after your shipment is created with JT Express.
+              Tracking appears after a tracking number is added to your order.
             </p>
           </div>
         </div>

@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import CartIconCount from "./CartIconCount";
 import AccountIcon from "./AccountIcon";
-import WalletHeaderIcon from "./WalletHeaderIcon";
 import Nav from "./Nav";
 import { useHeaderSticky } from "@/hooks/useHeaderSticky";
 import { useModalStore } from "@/store/modalStore";
@@ -76,9 +75,6 @@ export default function Header1() {
                 <a href="#search" data-bs-toggle="modal" className="nav-icon-item link" style={{ color: "#222", transition: "color 0.2s" }} onMouseEnter={(e) => e.currentTarget.style.color = "#777"} onMouseLeave={(e) => e.currentTarget.style.color = "#222"}>
                   <i className="icon icon-MagnifyingGlass fs-5" />
                 </a>
-              </li>
-              <li>
-                <WalletHeaderIcon />
               </li>
               <li>
                 <div style={{ color: "#222", transition: "color 0.2s", cursor: "pointer" }} onMouseEnter={(e) => e.currentTarget.style.color = "#777"} onMouseLeave={(e) => e.currentTarget.style.color = "#222"}>

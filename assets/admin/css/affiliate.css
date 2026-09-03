@@ -1,4 +1,0 @@
-/* Affiliate portal */
-.sk-aff-sidebar { width: 240px; min-height: calc(100vh - 56px); flex-shrink: 0; position: sticky; top: 56px; align-self: flex-start; }
-.sk-aff-main { background: #f4f6f9; min-height: calc(100vh - 56px); }
-.sk-aff-stat { border-radius: 12px; border: none; }

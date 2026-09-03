@@ -24,7 +24,6 @@ const OrderDetails = lazy(() => import("@/components/modals/OrderDetails"));
 const Toolbar         = lazy(() => import("@/components/modals/Toolbar"));
 const PhoneOTP        = lazy(() => import("@/components/modals/PhoneOTP"));
 const ProductViewModal = lazy(() => import("@/components/modals/ProductViewModal"));
-const AffiliateEnquiryModal = lazy(() => import("@/components/modals/AffiliateEnquiryModal"));
 
 type BootstrapModalInstance = {
   hide: () => void;
@@ -170,9 +169,6 @@ export default function LayoutModals() {
       </LazyModal>
       <LazyModal>
         <ProductViewModal />
-      </LazyModal>
-      <LazyModal>
-        <AffiliateEnquiryModal />
       </LazyModal>
     </>
   );

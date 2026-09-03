@@ -3,11 +3,13 @@ import { OfferCard } from "@/components/homes/home-fashion-2/OfferCard";
 import { useProducts, toProductCard } from "@/hooks/useApi";
 
 function Offers() {
-  // Let's fetch the products with a discount or some specific offer. 
-  // We can fetch "newest" for now, or maybe a specific filter if the backend supports it.
-  const { products, loading } = useProducts({ sort: "newest", limit: 10 });
+  // Fetch products marked for homepage offers (hot_sale flag)
+  const { products, loading } = useProducts({ hot_sale: 1, limit: 10 });
 
   const cards = products.map(toProductCard);
+
+  if (loading) return null;
+  if (!cards.length) return null;
 
   return (
     <div className="flat-spacing">
@@ -18,9 +20,6 @@ function Offers() {
           </a>
         </div>
 
-        {loading ? (
-          <div className="text-center py-40">Loading…</div>
-        ) : (
           <div className="tf-btn-swiper-main position-relative">
             <TfSwiper
               className="wrap-sw-over"
@@ -83,7 +82,6 @@ function Offers() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </div>
           </div>
-        )}
       </div>
     </div>
   );

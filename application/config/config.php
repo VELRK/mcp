@@ -36,12 +36,25 @@ if (!empty($_SERVER['HTTP_HOST'])) {
     $hostNoPort = strtolower(preg_replace('/:\d+$/', '', $host));
 
     // Production domain at document root (public_html)
-    if ($hostNoPort === '2deal.my' || $hostNoPort === 'www.2deal.my') {
+    if ($hostNoPort === 'talkaipilot.com' || $hostNoPort === 'www.talkaipilot.com' || $hostNoPort === '2deal.my' || $hostNoPort === 'www.2deal.my') {
         $config['base_url'] = $scheme . '://' . $hostNoPort . '/';
         // Clean URLs: blank index_page + root .htaccess rewrite to single index.php
         $config['index_page'] = '';
     } elseif (strpos($host, 'localhost') !== false || strpos($host, '127.0.0.1') !== false) {
-        $config['base_url'] = $scheme . '://' . $host . '/deal/';
+        $script = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php');
+        if (preg_match('#^/?[A-Za-z]:/#', $script)) {
+            $uri = str_replace('\\', '/', $_SERVER['REQUEST_URI'] ?? '/');
+            $uriPath = explode('?', $uri, 2)[0];
+            if (preg_match('#^/(mcp|deal)(/|$)#', $uriPath, $m)) {
+                $config['base_url'] = $scheme . '://' . $host . '/' . $m[1] . '/';
+            } else {
+                $config['base_url'] = $scheme . '://' . $host . '/mcp/';
+            }
+        } else {
+            $path = dirname($script);
+            $path = ($path === '/' || $path === '' || $path === '.') ? '/' : rtrim($path, '/') . '/';
+            $config['base_url'] = $scheme . '://' . $host . $path;
+        }
     } else {
         $script = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/index.php');
         // XAMPP on Windows can expose a filesystem path in SCRIPT_NAME — never use that in URLs
@@ -54,7 +67,15 @@ if (!empty($_SERVER['HTTP_HOST'])) {
         }
     }
 } else {
-    $config['base_url'] = 'http://localhost/deal/';
+    $config['base_url'] = 'http://localhost/mcp/';
+}
+
+// Never leak a Windows filesystem path into generated links (403 Forbidden).
+// Must match drive letters only (e.g. http://C:/...), not the "p:/" inside "http://".
+if (!empty($config['base_url']) && preg_match('#https?://[A-Za-z]:[/\\\\]#', $config['base_url'])) {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $config['base_url'] = $scheme . '://' . $host . '/mcp/';
 }
 
 

@@ -9,7 +9,6 @@ type ModalType =
   | "phoneOTP"
   | "quickAdd"
   | "quickView"
-  | "affiliateEnquiry"
   | "none";
 
 const AUTH_MODALS: ModalType[] = ["signIn", "register", "phoneOTP", "forgotPassword"];

@@ -137,8 +137,8 @@ $delivery = $store['delivery_settings'] ?? [];
     <div class="card shadow-sm mb-3">
       <div class="card-header fw-semibold">Delivery Settings</div>
       <div class="card-body">
-        <div class="mb-2"><label class="form-label small">Free shipping above (RM)</label><input type="number" step="0.01" name="free_shipping_above" class="form-control form-control-sm" value="<?= htmlspecialchars($delivery['free_shipping_above'] ?? '') ?>"></div>
-        <div class="mb-2"><label class="form-label small">Flat rate (RM)</label><input type="number" step="0.01" name="flat_rate" class="form-control form-control-sm" value="<?= htmlspecialchars($delivery['flat_rate'] ?? '') ?>"></div>
+        <div class="mb-2"><label class="form-label small">Free shipping above (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label><input type="number" step="0.01" name="free_shipping_above" class="form-control form-control-sm" value="<?= htmlspecialchars($delivery['free_shipping_above'] ?? '') ?>"></div>
+        <div class="mb-2"><label class="form-label small">Flat rate (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label><input type="number" step="0.01" name="flat_rate" class="form-control form-control-sm" value="<?= htmlspecialchars($delivery['flat_rate'] ?? '') ?>"></div>
         <div class="mb-2"><label class="form-label small">Processing days</label><input type="number" name="processing_days" class="form-control form-control-sm" value="<?= (int)($delivery['processing_days'] ?? 2) ?>"></div>
         <div class="form-check"><input type="checkbox" name="cod_enabled" value="1" class="form-check-input" id="cod" <?= !empty($delivery['cod_enabled']) ? 'checked' : '' ?>><label class="form-check-label" for="cod">COD enabled</label></div>
       </div>

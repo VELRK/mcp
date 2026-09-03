@@ -1,5 +1,3 @@
-import { useModalStore } from "@/store/modalStore";
-
 const services = [
   {
     icon: (
@@ -9,7 +7,7 @@ const services = [
       </svg>
     ),
     title: "Free Shipping",
-    description: "Free shipping above RM 100 in Malaysia."
+    description: "Free shipping on qualifying orders."
   },
   {
     icon: (
@@ -33,23 +31,9 @@ const services = [
     title: "Support",
     description: "Reach us at +60126364666\nBetween Monday to Saturday"
   },
-  {
-    icon: (
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H5c-1.1 0-2 .9-2 2v2" />
-        <circle cx="8.5" cy="7" r="4" />
-        <polyline points="17 11 19 13 23 9" />
-      </svg>
-    ),
-    title: "Become an Affiliate",
-    description: "Join our affiliate program and earn commission on every sale.",
-    action: "affiliateEnquiry"
-  }
 ];
 
 export default function ServicesBanner() {
-  const { openModal } = useModalStore();
-
   return (
     <div style={{ backgroundColor: '#f2f4f5', padding: '40px 0', borderTop: '1px solid #eaeaea', borderBottom: '1px solid #eaeaea' }}>
       <div className="container">
@@ -63,13 +47,11 @@ export default function ServicesBanner() {
           {services.map((svc, idx) => (
             <div
               key={idx}
-              onClick={() => svc.action && openModal(svc.action as any)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 flex: '1 1 300px',
                 gap: '20px',
-                cursor: svc.action ? 'pointer' : 'default'
               }}
             >
               <div style={{

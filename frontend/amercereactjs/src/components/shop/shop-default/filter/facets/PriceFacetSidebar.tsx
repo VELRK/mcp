@@ -3,6 +3,7 @@ import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 import type { FilterAction, FilterState } from "@/types/shopFilter";
 import { setPriceRange } from "../../filterActions";
+import { getCurrencySymbol } from "@/utils/formatPrice";
 
 type Props = {
   cId: string;
@@ -55,7 +56,7 @@ export function PriceFacetSidebar({ cId, state, dispatch, priceMax }: Props) {
           <div className="price-box tf-grid-layout tf-col-2">
             <div className="box-wrap">
               <div className="price-val_wrap">
-                <span className="cl-text-2 text-body-1" style={{ marginRight: '4px' }}>RM</span>
+                <span className="cl-text-2 text-body-1" style={{ marginRight: '4px' }}>{getCurrencySymbol()}</span>
                 <input
                   type="number"
                   className="price-val border-0 bg-transparent p-0 w-100"
@@ -74,7 +75,7 @@ export function PriceFacetSidebar({ cId, state, dispatch, priceMax }: Props) {
             </div>
             <div className="box-wrap">
               <div className="price-val_wrap">
-                <span className="cl-text-2 text-body-1" style={{ marginRight: '4px' }}>RM</span>
+                <span className="cl-text-2 text-body-1" style={{ marginRight: '4px' }}>{getCurrencySymbol()}</span>
                 <input
                   type="number"
                   className="price-val border-0 bg-transparent p-0 w-100"

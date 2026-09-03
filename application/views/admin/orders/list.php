@@ -1,4 +1,4 @@
-<?php $currency = $settings['currency_symbol'] ?? 'RM';
+<?php $currency = sk_currency_symbol($settings);
 $tab = $tab ?? ($filters['tab'] ?? 'orders');
 $qs = function (array $extra = []) use ($filters, $tab) {
     $params = array_filter([

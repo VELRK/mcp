@@ -10,7 +10,7 @@ class Sk_Vendor_model extends CI_Model {
         $total = $this->db->count_all_results();
 
         $this->_build_list_query($filters);
-        $rows = $this->db->select('v.*, vs.store_name, vs.logo, vw.balance as wallet_balance')
+        $rows = $this->db->select('v.*, vs.store_name, vs.logo')
                           ->order_by('v.created_at', 'DESC')
                           ->limit($limit, $offset)
                           ->get()
@@ -21,8 +21,7 @@ class Sk_Vendor_model extends CI_Model {
 
     protected function _build_list_query(array $filters): void {
         $this->db->from('vendors v')
-                 ->join('vendor_stores vs', 'vs.vendor_id = v.id', 'left')
-                 ->join('vendor_wallets vw', 'vw.vendor_id = v.id', 'left');
+                 ->join('vendor_stores vs', 'vs.vendor_id = v.id', 'left');
         $this->_apply_filters($filters);
         $this->db->where('v.deleted_at IS NULL', null, false);
     }
@@ -52,8 +51,6 @@ class Sk_Vendor_model extends CI_Model {
             return $vendor ?: null;
         }
         $vendor['store'] = $this->db->where('vendor_id', $id)->get('vendor_stores')->row_array();
-        $vendor['wallet'] = $this->db->where('vendor_id', $id)->get('vendor_wallets')->row_array();
-        $vendor['bank'] = $this->db->where('vendor_id', $id)->where('is_primary', 1)->get('vendor_bank_details')->row_array();
         $vendor['documents'] = $this->db->where('vendor_id', $id)->order_by('created_at', 'DESC')->get('vendor_documents')->result_array();
         return $vendor;
     }

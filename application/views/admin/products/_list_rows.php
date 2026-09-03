@@ -1,5 +1,5 @@
 <?php
-$currency = $settings['currency_symbol'] ?? 'RM';
+$currency = sk_currency_symbol($settings);
 $show_vendor_col = !empty($show_vendor_col);
 $colspan = $show_vendor_col ? 9 : 8;
 ?>

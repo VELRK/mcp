@@ -1,6 +1,6 @@
 <?php
 /** @var array $product */ /** @var array $order_rows */ /** @var int $order_total */ /** @var int $page */ /** @var int $limit */
-$currency = $settings['currency_symbol'] ?? 'RM';
+$currency = sk_currency_symbol($settings);
 $alert = (int)($product['low_stock_alert'] ?? 5);
 $variants = $product['variants'] ?? [];
 $orderPages = max(1, (int)ceil($order_total / $limit));

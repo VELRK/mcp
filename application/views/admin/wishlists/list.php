@@ -57,10 +57,10 @@
           <td class="text-muted small"><?= htmlspecialchars($w['user_email'] ?? '—') ?></td>
           <td>
             <?php if ($w['sale_price']): ?>
-              <span class="fw-semibold text-success">RM<?= number_format($w['sale_price'], 0) ?></span>
-              <span class="text-muted text-decoration-line-through small ms-1">RM<?= number_format($w['price'], 0) ?></span>
+              <span class="fw-semibold text-success"><?= sk_currency_symbol($settings) ?><?= number_format($w['sale_price'], 0) ?></span>
+              <span class="text-muted text-decoration-line-through small ms-1"><?= sk_currency_symbol($settings) ?><?= number_format($w['price'], 0) ?></span>
             <?php else: ?>
-              <span class="fw-semibold">RM<?= number_format($w['price'] ?? 0, 0) ?></span>
+              <span class="fw-semibold"><?= sk_currency_symbol($settings) ?><?= number_format($w['price'] ?? 0, 0) ?></span>
             <?php endif; ?>
           </td>
           <td class="text-muted small"><?= date('d M Y, g:i a', strtotime($w['created_at'])) ?></td>

@@ -1,7 +1,15 @@
 import axios from "axios";
 import { forceLogout } from "@/store/authStore";
+import { setCurrencySymbol } from "@/utils/formatPrice";
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? "/shopkart-api";
+function resolveApiBase(): string {
+  const env = import.meta.env.VITE_API_BASE_URL ?? "/shopkart-api";
+  if (typeof window === "undefined" || !env.startsWith("/")) return env;
+  const match = window.location.pathname.match(/^\/(mcp|deal)(?=\/|$)/);
+  return match ? `/${match[1]}${env}` : env;
+}
+
+const BASE = resolveApiBase();
 
 const http = axios.create({
   baseURL: BASE,
@@ -97,6 +105,8 @@ export interface ApiProduct {
   brand_id?: number;
   brand_name?: string;
   featured: number;
+  special_product?: number;
+  hot_sale?: number;
   status: string;
   listing_status?: string;
   avg_rating: number;
@@ -240,31 +250,12 @@ export interface CartItem {
   added_at?: string;
 }
 
-export interface RoyaltyCartInfo {
-  enabled: boolean;
-  points: number;
-  balance_rm: number;
-  min_redeem_points: number;
-  min_redeem_rm?: number;
-  /** Production unlock threshold (usually RM 100), for messaging. */
-  unlock_min_rm?: number;
-  unlock_min_points?: number;
-  /** How much royalty balance (RM) is still needed before Apply unlocks. */
-  remaining_rm_to_unlock?: number;
-  can_redeem: boolean;
-  show_on_cart: boolean;
-  conversion_label?: string;
-  earn_label?: string;
-  hint?: string;
-}
-
 export interface CartSummary {
   subtotal: number;
   shipping: number;
   tax: number;
   discount: number;
   total: number;
-  royalty?: RoyaltyCartInfo;
 }
 
 export interface ApiUser {
@@ -342,6 +333,7 @@ export interface ProductFilters {
   featured?: number | string;
   nav_featured?: number | string;
   special_product?: number | string;
+  hot_sale?: number | string;
   min_price?: number | string;
   max_price?: number | string;
   sort?: string;
@@ -442,7 +434,6 @@ export interface ShippingTrackResult {
   events?: ShippingTrackEvent[];
   message?: string;
 }
-
 export const shippingAPI = {
   track: (data: { tracking_number?: string; order_number?: string; bill_code?: string; awb?: string }) =>
     http.post<{ success: boolean; message?: string; data: ShippingTrackResult }>("/shipping/track", data),
@@ -453,12 +444,6 @@ export const shippingAPI = {
 export const paymentAPI = {
   createOrder: (data: { order_id: number }) => http.post("/payment/create-order", data),
   verify: (data: object) => http.post("/payment/verify", data),
-  verifyWalletTopup: (data: {
-    razorpay_order_id: string;
-    razorpay_payment_id: string;
-    razorpay_signature: string;
-    reference: string;
-  }) => http.post("/payment/wallet-topup-verify", data),
 };
 
 // ── Promo ─────────────────────────────────────────────────────────────────────
@@ -478,134 +463,6 @@ export const userAPI = {
   getAddresses: () => http.get<{ success: boolean; data: ApiAddress[] }>("/user/addresses"),
   saveAddress: (data: object) => http.post("/user/addresses", data),
   deleteAddress: (id: number) => http.delete(`/user/addresses/${id}`),
-  getWallet: () => http.get<{
-    success: boolean;
-    data: {
-      enabled: boolean;
-      balance: number;
-      discount_percent: number;
-      /** Min goods total (after promo) for wallet-pay % discount */
-      discount_min_rm?: number;
-      discount_promo_text?: string;
-      discount_below_text?: string;
-      /** Free delivery when paying full order with wallet — from admin checkbox */
-      free_shipping?: boolean;
-      points?: number;
-      royalty?: RoyaltyCartInfo;
-    };
-  }>("/user/wallet"),
-  getRoyalty: () => http.get<{
-    success: boolean;
-    data: RoyaltyCartInfo & {
-      points_per_rm?: number;
-      hint?: string;
-    };
-  }>("/user/royalty"),
-  getRoyaltyTransactions: (params?: { limit?: number; offset?: number }) =>
-    http.get<{
-      success: boolean;
-      data: {
-        rows: Array<{
-          id: number;
-          user_id: number;
-          type: "earn" | "redeem";
-          points: number;
-          amount_rm: number;
-          balance_after_points: number;
-          reference: string;
-          description: string;
-          created_at: string;
-        }>;
-        transactions?: Array<{
-          id: number;
-          user_id: number;
-          type: "earn" | "redeem";
-          points: number;
-          amount_rm: number;
-          balance_after_points: number;
-          reference: string;
-          description: string;
-          created_at: string;
-        }>;
-        total: number;
-      };
-    }>("/user/royalty/transactions", { params }),
-  getWalletTransactions: (params?: { limit?: number; offset?: number }) =>
-    http.get<{
-      success: boolean;
-      data: {
-        rows: Array<{
-          id: number;
-          wallet_id: number;
-          user_id: number;
-          type: "credit" | "debit";
-          amount: number;
-          balance_after: number;
-          source: "admin_add" | "order_payment" | "refund" | "promo" | "adjustment" | "topup";
-          reference: string;
-          description: string;
-          created_at: string;
-        }>;
-        transactions?: Array<{
-          id: number;
-          wallet_id: number;
-          user_id: number;
-          type: "credit" | "debit";
-          amount: number;
-          balance_after: number;
-          source: string;
-          reference: string;
-          description: string;
-          created_at: string;
-        }>;
-        total: number;
-      };
-    }>("/user/wallet/transactions", { params }),
-  topupWallet: (data: { amount: number }) =>
-    http.post<{
-      success: boolean;
-      message: string;
-      data: {
-        gateway?: "razorpay" | "toyyibpay" | "sandbox";
-        reference?: string;
-        amount_rm?: number;
-        points?: number;
-        payment_url?: string | null;
-        bill_code?: string | null;
-        credited?: boolean;
-        balance?: number;
-        razorpay_order_id?: string;
-        amount?: number;
-        currency?: string;
-        key_id?: string;
-        prefill?: { name: string; email: string; contact: string };
-      };
-    }>("/user/wallet/topup", data),
-};
-
-export const affiliateAPI = {
-  register: (data: {
-    name: string;
-    email: string;
-    phone: string;
-    password: string;
-    promo_code?: string;
-  }) => http.post("/affiliate/register", data),
-  checkPromo: (code: string) =>
-    http.get<{ success: boolean; data: { available: boolean } }>(
-      `/affiliate/check-promo?code=${encodeURIComponent(code)}`,
-    ),
-  submitEnquiry: (data: {
-    name: string;
-    email: string;
-    phone: string;
-    promo_code?: string;
-    message: string;
-  }) =>
-    http.post<{ success: boolean; message: string; data?: { id: number; status: string } }>(
-      "/affiliate/enquiry",
-      data,
-    ),
 };
 
 export interface ApiBanner {
@@ -725,6 +582,7 @@ export interface ApiSiteSettings {
   newsletter_popup_enabled: boolean;
   site_name?: string;
   currency_symbol?: string;
+  currency_code?: string;
   top_bar_enabled?: boolean;
   top_bar_text?: string;
   whatsapp_enabled?: boolean;
@@ -732,23 +590,6 @@ export interface ApiSiteSettings {
   tax_rate?: number;
   shipping_charge?: number;
   free_shipping_above?: number;
-  /** When true, full wallet pay gets free delivery */
-  wallet_free_shipping?: boolean;
-  wallet_enabled?: boolean;
-  wallet_discount_percent?: number;
-  wallet_discount_min_rm?: number;
-  wallet_discount_promo_text?: string;
-  wallet_discount_below_text?: string;
-  wallet?: {
-    enabled: boolean;
-    discount_percent: number;
-    discount_min_rm: number;
-    discount_promo_text?: string;
-    discount_below_text?: string;
-    free_shipping?: boolean;
-    currency?: string;
-    currency_symbol?: string;
-  };
   meta_title?: string;
   meta_desc?: string;
   meta_description?: string;
@@ -782,7 +623,13 @@ export const seoAPI = {
 };
 
 export const siteSettingsAPI = {
-  get: () => http.get<{ success: boolean; data: ApiSiteSettings }>("/site-settings"),
+  get: () =>
+    http.get<{ success: boolean; data: ApiSiteSettings }>("/site-settings").then((res) => {
+      if (res.data?.success && res.data.data) {
+        setCurrencySymbol(res.data.data.currency_symbol);
+      }
+      return res;
+    }),
 };
 
 // ── Blog ──────────────────────────────────────────────────────────────────────

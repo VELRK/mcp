@@ -8,28 +8,25 @@ function ProductFeature() {
 
   const cards = products.map(toProductCard);
 
+  if (loading) return null;
+  if (!cards.length) return null;
+
   return (
     <section className="flat-spacing">
       <div className="container-full">
         <div className="row">
           <div className="col-lg-3">
             <div className="sect-heading wow fadeInUp">
-              <h3 className="s-title mb-8">Featured Products</h3>
+              <h3 className="s-title mb-8">New Arrival</h3>
               <p className="text-body-1 cl-text-2">
-                Our curated collection handpicked for you.
+                Latest products freshly added to the store.
               </p>
             </div>
-            <Link
-              to="/shop-default?featured=1"
-              className="tf-btn animate-btn wow fadeInUp mb-30"
-            >
-              View All Products
+            <Link to="/shop-default?featured=1" className="tf-btn animate-btn wow fadeInUp mb-30">
+              View All New Arrivals
             </Link>
           </div>
           <div className="col-lg-9">
-            {loading ? (
-              <div className="text-center py-40">Loading…</div>
-            ) : (
               <TfSwiper
                 className="wrap-sw-over"
                 preview={3}
@@ -57,7 +54,6 @@ function ProductFeature() {
                   />
                 ))}
               </TfSwiper>
-            )}
           </div>
         </div>
       </div>

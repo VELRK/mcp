@@ -33,10 +33,10 @@
   <ul class="nav nav-tabs mb-3" id="settingsTabs">
     <li class="nav-item"><button type="button" class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-general">General</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-whatsapp"><i class="bi bi-whatsapp me-1"></i>Order WhatsApp</button></li>
+    <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-wacloud"><i class="bi bi-cloud me-1"></i>WhatsApp Cloud</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-invoice">Invoice</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-payment">Payment</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-email">Email</button></li>
-    <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-shipping">JT Express</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-sms">SMS OTP (iSMS)</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-seo">SEO</button></li>
   </ul>
@@ -52,20 +52,26 @@
               <label class="form-label">Site Name</label>
               <input type="text" name="site_name" class="form-control" value="<?= htmlspecialchars($settings['site_name'] ?? '2DEAL') ?>">
             </div>
-            <div class="col-md-6">
+            <div class="col-md-3">
               <label class="form-label">Currency Symbol</label>
-              <input type="text" name="currency_symbol" class="form-control" value="<?= htmlspecialchars($settings['currency_symbol'] ?? 'RM') ?>">
+              <input type="text" name="currency_symbol" class="form-control" value="<?= htmlspecialchars(sk_currency_symbol($settings)) ?>">
+              <div class="form-text">One store currency. Used on prices, invoices, and Razorpay.</div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Currency Code</label>
+              <input type="text" name="currency_code" class="form-control" value="<?= htmlspecialchars(sk_currency_code($settings)) ?>" maxlength="3">
+              <div class="form-text">ISO 4217 from this setting only (e.g. INR). No other picker.</div>
             </div>
             <div class="col-md-4">
               <label class="form-label">Tax Rate (%)</label>
               <input type="number" name="tax_rate" class="form-control" step="0.01" value="<?= $settings['tax_rate'] ?? '18' ?>">
             </div>
             <div class="col-md-4">
-              <label class="form-label">Shipping Charge (RM)</label>
+              <label class="form-label">Shipping Charge (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label>
               <input type="number" name="shipping_charge" class="form-control" value="<?= $settings['shipping_charge'] ?? '50' ?>">
             </div>
             <div class="col-md-4">
-              <label class="form-label">Free Shipping Above (RM)</label>
+              <label class="form-label">Free Shipping Above (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label>
               <input type="number" name="free_shipping_above" class="form-control" value="<?= $settings['free_shipping_above'] ?? '999' ?>">
             </div>
             <div class="col-12">
@@ -181,6 +187,103 @@
       </div>
     </div>
 
+    <!-- Meta WhatsApp Cloud API -->
+    <div class="tab-pane fade" id="tab-wacloud">
+      <div class="card sk-table-card shadow-sm">
+        <div class="card-body">
+          <h6 class="mb-1"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp Cloud API (Meta)</h6>
+          <p class="text-muted small mb-3">
+            Direct Graph API for inbox chat and template CRUD.
+            Register the webhook in Meta Developer → WhatsApp → Configuration.
+          </p>
+          <div class="alert alert-info small">
+            Webhook URL:
+            <code class="user-select-all"><?= site_url('shopkart-api/whatsapp/webhook') ?></code>
+            · Callback fields: <code>messages</code>
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" name="wa_cloud_enabled" value="1" id="waCloudOn"
+              <?= !empty($settings['wa_cloud_enabled']) && $settings['wa_cloud_enabled'] !== '0' ? 'checked' : '' ?>>
+            <label class="form-check-label" for="waCloudOn">Enable Meta Cloud inbox / templates</label>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Phone Number ID</label>
+              <input type="text" name="wa_cloud_phone_number_id" class="form-control font-monospace"
+                     value="<?= htmlspecialchars($settings['wa_cloud_phone_number_id'] ?? '') ?>">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">WhatsApp Business Account ID (WABA)</label>
+              <input type="text" name="wa_cloud_waba_id" class="form-control font-monospace"
+                     value="<?= htmlspecialchars($settings['wa_cloud_waba_id'] ?? '') ?>">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Permanent access token</label>
+              <input type="password" name="wa_cloud_access_token" class="form-control font-monospace" autocomplete="new-password"
+                     value="" placeholder="<?= !empty($settings['wa_cloud_access_token']) ? '•••• saved (leave blank to keep)' : 'Paste Meta system-user token' ?>">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">App secret</label>
+              <input type="password" name="wa_cloud_app_secret" class="form-control font-monospace" autocomplete="new-password"
+                     value="" placeholder="<?= !empty($settings['wa_cloud_app_secret']) ? '•••• saved (leave blank to keep)' : 'Webhook signature' ?>">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Verify token</label>
+              <input type="text" name="wa_cloud_verify_token" class="form-control"
+                     value="<?= htmlspecialchars($settings['wa_cloud_verify_token'] ?? '2deal-wa-verify') ?>">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Graph API version</label>
+              <input type="text" name="wa_cloud_api_version" class="form-control"
+                     value="<?= htmlspecialchars($settings['wa_cloud_api_version'] ?? 'v21.0') ?>">
+            </div>
+          </div>
+
+          <hr class="my-4">
+          <h6 class="mb-1">MCP bot replies</h6>
+          <p class="text-muted small mb-3">
+            Incoming WhatsApp messages are posted to your MCP URL. The JSON reply is converted to WhatsApp
+            <strong>text</strong>, <strong>reply buttons</strong>, <strong>list menu</strong>, or <strong>link button</strong> and sent back.
+            MCP can also push a reply to
+            <code class="user-select-all"><?= site_url('shopkart-api/whatsapp/mcp') ?></code>
+          </p>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" name="wa_mcp_enabled" value="1" id="waMcpOn"
+              <?= !empty($settings['wa_mcp_enabled']) && $settings['wa_mcp_enabled'] !== '0' ? 'checked' : '' ?>>
+            <label class="form-check-label" for="waMcpOn">Call MCP on inbound WhatsApp messages</label>
+          </div>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">MCP webhook URL</label>
+              <input type="url" name="wa_mcp_url" class="form-control font-monospace"
+                     value="<?= htmlspecialchars($settings['wa_mcp_url'] ?? '') ?>"
+                     placeholder="https://your-mcp-host/whatsapp">
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">MCP token (optional)</label>
+              <input type="password" name="wa_mcp_token" class="form-control font-monospace" autocomplete="new-password"
+                     value="" placeholder="<?= !empty($settings['wa_mcp_token']) ? '•••• saved (leave blank to keep)' : 'Bearer / X-MCP-Token' ?>">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Timeout (seconds)</label>
+              <input type="number" name="wa_mcp_timeout" class="form-control" min="5" max="30"
+                     value="<?= htmlspecialchars($settings['wa_mcp_timeout'] ?? '12') ?>">
+            </div>
+          </div>
+          <pre class="small bg-light border rounded p-2 mt-3 mb-0" style="white-space:pre-wrap">MCP reply examples:
+{"type":"text","text":"Hello"}
+{"type":"buttons","body":"How can we help?","buttons":[{"id":"track","title":"Track order"},{"id":"shop","title":"Shop"}]}
+{"type":"list","body":"Pick a category","button":"Categories","sections":[{"title":"Shop","rows":[{"id":"silk","title":"Silk Sarees","description":"Handwoven"}]}]}
+{"type":"cta","body":"Open the store","display_text":"Visit 2DEAL","url":"https://2deal.my/"}
+{"messages":[ ...several of the above... ]}</pre>
+          <div class="mt-3">
+            <a href="<?= site_url('shopkart/whatsapp') ?>" class="btn btn-sm btn-success">Open inbox</a>
+            <a href="<?= site_url('shopkart/whatsapp/templates') ?>" class="btn btn-sm btn-outline-success">Templates</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Invoice (platform default) -->
     <div class="tab-pane fade" id="tab-invoice">
       <div class="card sk-table-card shadow-sm">
@@ -222,9 +325,12 @@
         <div class="card-body">
           <div class="alert alert-info small">
             <i class="bi bi-info-circle me-1"></i>
-            Malaysia payments use <strong>Razorpay Curlec</strong>. Get API keys from the
-            <a href="https://curlec.com/docs/payments/payment-gateway/web-integration/standard/integration-steps/" target="_blank">Curlec dashboard</a>
-            (MYR, keys like <code>rzp_test_...</code>). Checkout needs a valid Malaysian mobile on the delivery address (<code>+60...</code>).
+            Checkout uses the <strong>Razorpay</strong> Orders API
+            (<a href="https://razorpay.com/docs/api/orders/" target="_blank">api.razorpay.com/v1/orders</a>)
+            in <strong><?= htmlspecialchars(sk_currency_code($settings)) ?></strong> from Settings → General.
+            Get keys from the
+            <a href="https://dashboard.razorpay.com/app/website-app-settings/api-keys" target="_blank">Razorpay Dashboard</a>
+            (<code>rzp_test_...</code> / <code>rzp_live_...</code>). Prefill needs a valid Indian mobile.
           </div>
           <div class="row g-3">
             <div class="col-md-6">
@@ -243,9 +349,9 @@
                      value="<?= htmlspecialchars($settings['razorpay_webhook_secret'] ?? '') ?>"
                      placeholder="whsec_...">
               <div class="form-text">
-                Webhook URL (register in Curlec Dashboard → Webhooks, events: <code>payment.captured</code>, <code>payment.authorized</code>, <code>order.paid</code>):
+                Webhook URL (Razorpay Dashboard → Webhooks, events: <code>payment.captured</code>, <code>payment.authorized</code>, <code>order.paid</code>):
                 <br><code class="user-select-all"><?= site_url('shopkart-api/payment/razorpay-webhook') ?></code>
-                <br>Checkout return URL (used automatically as Curlec <code>callback_url</code>):
+                <br>Optional return URL (Standard Checkout uses the in-page handler; this is a fallback):
                 <br><code class="user-select-all"><?= site_url('shopkart-api/payment/razorpay-return') ?></code>
               </div>
             </div>
@@ -289,155 +395,19 @@
             <div class="col-md-6">
               <label class="form-label">Admin Email</label>
               <input type="email" name="admin_email" class="form-control" value="<?= htmlspecialchars($settings['admin_email'] ?? '') ?>" placeholder="admin@yourdomain.com">
-              <div class="form-text">Every customer/affiliate mail also notifies this inbox with a separate admin summary (not the same customer email).</div>
+              <div class="form-text">Every customer mail also notifies this inbox with a separate admin summary.</div>
             </div>
             <div class="col-12">
               <div class="alert alert-info small mb-0">
                 Use your mailbox SMTP (e.g. Hostinger: <code>smtp.hostinger.com</code>, port <code>465</code> SSL or <code>587</code> TLS).
                 <strong>Site Email</strong> (General tab) must match the mailbox address you send from.
-                Set <strong>Admin Email</strong> to receive admin digests for orders, invoices, status, affiliates, contact, etc.
+                Set <strong>Admin Email</strong> to receive admin digests for orders, invoices, status, contact, etc.
               </div>
             </div>
             <div class="col-12">
               <button type="submit" formaction="<?= site_url('admin/settings/test_smtp') ?>" formmethod="post" class="btn btn-outline-primary btn-sm">
                 <i class="bi bi-envelope-check me-1"></i> Send SMTP test email
               </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- JT Express Shipping -->
-    <div class="tab-pane fade" id="tab-shipping">
-      <div class="card sk-table-card shadow-sm">
-        <div class="card-body">
-          <?php
-            $jtCfg = isset($jt_config) && is_array($jt_config) ? $jt_config : [];
-            $jtUrls = is_array($jtCfg['api_urls'] ?? null) ? $jtCfg['api_urls'] : [];
-            $isSandbox = sk_jt_express_is_sandbox($settings);
-          ?>
-          <div class="alert alert-info small">
-            <i class="bi bi-truck me-1"></i>
-            JT Express Malaysia Open Platform — create AWB, print label, track &amp; cancel from Admin → JT Express.
-            All API credentials and sender details are stored in the <strong>database</strong> (saved below). No secrets in code.
-            Turn <strong>Sandbox</strong> OFF for live orders (uses the same fields with your production account).
-            <br><span class="text-muted">Database setup runs automatically when you open this page (no PHP CLI needed). Or import <code>database/jt_express.sql</code> in phpMyAdmin.</span>
-            <hr class="my-2">
-            <strong>Status sync webhook</strong> (register in JT Open Platform → Tracking Callback / Joint-Debugging):
-            <br><code class="user-select-all"><?= site_url('shopkart-api/shipping/jt-webhook') ?></code>
-            <div class="small text-muted mt-2">
-              Expected ACK: <code>{"code":"1","msg":"success","data":"SUCCESS"}</code>
-              · Encoding UTF-8 · Method POST (form <code>bizContent</code>)
-            </div>
-            <br><span class="text-muted">JT pushes <code>bizContent</code> (AWB + scan details) to this URL after each tracking change. Also auto-syncs when you open an order or click Track. Fill sender phone/address/city/state/postcode below.</span>
-          </div>
-          <div class="row g-3">
-            <div class="col-md-4">
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" name="jt_express_enabled" value="1" id="jtEnabled"
-                  <?= !empty($settings['jt_express_enabled']) && $settings['jt_express_enabled'] !== '0' ? 'checked' : '' ?>>
-                <label class="form-check-label" for="jtEnabled">Enable JT Express</label>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" name="jt_express_sandbox" value="1" id="jtSandbox"
-                  <?= $isSandbox ? 'checked' : '' ?>>
-                <label class="form-check-label" for="jtSandbox">Sandbox (demo API)</label>
-              </div>
-              <div class="form-text">Uncheck for live production orders. Switch credentials below when changing mode.</div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Default parcel weight (kg)</label>
-              <input type="text" name="jt_express_default_weight" class="form-control"
-                     value="<?= htmlspecialchars($settings['jt_express_default_weight'] ?? '1') ?>">
-            </div>
-
-            <div class="col-12"><hr class="my-1">
-              <h6 class="text-muted mb-0">
-                API credentials
-                <span class="badge bg-primary">From database</span>
-                <?php if ($isSandbox): ?>
-                  <span class="badge bg-secondary">Sandbox mode</span>
-                <?php else: ?>
-                  <span class="badge bg-success">Production mode</span>
-                <?php endif; ?>
-              </h6>
-              <div class="form-text mb-2">
-                Saved in the <code>settings</code> table. Use sandbox account when Sandbox is ON; production account when OFF.
-                <?php if (!empty($jtUrls['sandbox']) || !empty($jtUrls['production'])): ?>
-                  API:
-                  <?= $isSandbox
-                    ? '<code>' . htmlspecialchars($jtUrls['sandbox'] ?? 'https://demoopenapi.jtexpress.my/webopenplatformapi') . '</code>'
-                    : '<code>' . htmlspecialchars($jtUrls['production'] ?? 'https://ylopenapi.jtexpress.my/webopenplatformapi') . '</code>' ?>
-                <?php endif; ?>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">API Account <span class="text-danger">*</span></label>
-              <input type="text" name="jt_express_api_account" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['jt_express_api_account'] ?? '') ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Private Key <span class="text-danger">*</span></label>
-              <input type="password" name="jt_express_private_key" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['jt_express_private_key'] ?? '') ?>"
-                     autocomplete="new-password">
-              <div class="form-text">Leave blank when saving to keep the current key.</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Customer / Source Code <span class="text-danger">*</span></label>
-              <input type="text" name="jt_express_customer_code" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['jt_express_customer_code'] ?? '') ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Source Name</label>
-              <input type="text" name="jt_express_customer_name" class="form-control"
-                     value="<?= htmlspecialchars($settings['jt_express_customer_name'] ?? '') ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Customer Password <span class="text-danger">*</span></label>
-              <input type="password" name="jt_express_customer_password" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['jt_express_customer_password'] ?? '') ?>"
-                     autocomplete="new-password">
-              <div class="form-text">Sandbox: plaintext (hashed as MD5(password + jadada369t3)). Production: use the Open Platform password hash if JT provided one. Leave blank to keep current.</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Demo UUID <span class="text-muted">(sandbox only)</span></label>
-              <input type="text" name="jt_express_demo_uuid" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['jt_express_demo_uuid'] ?? '') ?>">
-            </div>
-            <div class="col-12"><hr class="my-1"><h6 class="text-muted mb-0">Sender (pickup) address</h6></div>
-            <div class="col-md-6">
-              <label class="form-label">Sender Name</label>
-              <input type="text" name="jt_express_sender_name" class="form-control"
-                     value="<?= htmlspecialchars($settings['jt_express_sender_name'] ?? '') ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Sender Phone</label>
-              <input type="text" name="jt_express_sender_phone" class="form-control"
-                     value="<?= htmlspecialchars($settings['jt_express_sender_phone'] ?? '') ?>" placeholder="60123456789">
-            </div>
-            <div class="col-12">
-              <label class="form-label">Sender Address</label>
-              <input type="text" name="jt_express_sender_address" class="form-control"
-                     value="<?= htmlspecialchars($settings['jt_express_sender_address'] ?? '') ?>">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">City</label>
-              <input type="text" name="jt_express_sender_city" class="form-control"
-                     value="<?= htmlspecialchars($settings['jt_express_sender_city'] ?? '') ?>">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">State</label>
-              <input type="text" name="jt_express_sender_state" class="form-control"
-                     value="<?= htmlspecialchars($settings['jt_express_sender_state'] ?? '') ?>">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Postcode</label>
-              <input type="text" name="jt_express_sender_postcode" class="form-control"
-                     value="<?= htmlspecialchars($settings['jt_express_sender_postcode'] ?? '') ?>">
             </div>
           </div>
         </div>
@@ -534,32 +504,6 @@
               <input type="text" name="isms_test_phone" class="form-control font-monospace"
                      value="<?= htmlspecialchars($settings['isms_test_phone'] ?? '60180000000') ?>" placeholder="60180000000">
               <div class="form-text">Always uses test OTP above — no SMS sent for this number.</div>
-            </div>
-            <div class="col-12">
-              <div class="border rounded p-3 bg-light">
-                <div class="fw-semibold mb-2"><i class="bi bi-wallet2 me-1"></i>Test account wallet (for checkout wallet pay)</div>
-                <p class="small text-muted mb-2">
-                  <?php if (!empty($test_wallet_user)): ?>
-                    User #<?= (int)$test_wallet_user['id'] ?>
-                    · <?= htmlspecialchars($test_wallet_user['phone'] ?? '') ?>
-                    · balance <strong>RM <?= number_format((float)($test_wallet_balance ?? 0), 2) ?></strong>
-                  <?php else: ?>
-                    No test user yet — crediting will create the <code>0180000000</code> account.
-                  <?php endif; ?>
-                </p>
-                <div class="row g-2 align-items-end">
-                  <div class="col-md-4">
-                    <label class="form-label small mb-1">Add amount (RM)</label>
-                    <input type="number" name="test_wallet_amount" class="form-control form-control-sm" min="1" step="0.01" value="500">
-                  </div>
-                  <div class="col-md-8">
-                    <button type="submit" formaction="<?= site_url('admin/settings/credit_test_wallet') ?>" formmethod="post" class="btn btn-success btn-sm">
-                      <i class="bi bi-plus-circle me-1"></i>Add wallet funds to test account
-                    </button>
-                    <span class="text-muted small ms-2">Then login as 0180000000 / OTP 1234 and pay with wallet.</span>
-                  </div>
-                </div>
-              </div>
             </div>
             <div class="col-12">
               <button type="submit" formaction="<?= site_url('admin/settings/save_isms') ?>" formmethod="post" class="btn btn-warning btn-sm">

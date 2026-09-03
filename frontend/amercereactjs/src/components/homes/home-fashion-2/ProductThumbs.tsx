@@ -4,12 +4,9 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperType } from "swiper";
 import { Controller, EffectFade, Navigation } from "swiper/modules";
 import { useProducts, toProductCard, apiImageUrl } from "@/hooks/useApi";
+import { formatPrice } from "@/utils/formatPrice";
 import AddToCartButton from "@/components/common/AddToCartButton";
 import WishlistButton from "@/components/common/WishlistButton";
-
-function formatPrice(value: number): string {
-  return "RM" + value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
 
 /** Strip HTML tags and decode common entities to get plain text. */
 function stripHtml(html: string): string {

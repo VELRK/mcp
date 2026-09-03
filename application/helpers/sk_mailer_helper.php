@@ -261,7 +261,7 @@ function sk_mail_order_confirmation($order, $settings = []) {
     $to_name  = $order['customer_name']  ?? 'Customer';
     $subject  = 'Order Confirmed – #' . ($order['order_number'] ?? $order['id']);
 
-    $currency = $settings['currency_symbol'] ?? 'RM';
+    $currency = sk_currency_symbol($settings);
 
     // Build items HTML
     $items_html = '';
@@ -480,7 +480,7 @@ function sk_mail_order_status($order, $new_status, $settings = [], bool $notifyA
                 'Customer email' => $to_email,
                 'Tracking'       => $order['tracking_number'] ?? '',
                 'Payment'        => strtoupper($order['payment_method'] ?? ''),
-                'Total'          => ($settings['currency_symbol'] ?? 'RM') . number_format((float)($order['total'] ?? 0), 2),
+                'Total'          => (sk_currency_symbol($settings)) . number_format((float)($order['total'] ?? 0), 2),
             ]),
             $settings
         );
@@ -540,301 +540,7 @@ function sk_mail_password_reset_code($user, $code, $settings = [], $portalLabel 
     return $sent;
 }
 
-/** Affiliate forgot password: reset via secure link. */
-function sk_mail_affiliate_password_reset(array $affiliate, string $link, array $settings = []) {
-    $to_email  = $affiliate['email'] ?? '';
-    $to_name   = $affiliate['name'] ?? 'Affiliate';
-    $site_name = $settings['site_name'] ?? '2DEAL';
-    $safeLink  = htmlspecialchars($link);
-    $safeName  = htmlspecialchars($to_name);
-    $subject   = 'Reset your Affiliate Portal password – ' . $site_name;
-
-    $body = "
-<!DOCTYPE html>
-<html>
-<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head>
-<body style='margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;'>
-<div style='max-width:520px;margin:30px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.07);'>
-  <div style='background:#065f46;padding:28px 32px;text-align:center;'>
-    <h1 style='color:#fff;margin:0;font-size:22px;'>{$site_name}</h1>
-    <p style='color:#a7f3d0;margin:6px 0 0;font-size:13px;'>Affiliate Portal – Password Reset</p>
-  </div>
-  <div style='padding:36px 32px;'>
-    <p style='color:#334155;font-size:16px;'>Hi <strong>{$safeName}</strong>,</p>
-    <p style='color:#334155;'>We received a request to reset your affiliate account password. Click the button below to choose a new password.</p>
-    <div style='text-align:center;margin:28px 0;'>
-      <a href='{$safeLink}' style='display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:700;'>Reset Password</a>
-    </div>
-    <p style='color:#64748b;font-size:13px;'>This link expires in 1 hour. If you did not request a reset, you can ignore this email.</p>
-    <p style='color:#64748b;font-size:13px;'>If the button does not work, copy this URL:<br><span style='word-break:break-all;'>{$safeLink}</span></p>
-  </div>
-  <div style='background:#f8fafc;padding:20px 32px;text-align:center;border-top:1px solid #f1f5f9;'>
-    <p style='margin:0;color:#94a3b8;font-size:13px;'>{$site_name} &copy; " . date('Y') . "</p>
-  </div>
-</div>
-</body>
-</html>";
-
-    $sent = sk_send_mail($to_email, $to_name, $subject, $body);
-    sk_mail_notify_admin(
-        'Affiliate password reset requested',
-        sk_mail_admin_rows([
-            'Event'         => 'Affiliate password reset link emailed (link not shown to admin)',
-            'Affiliate'     => $to_name,
-            'Email'         => $to_email,
-            'Affiliate ID'  => $affiliate['id'] ?? '',
-            'Promo code'    => $affiliate['promo_code'] ?? '',
-            'Time'          => date('d M Y, h:i A'),
-        ]),
-        $settings
-    );
-    return $sent;
-}
-
-/** Affiliate invite: set password via verification link. */
-function sk_mail_affiliate_invite($affiliate, $link, $settings = []) {
-    $to_email  = $affiliate['email'] ?? '';
-    $to_name   = $affiliate['name'] ?? 'Affiliate';
-    $site_name = $settings['site_name'] ?? '2DEAL';
-    $promo     = htmlspecialchars($affiliate['promo_code'] ?? '');
-    $safeLink  = htmlspecialchars($link);
-    $safeName  = htmlspecialchars($to_name);
-    $subject   = 'Set your Affiliate Portal password – ' . $site_name;
-
-    $promoHtml = $promo
-        ? "<p style='color:#334155;'>Your promo code: <strong style='letter-spacing:1px;'>{$promo}</strong></p>"
-        : '';
-
-    $body = "
-<!DOCTYPE html>
-<html>
-<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head>
-<body style='margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;'>
-<div style='max-width:520px;margin:30px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.07);'>
-  <div style='background:#065f46;padding:28px 32px;text-align:center;'>
-    <h1 style='color:#fff;margin:0;font-size:22px;'>{$site_name}</h1>
-    <p style='color:#a7f3d0;margin:6px 0 0;font-size:13px;'>Affiliate Portal – Welcome</p>
-  </div>
-  <div style='padding:36px 32px;'>
-    <p style='color:#334155;font-size:16px;'>Hi <strong>{$safeName}</strong>,</p>
-    <p style='color:#334155;'>Your affiliate account has been created. Please set your password to activate login.</p>
-    {$promoHtml}
-    <div style='text-align:center;margin:28px 0;'>
-      <a href='{$safeLink}' style='display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:700;'>Set Password</a>
-    </div>
-    <p style='color:#64748b;font-size:13px;'>This link expires in 7 days. If the button does not work, copy this URL:<br><span style='word-break:break-all;'>{$safeLink}</span></p>
-  </div>
-  <div style='background:#f8fafc;padding:20px 32px;text-align:center;border-top:1px solid #f1f5f9;'>
-    <p style='margin:0;color:#94a3b8;font-size:13px;'>{$site_name} &copy; " . date('Y') . "</p>
-  </div>
-</div>
-</body>
-</html>";
-
-    $sent = sk_send_mail($to_email, $to_name, $subject, $body);
-    sk_mail_notify_admin(
-        'Affiliate invite emailed – ' . ($affiliate['name'] ?? ''),
-        sk_mail_admin_rows([
-            'Event'        => 'Affiliate invite / set-password email sent',
-            'Affiliate'    => $to_name,
-            'Email'        => $to_email,
-            'Promo code'   => $affiliate['promo_code'] ?? '',
-            'Affiliate ID' => $affiliate['id'] ?? '',
-            'Phone'        => $affiliate['phone'] ?? '',
-        ]),
-        $settings
-    );
-    return $sent;
-}
-
-/** Affiliate self-registration: confirmation to applicant (pending approval). */
-function sk_mail_affiliate_registration(array $affiliate, array $settings = []) {
-    if (empty($settings)) {
-        $settings = sk_mailer_settings();
-    }
-    $to_email  = $affiliate['email'] ?? '';
-    $to_name   = $affiliate['name'] ?? 'Affiliate';
-    $site_name = $settings['site_name'] ?? '2DEAL';
-    $promo     = htmlspecialchars($affiliate['promo_code'] ?? '');
-    $loginUrl  = htmlspecialchars(site_url('admin/affiliate/login'));
-    $safeName  = htmlspecialchars($to_name);
-    $subject   = 'Affiliate registration received – ' . $site_name;
-
-    $body = "
-<!DOCTYPE html>
-<html>
-<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head>
-<body style='margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;'>
-<div style='max-width:520px;margin:30px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.07);'>
-  <div style='background:#065f46;padding:28px 32px;text-align:center;'>
-    <h1 style='color:#fff;margin:0;font-size:22px;'>{$site_name}</h1>
-    <p style='color:#a7f3d0;margin:6px 0 0;font-size:13px;'>Affiliate Registration</p>
-  </div>
-  <div style='padding:36px 32px;'>
-    <p style='color:#334155;font-size:16px;'>Hi <strong>{$safeName}</strong>,</p>
-    <p style='color:#334155;'>Thank you for registering as an affiliate. Your application is <strong>pending admin approval</strong>.</p>
-    <p style='color:#334155;'>Your requested promo code: <strong style='letter-spacing:1px;'>{$promo}</strong></p>
-    <p style='color:#64748b;font-size:14px;'>We will email you again once your account is approved. After approval you can sign in here:<br><a href='{$loginUrl}'>{$loginUrl}</a></p>
-  </div>
-  <div style='background:#f8fafc;padding:20px 32px;text-align:center;border-top:1px solid #f1f5f9;'>
-    <p style='margin:0;color:#94a3b8;font-size:13px;'>{$site_name} &copy; " . date('Y') . "</p>
-  </div>
-</div>
-</body>
-</html>";
-
-    // Customer ack only — admin copy is sk_mail_affiliate_registration_admin().
-    return sk_send_mail($to_email, $to_name, $subject, $body);
-}
-
-/** Notify store admin about a new affiliate registration. */
-function sk_mail_affiliate_registration_admin(array $affiliate, array $settings = []) {
-    if (empty($settings)) {
-        $settings = sk_mailer_settings();
-    }
-    $adminUrl = htmlspecialchars(site_url('admin/affiliates'));
-    $inner = sk_mail_admin_rows([
-        'Event'      => 'New affiliate registration (pending approval)',
-        'Name'       => $affiliate['name'] ?? '',
-        'Email'      => $affiliate['email'] ?? '',
-        'Phone'      => $affiliate['phone'] ?? '',
-        'Promo code' => $affiliate['promo_code'] ?? '',
-    ]) . '<p style="margin-top:20px;"><a href="' . $adminUrl . '" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:700;">Review in admin</a></p>';
-
-    return sk_mail_notify_admin(
-        'New affiliate registration – ' . ($affiliate['name'] ?? 'Applicant'),
-        $inner,
-        $settings
-    );
-}
-
-/** Affiliate approved: notify applicant with promo code and login link. */
-function sk_mail_affiliate_approved(array $affiliate, array $settings = []) {
-    if (empty($settings)) {
-        $settings = sk_mailer_settings();
-    }
-    $to_email  = $affiliate['email'] ?? '';
-    $to_name   = $affiliate['name'] ?? 'Affiliate';
-    $site_name = $settings['site_name'] ?? '2DEAL';
-    $promo     = htmlspecialchars($affiliate['promo_code'] ?? '');
-    $loginUrl  = htmlspecialchars(site_url('admin/affiliate/login'));
-    $safeName  = htmlspecialchars($to_name);
-    $subject   = 'Affiliate account approved – ' . $site_name;
-
-    $body = "
-<!DOCTYPE html>
-<html>
-<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head>
-<body style='margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;'>
-<div style='max-width:520px;margin:30px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.07);'>
-  <div style='background:#065f46;padding:28px 32px;text-align:center;'>
-    <h1 style='color:#fff;margin:0;font-size:22px;'>{$site_name}</h1>
-    <p style='color:#a7f3d0;margin:6px 0 0;font-size:13px;'>Affiliate Approved</p>
-  </div>
-  <div style='padding:36px 32px;'>
-    <p style='color:#334155;font-size:16px;'>Hi <strong>{$safeName}</strong>,</p>
-    <p style='color:#334155;'>Great news — your affiliate account has been <strong>approved</strong>.</p>
-    <p style='color:#334155;'>Your promo code: <strong style='letter-spacing:1px;font-size:18px;'>{$promo}</strong></p>
-    <p style='color:#64748b;font-size:14px;'>Share this code at checkout or use your referral link. Sign in to your affiliate dashboard:</p>
-    <div style='text-align:center;margin:28px 0;'>
-      <a href='{$loginUrl}' style='display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:700;'>Affiliate Login</a>
-    </div>
-  </div>
-  <div style='background:#f8fafc;padding:20px 32px;text-align:center;border-top:1px solid #f1f5f9;'>
-    <p style='margin:0;color:#94a3b8;font-size:13px;'>{$site_name} &copy; " . date('Y') . "</p>
-  </div>
-</div>
-</body>
-</html>";
-
-    $sent = sk_send_mail($to_email, $to_name, $subject, $body);
-    sk_mail_notify_admin(
-        'Affiliate approved – ' . ($affiliate['name'] ?? ''),
-        sk_mail_admin_rows([
-            'Event'        => 'Affiliate approved email sent to applicant',
-            'Affiliate'    => $to_name,
-            'Email'        => $to_email,
-            'Promo code'   => $affiliate['promo_code'] ?? '',
-            'Affiliate ID' => $affiliate['id'] ?? '',
-            'Phone'        => $affiliate['phone'] ?? '',
-        ]),
-        $settings
-    );
-    return $sent;
-}
-
-/** Affiliate payout paid: notify affiliate that payment was sent. */
-function sk_mail_affiliate_payout_paid(array $affiliate, array $payout, array $settings = []) {
-    if (empty($settings)) {
-        $settings = sk_mailer_settings();
-    }
-    $to_email  = $affiliate['email'] ?? '';
-    $to_name   = $affiliate['name'] ?? 'Affiliate';
-    if ($to_email === '') {
-        return false;
-    }
-    $site_name = $settings['site_name'] ?? '2DEAL';
-    $currency  = $settings['currency_symbol'] ?? 'RM';
-    $amount    = number_format((float)($payout['amount'] ?? 0), 2);
-    $ref       = htmlspecialchars($payout['payment_reference'] ?? '');
-    $paidAt    = !empty($payout['paid_at']) ? date('d M Y, h:i A', strtotime($payout['paid_at'])) : date('d M Y, h:i A');
-    $pending   = number_format((float)($affiliate['pending_commission'] ?? 0), 2);
-    $paidTotal = number_format((float)($affiliate['paid_commission'] ?? 0), 2);
-    $safeName  = htmlspecialchars($to_name);
-    $loginUrl  = htmlspecialchars(site_url('admin/affiliate/login'));
-    $subject   = "Payout of {$currency}{$amount} paid – {$site_name}";
-
-    $body = "
-<!DOCTYPE html>
-<html>
-<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head>
-<body style='margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;'>
-<div style='max-width:520px;margin:30px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.07);'>
-  <div style='background:#065f46;padding:28px 32px;text-align:center;'>
-    <h1 style='color:#fff;margin:0;font-size:22px;'>{$site_name}</h1>
-    <p style='color:#a7f3d0;margin:6px 0 0;font-size:13px;'>Affiliate Payout Paid</p>
-  </div>
-  <div style='padding:36px 32px;'>
-    <p style='color:#334155;font-size:16px;'>Hi <strong>{$safeName}</strong>,</p>
-    <p style='color:#334155;'>Your affiliate payout has been <strong>paid</strong>.</p>
-    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px 18px;margin:20px 0;'>
-      <p style='margin:0 0 8px;color:#065f46;font-size:14px;'><strong>Amount:</strong> {$currency}{$amount}</p>
-      <p style='margin:0 0 8px;color:#065f46;font-size:14px;'><strong>Payment reference:</strong> {$ref}</p>
-      <p style='margin:0;color:#065f46;font-size:14px;'><strong>Paid on:</strong> {$paidAt}</p>
-    </div>
-    <p style='color:#64748b;font-size:14px;margin:0 0 6px;'>Pending balance: <strong>{$currency}{$pending}</strong></p>
-    <p style='color:#64748b;font-size:14px;margin:0;'>Total paid to date: <strong>{$currency}{$paidTotal}</strong></p>
-    <div style='text-align:center;margin:28px 0 0;'>
-      <a href='{$loginUrl}' style='display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:700;'>Affiliate Login</a>
-    </div>
-  </div>
-  <div style='background:#f8fafc;padding:20px 32px;text-align:center;border-top:1px solid #f1f5f9;'>
-    <p style='margin:0;color:#94a3b8;font-size:13px;'>{$site_name} &copy; " . date('Y') . "</p>
-  </div>
-</div>
-</body>
-</html>";
-
-    $sent = sk_send_mail($to_email, $to_name, $subject, $body);
-    $currency = $settings['currency_symbol'] ?? 'RM';
-    sk_mail_notify_admin(
-        "Affiliate payout paid – {$currency}" . number_format((float)($payout['amount'] ?? 0), 2),
-        sk_mail_admin_rows([
-            'Event'              => 'Affiliate payout paid email sent',
-            'Affiliate'          => $to_name,
-            'Email'              => $to_email,
-            'Amount'             => $currency . number_format((float)($payout['amount'] ?? 0), 2),
-            'Payment reference'  => $payout['payment_reference'] ?? '',
-            'Paid at'            => !empty($payout['paid_at']) ? date('d M Y, h:i A', strtotime($payout['paid_at'])) : date('d M Y, h:i A'),
-            'Pending balance'    => $currency . number_format((float)($affiliate['pending_commission'] ?? 0), 2),
-            'Total paid to date' => $currency . number_format((float)($affiliate['paid_commission'] ?? 0), 2),
-        ]),
-        $settings
-    );
-    return $sent;
-}
-
-/** Contact / affiliate enquiry: ack to user + notify admin. */
+/** Contact enquiry: ack to user + notify admin. */
 function sk_mail_contact_enquiry(string $name, string $email, string $message, array $settings = []): array {
     if (empty($settings)) {
         $settings = sk_mailer_settings();
@@ -842,27 +548,24 @@ function sk_mail_contact_enquiry(string $name, string $email, string $message, a
     $site_name = $settings['site_name'] ?? '2DEAL';
     $safeName  = htmlspecialchars($name);
     $safeMsg   = nl2br(htmlspecialchars($message));
-    $isAffiliate = stripos($message, 'Affiliate programme enquiry') !== false
-        || stripos($message, 'Affiliate program enquiry') !== false;
-
-    $userSubject = ($isAffiliate ? 'Affiliate enquiry received' : 'We received your message') . ' – ' . $site_name;
+    $userSubject = 'We received your message' . ' – ' . $site_name;
     $userBody = "
 <!DOCTYPE html>
 <html><body style='margin:0;padding:20px;background:#f8fafc;font-family:Arial,sans-serif;color:#334155;'>
 <div style='max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e2e8f0;'>
   <p>Hi <strong>{$safeName}</strong>,</p>
-  <p>Thank you for contacting {$site_name}. We have received your " . ($isAffiliate ? 'affiliate enquiry' : 'message') . " and will get back to you shortly.</p>
+  <p>Thank you for contacting {$site_name}. We have received your message and will get back to you shortly.</p>
   <p style='color:#64748b;font-size:14px;'><strong>Your message:</strong><br>{$safeMsg}</p>
 </div>
 </body></html>";
 
     $sentUser = sk_send_mail($email, $name, $userSubject, $userBody);
 
-    $adminSubject = ($isAffiliate ? 'New affiliate enquiry' : 'New contact enquiry') . ' – ' . $name;
+    $adminSubject = 'New contact enquiry' . ' – ' . $name;
     $sentAdmin = sk_mail_notify_admin(
         $adminSubject,
         sk_mail_admin_rows([
-            'Event'   => $isAffiliate ? 'Affiliate programme enquiry' : 'Contact form enquiry',
+            'Event'   => 'Contact form enquiry',
             'Name'    => $name,
             'Email'   => $email,
             'Message' => $safeMsg,

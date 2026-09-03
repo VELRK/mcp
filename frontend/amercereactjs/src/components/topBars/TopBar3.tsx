@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSiteSettings } from "@/hooks/useApi";
 
 const messages = [
-  "Free Shipping on orders above RM 100 in Malaysia.",
+  "Free shipping on qualifying orders.",
   "Easy Enquiry or Contact us at +60126364666",
   "Order with Confidence. 100% Easy Returns Guaranteed for All Domestic Orders"
 ];

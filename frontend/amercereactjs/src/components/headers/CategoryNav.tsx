@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useCategories, useProducts, apiImageUrl } from "@/hooks/useApi";
 import type { ApiCategory } from "@/services/api";
+import { formatPrice } from "@/utils/formatPrice";
 
 function catLink(c: ApiCategory) {
   return `/shop-default?category_id=${c.id}`;
@@ -218,8 +219,8 @@ export default function CategoryNav() {
                           ))}
                         </div>
                         <div className="mt-1">
-                          <span className="mega-prod-price">RM{prod.sale_price || prod.price}</span>
-                          {prod.sale_price && <span className="mega-prod-old">RM{prod.price}</span>}
+                          <span className="mega-prod-price">{formatPrice(Number(prod.sale_price || prod.price))}</span>
+                          {prod.sale_price && <span className="mega-prod-old">{formatPrice(Number(prod.price))}</span>}
                         </div>
                       </Link>
                     ))}

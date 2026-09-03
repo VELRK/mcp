@@ -1,4 +1,4 @@
-<?php $currency = $settings['currency_symbol'] ?? 'RM'; ?>
+<?php $currency = sk_currency_symbol($settings); ?>
 
 <div class="sk-page-header">
   <h5 class="sk-page-title">
@@ -49,19 +49,14 @@
             <?php
             $this->load->helper('sk_invoice');
             $disc = sk_order_discount_breakdown($order, $settings ?? []);
-            $affDiscPct = (!empty($affiliate['customer_discount_percent']) && (float)$affiliate['customer_discount_percent'] > 0)
-                ? rtrim(rtrim(number_format((float)$affiliate['customer_discount_percent'], 2), '0'), '.') . '%'
-                : '';
-            if (($disc['affiliate'] ?? 0) > 0): ?>
-            <tr><td colspan="3" class="text-end text-success">Affiliate checkout discount (<?= htmlspecialchars($disc['affiliate_promo']) ?><?= $affDiscPct ? ', ' . $affDiscPct : '' ?>)</td><td class="text-success">-<?= $currency . number_format($disc['affiliate'], 2) ?></td></tr>
-            <?php elseif (($disc['promo'] ?? 0) > 0): ?>
-            <tr><td colspan="3" class="text-end text-success">Discount (<?= htmlspecialchars($disc['promo_code']) ?>)</td><td class="text-success">-<?= $currency . number_format($disc['promo'], 2) ?></td></tr>
+            if (($disc['promo'] ?? 0) > 0 || ($disc['affiliate'] ?? 0) > 0):
+              $promoAmt = (float)($disc['promo'] ?? 0) + (float)($disc['affiliate'] ?? 0);
+              $promoLabel = $disc['promo_code'] ?: ($disc['affiliate_promo'] ?? 'Promo');
+            ?>
+            <tr><td colspan="3" class="text-end text-success">Discount (<?= htmlspecialchars($promoLabel) ?>)</td><td class="text-success">-<?= $currency . number_format($promoAmt, 2) ?></td></tr>
             <?php endif; ?>
             <?php if (($disc['wallet'] ?? 0) > 0): ?>
             <tr><td colspan="3" class="text-end text-success">Wallet payment discount<?= !empty($disc['wallet_percent']) ? ' (' . rtrim(rtrim(number_format((float)$disc['wallet_percent'], 2), '0'), '.') . '%)' : '' ?></td><td class="text-success">-<?= $currency . number_format($disc['wallet'], 2) ?></td></tr>
-            <?php endif; ?>
-            <?php if ((float)($order['royalty_used_rm'] ?? 0) > 0 || (int)($order['royalty_used_points'] ?? 0) > 0): ?>
-            <tr><td colspan="3" class="text-end text-warning">Royalty redeemed (<?= (int)$order['royalty_used_points'] ?> pts)</td><td class="text-warning">-<?= $currency . number_format((float)(($order['royalty_used_rm'] ?? 0) > 0 ? $order['royalty_used_rm'] : ($order['wallet_amount'] ?? 0)), 2) ?></td></tr>
             <?php endif; ?>
             <tr><td colspan="3" class="text-end">Shipping</td><td><?= $currency . number_format($order['shipping'],2) ?></td></tr>
             <tr><td colspan="3" class="text-end">Tax</td><td><?= $currency . number_format($order['tax'],2) ?></td></tr>
@@ -70,29 +65,6 @@
         </table>
       </div>
     </div>
-
-    <?php if ((int)($order['royalty_earned_points'] ?? 0) > 0 || (int)($order['royalty_used_points'] ?? 0) > 0): ?>
-    <div class="card sk-table-card shadow-sm mb-3 border-warning">
-      <div class="card-header bg-white border-0 py-3 fw-semibold">
-        <i class="bi bi-stars me-2 text-warning"></i>Royalty Points
-      </div>
-      <div class="card-body small">
-        <?php if ((int)($order['royalty_earned_points'] ?? 0) > 0): ?>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted">Earned on this order</span>
-          <strong class="text-success"><?= (int)$order['royalty_earned_points'] ?> pts (<?= $currency . number_format((float)$order['royalty_earned_Rs'], 2) ?>)</strong>
-        </div>
-        <?php endif; ?>
-        <?php if ((int)($order['royalty_used_points'] ?? 0) > 0): ?>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted">Redeemed on checkout</span>
-          <strong class="text-danger"><?= (int)$order['royalty_used_points'] ?> pts (<?= $currency . number_format((float)$order['royalty_used_rm'], 2) ?>)</strong>
-        </div>
-        <?php endif; ?>
-        <div class="text-muted" style="font-size:11px;">Earn: RM 5000 purchase = 500 pts (RM 100 credit). Royalty pays the bill (not a coupon). Shown on invoice for admin.</div>
-      </div>
-    </div>
-    <?php endif; ?>
 
     <!-- Payment Info -->
     <?php if ($order['payment']): $pay = $order['payment']; ?>
@@ -168,7 +140,7 @@
                     <?= $step['label'] ?>
                   </small>
                   <?php if (!empty($step['time']) && ($done || $active)): ?>
-                  <small style="display:block;font-size:9px;color:#64748b;margin-top:2px;"><?= sk_jt_format_datetime($step['time']) ?></small>
+                  <small style="display:block;font-size:9px;color:#64748b;margin-top:2px;"><?= htmlspecialchars(date('d M Y H:i', strtotime($step['time']))) ?></small>
                   <?php endif; ?>
                 </div>
                 <?php if ($i < count($status_steps) - 1): ?>
@@ -213,68 +185,6 @@
         </button>
       </div>
     </div>
-
-    <?php if (!empty($settings['jt_express_enabled']) && $settings['jt_express_enabled'] !== '0'): ?>
-    <!-- JT Express — summary only; full create/track in JT Express module -->
-    <div class="card sk-table-card shadow-sm mb-3 border-warning">
-      <div class="card-header bg-white border-0 py-3 fw-semibold d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-truck me-2 text-warning"></i>JT Express</span>
-        <?php if (sk_jt_express_is_sandbox($settings)): ?>
-          <span class="badge bg-secondary">Sandbox</span>
-        <?php endif; ?>
-      </div>
-      <div class="card-body">
-        <div class="small mb-3">
-          <div><span class="text-muted">AWB:</span> <strong><?= htmlspecialchars($order['jt_bill_code'] ?? $order['tracking_number'] ?? '—') ?></strong></div>
-          <div><span class="text-muted">Courier:</span> <?= htmlspecialchars($order['jt_courier_status'] ?? 'not created') ?></div>
-          <div><span class="text-muted">Order:</span> <strong><?= htmlspecialchars(ucfirst($order['status'] ?? '')) ?></strong> <span class="text-muted small">(syncs from JT)</span></div>
-          <?php if (!empty($order['jt_shipment_created_at'])): ?>
-          <div><span class="text-muted">Created:</span> <?= sk_jt_format_datetime($order['jt_shipment_created_at']) ?></div>
-          <?php endif; ?>
-        </div>
-        <a href="<?= site_url('shopkart/jt-express/view/'.$order['id']) ?>" class="btn btn-warning btn-sm w-100 fw-semibold">
-          <i class="bi bi-truck me-1"></i>
-          <?= empty($order['jt_bill_code']) ? 'Create / Manage JT Shipment' : 'Detailed Tracking &amp; Manage' ?>
-        </a>
-        <a href="<?= site_url('shopkart/jt-express') ?>" class="btn btn-link btn-sm w-100 mt-1">All JT shipments</a>
-      </div>
-    </div>
-    <?php endif; ?>
-
-    <?php if (!empty($order['affiliate_promo']) || !empty($affiliate)): ?>
-    <div class="card sk-table-card shadow-sm mb-3 border-success">
-      <div class="card-header bg-white border-0 py-3 fw-semibold">
-        <i class="bi bi-link-45deg me-2 text-success"></i>Affiliate
-      </div>
-      <div class="card-body small">
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted">Promo code</span>
-          <code><?= htmlspecialchars($order['affiliate_promo'] ?? ($affiliate['promo_code'] ?? '')) ?></code>
-        </div>
-        <?php if (!empty($affiliate['name'])): ?>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted">Affiliate</span>
-          <strong><?= htmlspecialchars($affiliate['name']) ?></strong>
-        </div>
-        <?php endif; ?>
-        <?php if (!empty($affiliate['commission_rate'])): ?>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted">Commission rate</span>
-          <strong><?= rtrim(rtrim(number_format((float)$affiliate['commission_rate'], 2), '0'), '.') ?>%</strong>
-        </div>
-        <?php endif; ?>
-        <?php if (!empty($affiliate_commission['commission_amount'])): ?>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted">Commission earned</span>
-          <strong class="text-success"><?= $currency . number_format((float)$affiliate_commission['commission_amount'], 2) ?></strong>
-        </div>
-        <?php if (!empty($affiliate_commission['order_total'])): ?>
-        <div class="text-muted" style="font-size:11px;">On subtotal <?= $currency . number_format((float)$affiliate_commission['order_total'], 2) ?> (before discount/tax/shipping)</div>
-        <?php endif; ?>
-        <?php endif; ?>
-      </div>
-    </div>
-    <?php endif; ?>
 
     <!-- Customer Info -->
     <div class="card sk-table-card shadow-sm mb-3">

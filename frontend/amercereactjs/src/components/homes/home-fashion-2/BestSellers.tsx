@@ -5,6 +5,8 @@ import { Link } from "react-router-dom";
 import AddToCartButton from "@/components/common/AddToCartButton";
 import WishlistButton from "@/components/common/WishlistButton";
 
+import { formatPrice } from "@/utils/formatPrice";
+
 function BestSellerCard({ product }: { product: ProductCardItem }) {
   // Calculate discount percentage if priceOld is available
   const discountPercent = product.priceOld
@@ -87,11 +89,11 @@ function BestSellerCard({ product }: { product: ProductCardItem }) {
         {/* Price */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "16px", fontWeight: "600", color: "#333" }}>
-            RM {product.price?.toLocaleString()}
+            {formatPrice(product.price)}
           </span>
           {product.priceOld && (
             <span style={{ fontSize: "13px", color: "#999", textDecoration: "line-through" }}>
-              RM {product.priceOld.toLocaleString()}
+              {formatPrice(product.priceOld)}
             </span>
           )}
         </div>
@@ -123,10 +125,12 @@ function BestSellerCard({ product }: { product: ProductCardItem }) {
 }
 
 function BestSellers() {
-  const activeTab = "popular";
-  const { products, loading } = useProducts({ sort: activeTab, limit: 16 });
+  const { products, loading } = useProducts({ special_product: 1, limit: 16 });
 
   const cards = products.map(toProductCard);
+
+  if (loading) return null;
+  if (!cards.length) return null;
 
   // Fallback seamless pattern or similar if desired.
   const bgPattern = `url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30,10 C20,20 10,20 10,30 C10,40 20,40 30,50 C40,40 50,40 50,30 C50,20 40,20 30,10 Z' fill='rgba(255, 255, 255, 0.08)' /%3E%3C/svg%3E")`;
@@ -147,9 +151,6 @@ function BestSellers() {
 
         <div className="tab-content position-relative">
           <div className="tab-pane fade active show" role="tabpanel">
-            {loading ? (
-              <div className="text-center py-40 text-white">Loading…</div>
-            ) : (
               <div style={{ position: "relative" }}>
                 <TfSwiper
                   className="wrap-sw-over"
@@ -182,7 +183,6 @@ function BestSellers() {
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
                 </div>
               </div>
-            )}
           </div>
         </div>
       </div>

@@ -1,6 +1,5 @@
 <?php
 $store = $vendor['store'] ?? [];
-$wallet = $vendor['wallet'] ?? [];
 $status_badges = [
   'pending' => 'bg-warning text-dark', 'approved' => 'bg-success', 'rejected' => 'bg-danger',
   'suspended' => 'bg-secondary', 'inactive' => 'bg-dark',
@@ -16,7 +15,6 @@ $status_badges = [
   <div class="d-flex flex-wrap gap-2">
     <a href="<?= site_url('admin/vendors/edit/'.$vendor['id']) ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil me-1"></i>Edit</a>
     <a href="<?= site_url('admin/stores/edit/'.$vendor['id']) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-shop me-1"></i>Store</a>
-    <a href="<?= site_url('admin/wallet/vendor/'.$vendor['id']) ?>" class="btn btn-outline-success btn-sm"><i class="bi bi-wallet2 me-1"></i>Wallet</a>
     <?php if ($vendor['status'] === 'pending'): ?>
     <a href="<?= site_url('admin/vendors/approve/'.$vendor['id']) ?>" class="btn btn-success btn-sm">Approve</a>
     <?php endif; ?>
@@ -72,24 +70,6 @@ $status_badges = [
   </div>
 
   <div class="col-lg-4">
-    <div class="card shadow-sm mb-3">
-      <div class="card-header fw-semibold">Wallet</div>
-      <div class="card-body">
-        <div class="display-6 fw-bold text-success">RM<?= number_format((float)($wallet['balance'] ?? 0), 2) ?></div>
-        <small class="text-muted">Available balance</small>
-      </div>
-    </div>
-
-    <?php if (!empty($vendor['bank'])): $b = $vendor['bank']; ?>
-    <div class="card shadow-sm mb-3">
-      <div class="card-header fw-semibold">Bank Details</div>
-      <div class="card-body small">
-        <div><?= htmlspecialchars($b['account_holder']) ?></div>
-        <div class="text-muted"><?= htmlspecialchars($b['bank_name']) ?> · ****<?= substr($b['account_number'], -4) ?></div>
-      </div>
-    </div>
-    <?php endif; ?>
-
     <div class="card shadow-sm">
       <div class="card-header fw-semibold">Timeline</div>
       <div class="card-body small">

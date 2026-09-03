@@ -32,12 +32,6 @@ function sk_order_discount_breakdown(array $order, array $settings = []): array 
     }
 
     $walletPct = (float)($settings['customer_wallet_discount_percent'] ?? 0);
-    if ($walletPct <= 0 && $wallet > 0) {
-        $CI =& get_instance();
-        if (isset($CI->Sk_Customer_wallet_model)) {
-            $walletPct = (float)$CI->Sk_Customer_wallet_model->get_wallet_discount_percent();
-        }
-    }
 
     return [
         'total'            => $total,
@@ -71,7 +65,7 @@ function sk_invoice_payment_method_label(array $order): string {
  */
 function sk_invoice_build(array $order, array $settings = [], ?array $sellerOverride = null): array {
     $CI =& get_instance();
-    $currency = $settings['currency_symbol'] ?? 'RM';
+    $currency = sk_currency_symbol($settings);
     $taxRate  = (float)($settings['tax_rate'] ?? 18);
 
     $seller = $sellerOverride ?: sk_invoice_resolve_seller($order, $settings);
@@ -165,10 +159,6 @@ function sk_invoice_build(array $order, array $settings = [], ?array $sellerOver
         'total'          => $total,
         'payment_method' => sk_invoice_payment_method_label($order),
         'wallet_amount'  => (float)($order['wallet_amount'] ?? 0),
-        'royalty_earned_points' => (int)($order['royalty_earned_points'] ?? 0),
-        'royalty_earned_Rs'     => (float)($order['royalty_earned_Rs'] ?? 0),
-        'royalty_used_points'   => (int)($order['royalty_used_points'] ?? 0),
-        'royalty_used_rm'       => (float)($order['royalty_used_rm'] ?? 0),
         'payment_status' => ucfirst($order['payment_status'] ?? 'pending'),
         'order_status'   => ucfirst($order['status'] ?? 'pending'),
         'notes'          => $order['notes'] ?? '',
@@ -481,25 +471,13 @@ function sk_invoice_render_html(array $invoice, bool $forEmail = false): string 
 
     $walletPayHtml = '';
     $walletPaid = (float)($invoice['wallet_amount'] ?? 0);
-    $royaltyUsedPts = (int)($invoice['royalty_used_points'] ?? 0);
-    $royaltyUsedRm  = (float)($invoice['royalty_used_rm'] ?? 0);
     if ($walletPaid > 0) {
         $walletPayHtml = "<div><strong>Wallet:</strong> {$cur}" . number_format($walletPaid, 2) . '</div>';
     }
-    if ($royaltyUsedPts > 0 || $royaltyUsedRm > 0) {
-        $walletPayHtml .= "<div><strong>Royalty points:</strong> {$royaltyUsedPts} pts ({$cur}"
-            . number_format($royaltyUsedRm, 2) . ')</div>';
-    }
-    $onlinePaid = max(0, (float)$invoice['total'] - $walletPaid - $royaltyUsedRm);
-    if ($onlinePaid > 0.009 && ($walletPaid > 0 || $royaltyUsedRm > 0)) {
+    $onlinePaid = max(0, (float)$invoice['total'] - $walletPaid);
+    if ($onlinePaid > 0.009 && $walletPaid > 0) {
         $methodLabel = strtolower((string)($invoice['payment_method'] ?? '')) === 'cod' ? 'COD' : 'Online';
         $walletPayHtml .= "<div><strong>{$methodLabel} due:</strong> {$cur}" . number_format($onlinePaid, 2) . '</div>';
-    }
-    $royaltyEarnPts = (int)($invoice['royalty_earned_points'] ?? 0);
-    $royaltyEarnRm  = (float)($invoice['royalty_earned_Rs'] ?? 0);
-    if ($royaltyEarnPts > 0 || $royaltyEarnRm > 0) {
-        $walletPayHtml .= "<div><strong>Royalty earned:</strong> {$royaltyEarnPts} pts ({$cur}"
-            . number_format($royaltyEarnRm, 2) . ')</div>';
     }
 
     $printBtns = $forEmail ? '' : "
@@ -587,14 +565,6 @@ function sk_invoice_render_html(array $invoice, bool $forEmail = false): string 
       </tfoot>
     </table>
 
-    " . (($royaltyEarnPts > 0 || $royaltyUsedPts > 0)
-        ? "<div style='margin-top:12px;padding:12px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:12px;color:#92400e;'>"
-            . "<strong style='display:block;margin-bottom:4px;'>Royalty Points</strong>"
-            . ($royaltyEarnPts > 0 ? "<div>Earned: <strong>{$royaltyEarnPts} pts</strong> ({$cur}" . number_format($royaltyEarnRm, 2) . ')</div>' : '')
-            . ($royaltyUsedPts > 0 ? "<div>Redeemed: <strong>{$royaltyUsedPts} pts</strong> ({$cur}" . number_format($royaltyUsedRm > 0 ? $royaltyUsedRm : $walletPaid, 2) . ')</div>' : '')
-            . '</div>'
-        : '') . "
-
     " . ($invoice['notes'] ? "<div style='margin-top:16px;padding:12px;background:#fffbeb;border-radius:6px;font-size:12px;color:#92400e;'><strong>Note:</strong> " . htmlspecialchars($invoice['notes']) . '</div>' : '') . "
 
     <div style='margin-top:28px;padding-top:16px;border-top:1px dashed #cbd5e1;text-align:center;font-size:12px;color:#64748b;line-height:1.6;'>
@@ -621,7 +591,7 @@ function sk_invoice_email_body(array $invoice, array $order, array $settings = [
     $name = htmlspecialchars($order['customer_name'] ?? ($order['shipping_name'] ?? 'Customer'));
     $orderNo = htmlspecialchars($invoice['order_number'] ?? ($order['order_number'] ?? ''));
     $invoiceNo = htmlspecialchars($invoice['invoice_no'] ?? '');
-    $currency = htmlspecialchars($invoice['currency'] ?? ($settings['currency_symbol'] ?? 'RM'));
+    $currency = htmlspecialchars($invoice['currency'] ?? sk_currency_symbol($settings));
     $total = $currency . number_format((float)($invoice['total'] ?? $order['total'] ?? 0), 2);
     $date = htmlspecialchars($invoice['invoice_date'] ?? date('d M Y'));
     $payment = htmlspecialchars($invoice['payment_method'] ?? sk_invoice_payment_method_label($order));
@@ -771,7 +741,7 @@ function sk_mail_order_invoice(array $order, array $settings = []): bool {
     }
 
     // Admin copy: full order digest (no customer-facing invoice tone); PDF attached when available.
-    $currency = $settings['currency_symbol'] ?? 'RM';
+    $currency = sk_currency_symbol($settings);
     $itemsSummary = '';
     foreach (($order['items'] ?? []) as $item) {
         $itemsSummary .= htmlspecialchars(($item['product_name'] ?? 'Item') . ' × ' . ($item['quantity'] ?? 1)) . '<br>';

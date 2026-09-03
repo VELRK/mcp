@@ -1,17 +1,9 @@
-/** FPX / TnG / card 3DS must leave Curlec via this URL. Do not omit. */
-export function curlecCheckoutRedirect(callbackUrl?: string | null): {
-  callback_url: string;
-  redirect: true;
-} {
-  const fromApi = (callbackUrl || "").trim();
-  const fallback = `${window.location.origin}/shopkart-api/payment/razorpay-return`;
-  return {
-    callback_url: fromApi || fallback,
-    redirect: true,
-  };
+/** Legacy helper — Standard Razorpay Checkout uses the in-page handler, not Curlec redirect. */
+export function curlecCheckoutRedirect(_callbackUrl?: string | null): Record<string, never> {
+  return {};
 }
 
-/** User-facing copy for Curlec / Razorpay checkout outcomes. */
+/** User-facing copy for Razorpay checkout outcomes. */
 export function curlecUserMessage(err?: {
   reason?: string;
   description?: string;
@@ -29,21 +21,21 @@ export function curlecUserMessage(err?: {
       kind: "pending",
       retry: false,
       message:
-        "Your Touch ’n Go / online payment is still processing. Do not pay again — we will confirm the order automatically. Check My Orders in a few minutes.",
+        "Your payment is still processing. Do not pay again — we will confirm the order automatically. Check My Orders in a few minutes.",
     };
   }
 
   const byReason: Record<string, string> = {
     card_declined:
-      "Card was declined by the bank. Try another card, or pay with FPX / Touch ’n Go. Your order is saved under My Orders.",
+      "Card was declined by the bank. Try another card or UPI. Your order is saved under My Orders.",
     payment_session_expired:
-      "The bank payment session expired. Open My Orders and tap Complete payment to try FPX again.",
+      "The payment session expired. Open My Orders and tap Complete payment to try again.",
     payment_timed_out:
       "The bank took too long to respond. Please try again from My Orders.",
     authentication_failed:
-      "Card / bank authentication failed. Try again or use another payment method.",
+      "Card / UPI authentication failed. Try again or use another payment method.",
     insufficient_funds:
-      "Insufficient funds. Use another card, FPX, or Touch ’n Go.",
+      "Insufficient funds. Use another card or UPI.",
   };
 
   if (byReason[reason]) {
@@ -54,7 +46,7 @@ export function curlecUserMessage(err?: {
       kind: "failed",
       retry: true,
       message:
-        "The payment gateway had a technical error. Please try again in a few minutes from My Orders.",
+        "Razorpay had a technical error. Please try again in a few minutes from My Orders.",
     };
   }
   if (desc) {
@@ -68,6 +60,6 @@ export function curlecUserMessage(err?: {
     kind: "failed",
     retry: true,
     message:
-      "Payment was not completed. Try another method from My Orders. If money was deducted, it is usually returned in 5–7 working days.",
+      "Payment was not completed. Try again from My Orders. If money was deducted, it is usually returned in 5–7 working days.",
   };
 }

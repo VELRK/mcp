@@ -40,15 +40,12 @@ add_col($CI->db, 'orders', 'billing_line2', "VARCHAR(255) NULL DEFAULT NULL AFTE
 add_col($CI->db, 'orders', 'billing_city', "VARCHAR(100) NULL DEFAULT NULL AFTER `billing_line2`");
 add_col($CI->db, 'orders', 'billing_state', "VARCHAR(100) NULL DEFAULT NULL AFTER `billing_city`");
 add_col($CI->db, 'orders', 'billing_pincode', "VARCHAR(20) NULL DEFAULT NULL AFTER `billing_state`");
-add_col($CI->db, 'orders', 'billing_country', "VARCHAR(80) NULL DEFAULT 'Malaysia' AFTER `billing_pincode`");
+add_col($CI->db, 'orders', 'billing_country', "VARCHAR(80) NULL DEFAULT 'India' AFTER `billing_pincode`");
 
 $defaults = [
-    'currency_symbol' => 'RM',
-    'currency_code' => 'MYR',
-    'default_country' => 'Malaysia',
-    'wallet_points_per_rm' => '5',
-    'wallet_rm_per_points_base' => '100',
-    'wallet_points_base' => '500',
+    'currency_symbol' => '₹',
+    'currency_code' => 'INR',
+    'default_country' => 'India',
     'payment_gateway' => 'toyyibpay',
     'toyyibpay_secret_key' => '',
     'toyyibpay_category_code' => '',
