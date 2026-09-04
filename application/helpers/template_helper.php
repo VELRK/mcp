@@ -655,6 +655,8 @@ function rewrite_template_html($html, $current = 'home')
 
 	$base = base_url();
 	$assets = base_url('assets/website/');
+	$layout = '<link rel="stylesheet" href="'.htmlspecialchars($assets.'site-layout.css', ENT_QUOTES, 'UTF-8').'?v=1">';
+	$html = preg_replace('#</head>#i', $layout.'</head>', $html, 1);
 
 	// Drop WP speculation rules (paths break after rewrite)
 	$html = preg_replace('#<script type="speculationrules">.*?</script>#is', '', $html);
@@ -825,7 +827,7 @@ function site_business_story_html()
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-business-story.js'), ENT_QUOTES, 'UTF-8');
 
-	return '<link rel="stylesheet" href="'.$css.'?v=9">'
+	return '<link rel="stylesheet" href="'.$css.'?v=10">'
 		.'<section class="site-story" id="how-talkaipilot-works">'
 		.'<div class="site-story-inner">'
 		.'<span class="site-story-kicker">The conversation</span>'
@@ -921,7 +923,7 @@ function site_sale_path_html()
 	};
 
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=9">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=10">'
 		.'<section class="site-path" id="site-sale-path">'
 		.'<div class="site-path-inner">'
 		.'<span class="site-path-kicker">How a sale happens</span>'
@@ -949,7 +951,7 @@ function site_sale_path_html()
 function site_hero_demo_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-hero-demo.css'), ENT_QUOTES, 'UTF-8');
-	return '<link rel="stylesheet" href="'.$css.'?v=5">'
+	return '<link rel="stylesheet" href="'.$css.'?v=6">'
 		.'<div class="site-hero-demo" aria-hidden="true">'
 		.'<div class="site-hero-phone">'
 		.'<div class="site-hero-notch"></div>'
@@ -1042,7 +1044,7 @@ function site_lead_channels()
 function site_lead_channels_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=9">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=10">'
 		.'<section class="site-channels" id="site-lead-channels">'
 		.'<div class="site-channels-inner">'
 		.'<span class="site-channels-kicker">Where leads come from</span>'
@@ -1077,7 +1079,7 @@ function inject_lead_channels($html)
 function site_use_cases_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=9">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=10">'
 		.'<div class="site-cases" id="site-use-cases">';
 	foreach (site_use_cases() as $case) {
 		$url = htmlspecialchars(base_url('service/'.$case['slug']), ENT_QUOTES, 'UTF-8');
