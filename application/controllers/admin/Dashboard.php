@@ -11,6 +11,15 @@ class Dashboard extends Sk_Base {
     }
 
     public function index() {
+        try {
+            $this->_load_dashboard();
+        } catch (Throwable $e) {
+            log_message('error', 'Admin dashboard: '.$e->getMessage());
+            $this->_render_empty_dashboard();
+        }
+    }
+
+    private function _load_dashboard(): void {
         $vid = $this->current_vendor_id();
         $currency = sk_currency_symbol($this->Sk_Admin_model->get_settings());
 
@@ -48,5 +57,29 @@ class Dashboard extends Sk_Base {
         }
 
         $this->render('dashboard', $data);
+    }
+
+    private function _render_empty_dashboard(): void {
+        $currency = '₹';
+        try {
+            $currency = sk_currency_symbol($this->Sk_Admin_model->get_settings());
+        } catch (Throwable $e) {
+            // keep default
+        }
+        $this->render('dashboard', [
+            'title'           => 'Dashboard - 2DEAL Admin',
+            'is_vendor_view'  => false,
+            'currency'        => $currency,
+            'total_orders'    => 0,
+            'pending_orders'  => 0,
+            'total_revenue'   => 0,
+            'monthly_revenue' => 0,
+            'total_products'  => 0,
+            'total_customers' => 0,
+            'recent_orders'   => [],
+            'top_products'    => [],
+            'revenue_chart'   => [],
+            'vendor_counts'   => ['total' => 0, 'approved' => 0, 'pending' => 0],
+        ]);
     }
 }

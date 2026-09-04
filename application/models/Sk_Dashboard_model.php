@@ -79,7 +79,7 @@ class Sk_Dashboard_model extends CI_Model {
     }
 
     public function vendor_revenue_chart(int $vendor_id, int $days = 30): array {
-        $rows = $this->db->select('DATE(o.created_at) as date, SUM(oi.subtotal) as revenue', false)
+        $q = $this->db->select('DATE(o.created_at) as date, SUM(oi.subtotal) as revenue', false)
                          ->from('order_items oi')
                          ->join('orders o', 'o.id = oi.order_id')
                          ->join('products p', 'p.id = oi.product_id', 'left')
@@ -91,7 +91,8 @@ class Sk_Dashboard_model extends CI_Model {
                          ->where('o.created_at >=', date('Y-m-d', strtotime("-{$days} days")))
                          ->group_by('DATE(o.created_at)')
                          ->order_by('date', 'ASC')
-                         ->get()->result_array();
+                         ->get();
+        $rows = ($q && is_object($q)) ? $q->result_array() : [];
 
         $map = [];
         foreach ($rows as $r) $map[$r['date']] = (float)$r['revenue'];
@@ -105,7 +106,7 @@ class Sk_Dashboard_model extends CI_Model {
     }
 
     public function vendor_top_products(int $vendor_id, int $limit = 5): array {
-        return $this->db->select('oi.product_name, oi.product_id, SUM(oi.quantity) as qty_sold, SUM(oi.subtotal) as revenue')
+        $q = $this->db->select('oi.product_id, MAX(oi.product_name) as product_name, SUM(oi.quantity) as qty_sold, SUM(oi.subtotal) as revenue', false)
                         ->from('order_items oi')
                         ->join('orders o', 'o.id = oi.order_id')
                         ->join('products p', 'p.id = oi.product_id', 'left')
@@ -117,11 +118,12 @@ class Sk_Dashboard_model extends CI_Model {
                         ->group_by('oi.product_id')
                         ->order_by('revenue', 'DESC')
                         ->limit($limit)
-                        ->get()->result_array();
+                        ->get();
+        return ($q && is_object($q)) ? $q->result_array() : [];
     }
 
     public function vendor_recent_orders(int $vendor_id, int $limit = 8): array {
-        return $this->db->select('o.*, u.name as customer_name, SUM(oi.subtotal) as vendor_total')
+        $q = $this->db->select('o.id, o.order_number, o.status, o.payment_status, o.created_at, o.total, u.name as customer_name, SUM(oi.subtotal) as vendor_total', false)
                         ->from('order_items oi')
                         ->join('orders o', 'o.id = oi.order_id')
                         ->join('users u', 'u.id = o.user_id', 'left')
@@ -133,6 +135,7 @@ class Sk_Dashboard_model extends CI_Model {
                         ->group_by('o.id')
                         ->order_by('o.created_at', 'DESC')
                         ->limit($limit)
-                        ->get()->result_array();
+                        ->get();
+        return ($q && is_object($q)) ? $q->result_array() : [];
     }
 }

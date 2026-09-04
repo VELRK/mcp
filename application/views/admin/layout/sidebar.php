@@ -124,8 +124,12 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
           <i class="bi bi-envelope me-2"></i> Contacts
           <?php
             $sk_contact_new = 0;
-            if ($this->db->table_exists('contact_enquiries')) {
-              $sk_contact_new = (int)$this->db->where('status', 'new')->count_all_results('contact_enquiries');
+            try {
+              if ($this->db->table_exists('contact_enquiries') && $this->db->field_exists('status', 'contact_enquiries')) {
+                $sk_contact_new = (int)$this->db->where('status', 'new')->count_all_results('contact_enquiries');
+              }
+            } catch (Throwable $e) {
+              $sk_contact_new = 0;
             }
           ?>
           <?php if ($sk_contact_new > 0): ?>
