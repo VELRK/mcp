@@ -1159,6 +1159,56 @@ function site_contact_form_html($type = 'contact')
 		.'</form></div></div></div></section>';
 }
 
+function ensure_contact_enquiries_table()
+{
+	$CI =& get_instance();
+	$CI->load->database();
+	if (!$CI->db) {
+		return false;
+	}
+
+	if (!$CI->db->table_exists('contact_enquiries')) {
+		$CI->db->query("CREATE TABLE IF NOT EXISTS `contact_enquiries` (
+			`id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+			`user_id` INT UNSIGNED NULL DEFAULT NULL,
+			`name` VARCHAR(150) NOT NULL,
+			`email` VARCHAR(150) NOT NULL,
+			`phone` VARCHAR(40) NULL DEFAULT NULL,
+			`business_name` VARCHAR(150) NULL DEFAULT NULL,
+			`industry` VARCHAR(80) NULL DEFAULT NULL,
+			`subject` VARCHAR(200) NULL DEFAULT NULL,
+			`message` TEXT NOT NULL,
+			`source` VARCHAR(20) NOT NULL DEFAULT 'web',
+			`status` ENUM('new','read','replied','closed') NOT NULL DEFAULT 'new',
+			`admin_note` TEXT NULL,
+			`created_at` DATETIME NOT NULL,
+			`updated_at` DATETIME NULL DEFAULT NULL,
+			PRIMARY KEY (`id`),
+			KEY `idx_contact_email` (`email`),
+			KEY `idx_contact_status` (`status`),
+			KEY `idx_contact_created` (`created_at`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+		return true;
+	}
+
+	foreach (array(
+		'user_id'       => 'ADD COLUMN `user_id` INT UNSIGNED NULL DEFAULT NULL AFTER `id`',
+		'phone'         => 'ADD COLUMN `phone` VARCHAR(40) NULL DEFAULT NULL AFTER `email`',
+		'business_name' => 'ADD COLUMN `business_name` VARCHAR(150) NULL DEFAULT NULL AFTER `phone`',
+		'industry'      => 'ADD COLUMN `industry` VARCHAR(80) NULL DEFAULT NULL AFTER `business_name`',
+		'subject'       => 'ADD COLUMN `subject` VARCHAR(200) NULL DEFAULT NULL AFTER `industry`',
+		'source'        => 'ADD COLUMN `source` VARCHAR(20) NOT NULL DEFAULT \'web\' AFTER `message`',
+		'admin_note'    => 'ADD COLUMN `admin_note` TEXT NULL AFTER `status`',
+		'updated_at'    => 'ADD COLUMN `updated_at` DATETIME NULL DEFAULT NULL AFTER `created_at`',
+	) as $col => $alter) {
+		if (!$CI->db->field_exists($col, 'contact_enquiries')) {
+			$CI->db->query('ALTER TABLE `contact_enquiries` '.$alter);
+		}
+	}
+
+	return true;
+}
+
 function save_site_enquiry($source = 'web')
 {
 	$CI =& get_instance();
@@ -1170,33 +1220,48 @@ function save_site_enquiry($source = 'web')
 	$business = trim((string) $CI->input->post('business', true));
 	$industry = trim((string) $CI->input->post('industry', true));
 
-	if ($business !== '') {
-		$message = "Business: {$business}\n".($industry !== '' ? "Industry: {$industry}\n" : '')."\n".$message;
-	}
-
 	$redirect = 'contact';
 	if ($name === '' || $message === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
 		redirect($redirect.'?sent=0');
 		return;
 	}
 
+	$subject = $subject !== '' ? substr($subject, 0, 200) : ($source === 'enquiry' ? 'Website enquiry' : 'Website contact');
+
 	try {
-		$CI->load->database();
-		if ($CI->db && $CI->db->table_exists('contact_enquiries')) {
-			$CI->db->insert('contact_enquiries', array(
-				'name'       => substr($name, 0, 150),
-				'email'      => substr($email, 0, 150),
-				'phone'      => $phone !== '' ? substr($phone, 0, 40) : null,
-				'subject'    => $subject !== '' ? substr($subject, 0, 200) : ($source === 'enquiry' ? 'Website enquiry' : 'Website contact'),
-				'message'    => $message,
-				'source'     => 'web',
-				'status'     => 'new',
-				'created_at' => date('Y-m-d H:i:s'),
-			));
+		if (!ensure_contact_enquiries_table()) {
+			throw new Exception('contact_enquiries table is not available');
 		}
+
+		$CI->db->insert('contact_enquiries', array(
+			'name'          => substr($name, 0, 150),
+			'email'         => substr($email, 0, 150),
+			'phone'         => $phone !== '' ? substr($phone, 0, 40) : null,
+			'business_name' => $business !== '' ? substr($business, 0, 150) : null,
+			'industry'      => $industry !== '' ? substr($industry, 0, 80) : null,
+			'subject'       => $subject,
+			'message'       => $message,
+			'source'        => 'web',
+			'status'        => 'new',
+			'created_at'    => date('Y-m-d H:i:s'),
+		));
 	} catch (Exception $e) {
 		log_message('error', 'Landing enquiry save failed: '.$e->getMessage());
+		redirect($redirect.'?sent=0');
+		return;
 	}
+
+	$mailBody = $message;
+	if ($business !== '') {
+		$mailBody = "Business: {$business}\n".($industry !== '' ? "Industry: {$industry}\n" : '')."\n".$mailBody;
+	}
+	if ($phone !== '') {
+		$mailBody = "Phone: {$phone}\n".$mailBody;
+	}
+	$mailBody = "Subject: {$subject}\n".$mailBody;
+
+	$CI->load->helper('sk_mailer');
+	sk_mail_contact_enquiry($name, $email, $mailBody);
 
 	redirect($redirect.'?sent=1');
 }

@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS `contact_enquiries` (
   `name`       VARCHAR(150) NOT NULL,
   `email`      VARCHAR(150) NOT NULL,
   `phone`      VARCHAR(40) NULL DEFAULT NULL,
+  `business_name` VARCHAR(150) NULL DEFAULT NULL,
+  `industry`   VARCHAR(80) NULL DEFAULT NULL,
   `subject`    VARCHAR(200) NULL DEFAULT NULL,
   `message`    TEXT NOT NULL,
   `source`     VARCHAR(20) NOT NULL DEFAULT 'app',

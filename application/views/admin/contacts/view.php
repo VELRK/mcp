@@ -27,6 +27,14 @@
         <div class="text-muted small">Phone</div>
         <div><?= !empty($c['phone']) ? htmlspecialchars($c['phone']) : '—' ?></div>
       </div>
+      <div class="col-md-6">
+        <div class="text-muted small">Business</div>
+        <div><?= !empty($c['business_name']) ? htmlspecialchars($c['business_name']) : '—' ?></div>
+      </div>
+      <div class="col-md-6">
+        <div class="text-muted small">Industry</div>
+        <div><?= !empty($c['industry']) ? htmlspecialchars($c['industry']) : '—' ?></div>
+      </div>
       <div class="col-12">
         <div class="text-muted small">Subject</div>
         <div><?= !empty($c['subject']) ? htmlspecialchars($c['subject']) : '—' ?></div>

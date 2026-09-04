@@ -122,6 +122,15 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
         <a href="<?= site_url('shopkart/contacts') ?>"
            class="nav-link sk-nav-link <?= sk_active($uri,'contacts') ?>">
           <i class="bi bi-envelope me-2"></i> Contacts
+          <?php
+            $sk_contact_new = 0;
+            if ($this->db->table_exists('contact_enquiries')) {
+              $sk_contact_new = (int)$this->db->where('status', 'new')->count_all_results('contact_enquiries');
+            }
+          ?>
+          <?php if ($sk_contact_new > 0): ?>
+          <span class="badge bg-warning text-dark ms-auto"><?= $sk_contact_new ?></span>
+          <?php endif; ?>
         </a>
       </li>
 

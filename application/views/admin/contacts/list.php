@@ -57,6 +57,7 @@ $status_badges = [
           <tr>
             <th style="width:50px">#</th>
             <th>Name</th>
+            <th>Business</th>
             <th>Contact</th>
             <th>Subject</th>
             <th>Message</th>
@@ -71,6 +72,12 @@ $status_badges = [
           <tr id="row-<?= (int)$c['id'] ?>" class="<?= ($c['status'] ?? '') === 'new' ? 'fw-semibold table-warning' : '' ?>">
             <td class="text-muted small"><?= (int)$c['id'] ?></td>
             <td><?= htmlspecialchars($c['name'] ?? '') ?></td>
+            <td class="small">
+              <?= !empty($c['business_name']) ? htmlspecialchars($c['business_name']) : '<span class="text-muted">—</span>' ?>
+              <?php if (!empty($c['industry'])): ?>
+                <div class="text-muted"><?= htmlspecialchars($c['industry']) ?></div>
+              <?php endif; ?>
+            </td>
             <td class="small">
               <a href="mailto:<?= htmlspecialchars($c['email'] ?? '') ?>"><?= htmlspecialchars($c['email'] ?? '') ?></a>
               <?php if (!empty($c['phone'])): ?>
@@ -100,7 +107,7 @@ $status_badges = [
           </tr>
           <?php endforeach; ?>
           <?php if (empty($contacts)): ?>
-          <tr><td colspan="9" class="text-center text-muted py-4">No contact enquiries yet. App / web form submissions will appear here.</td></tr>
+          <tr><td colspan="10" class="text-center text-muted py-4">No contact messages yet. Website Contact form and app submissions appear here.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>

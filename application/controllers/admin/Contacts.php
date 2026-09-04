@@ -31,6 +31,8 @@ class Contacts extends Sk_Base {
                     ->like('name', $search)
                     ->or_like('email', $search)
                     ->or_like('phone', $search)
+                    ->or_like('business_name', $search)
+                    ->or_like('industry', $search)
                     ->or_like('subject', $search)
                     ->or_like('message', $search)
                     ->group_end();
@@ -87,35 +89,6 @@ class Contacts extends Sk_Base {
     }
 
     private function _ensure_schema(): void {
-        if (!$this->db->table_exists('contact_enquiries')) {
-            $this->db->query("CREATE TABLE IF NOT EXISTS `contact_enquiries` (
-                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                `user_id` INT UNSIGNED NULL DEFAULT NULL,
-                `name` VARCHAR(150) NOT NULL,
-                `email` VARCHAR(150) NOT NULL,
-                `phone` VARCHAR(40) NULL DEFAULT NULL,
-                `subject` VARCHAR(200) NULL DEFAULT NULL,
-                `message` TEXT NOT NULL,
-                `source` VARCHAR(20) NOT NULL DEFAULT 'app',
-                `status` ENUM('new','read','replied','closed') NOT NULL DEFAULT 'new',
-                `admin_note` TEXT NULL,
-                `created_at` DATETIME NOT NULL,
-                `updated_at` DATETIME NULL DEFAULT NULL,
-                PRIMARY KEY (`id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-            return;
-        }
-        foreach ([
-            'user_id'    => "ADD COLUMN `user_id` INT UNSIGNED NULL DEFAULT NULL AFTER `id`",
-            'phone'      => "ADD COLUMN `phone` VARCHAR(40) NULL DEFAULT NULL AFTER `email`",
-            'subject'    => "ADD COLUMN `subject` VARCHAR(200) NULL DEFAULT NULL AFTER `phone`",
-            'source'     => "ADD COLUMN `source` VARCHAR(20) NOT NULL DEFAULT 'app' AFTER `message`",
-            'admin_note' => "ADD COLUMN `admin_note` TEXT NULL AFTER `status`",
-            'updated_at' => "ADD COLUMN `updated_at` DATETIME NULL DEFAULT NULL AFTER `created_at`",
-        ] as $col => $alter) {
-            if (!$this->db->field_exists($col, 'contact_enquiries')) {
-                $this->db->query("ALTER TABLE `contact_enquiries` {$alter}");
-            }
-        }
+        ensure_contact_enquiries_table();
     }
 }
