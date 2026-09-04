@@ -655,11 +655,33 @@ function rewrite_template_html($html, $current = 'home')
 	$base = base_url();
 	$assets = base_url('assets/website/');
 
+	// Drop WP speculation rules (paths break after rewrite)
+	$html = preg_replace('#<script type="speculationrules">.*?</script>#is', '', $html);
+
+	// Drop emoji loader (wp-emoji-release.min.js was not mirrored; uses wordpress.org CDN in settings)
+	$html = preg_replace('#<script id="wp-emoji-settings"[^>]*>.*?</script>#is', '', $html);
+	$html = preg_replace('#<script[^>]*id="wp-emoji-loader-js"[^>]*>.*?</script>#is', '', $html);
+	$html = preg_replace('#<script[^>]*>.*?_wpemojiSettings.*?</script>#is', '', $html);
+
+	// Absolute mirrored host → local assets
 	$html = preg_replace('#https?://softivuslab\.com/wp/intellicon/(wp-content/)#i', $assets.'$1', $html);
 	$html = preg_replace('#https?://softivuslab\.com/wp/intellicon/(wp-includes/)#i', $assets.'$1', $html);
-	$html = preg_replace('#(?<!assets/)(?:\.\./)*wp-content/#', $assets.'wp-content/', $html);
-	$html = preg_replace('#(?<!assets/)(?:\.\./)*wp-includes/#', $assets.'wp-includes/', $html);
+
+	// Absolute-path leftovers from the mirror (/wp/intellicon/wp-content/...)
+	$html = preg_replace('#(?:https?://[^"\'\s]+)?/wp/intellicon/(wp-content/)#i', $assets.'$1', $html);
+	$html = preg_replace('#(?:https?://[^"\'\s]+)?/wp/intellicon/(wp-includes/)#i', $assets.'$1', $html);
+
+	// Relative wp-content / wp-includes (do not touch already-rewritten assets/website/...)
+	$html = preg_replace('#(?<!assets/website/)(?:\.\./)*wp-content/#', $assets.'wp-content/', $html);
+	$html = preg_replace('#(?<!assets/website/)(?:\.\./)*wp-includes/#', $assets.'wp-includes/', $html);
+
+	// Collapse accidental double prefixes from older rewrites / srcset
+	$html = str_replace($assets.$assets, $assets, $html);
+	$html = preg_replace('#'.preg_quote($assets, '#').'https?://[^/]+/assets/website/#i', $assets, $html);
+
 	$html = preg_replace('#https?://softivuslab\.com/wp/intellicon/?#i', $base, $html);
+	$html = preg_replace('#"/wp/intellicon/#i', '"'.$base, $html);
+	$html = preg_replace("#'/wp/intellicon/#i", "'".$base, $html);
 
 	$html = preg_replace('#(?:\.\./)*services/([a-z0-9\-]+)/index\.html#i', $base.'service/$1', $html);
 	$html = preg_replace('#(?:\.\./)*service/index\.html#i', $base.'service', $html);

@@ -30,7 +30,8 @@ application/logs/*
 application/cache/api/
 
 # ── PHP / Composer ────────────────────────────────────────────
-vendor/
+# Root-only: do not ignore WP assets under assets/website/.../vendor/
+/vendor/
 composer.lock
 
 # ── Secrets (never commit) ────────────────────────────────────
@@ -51,11 +52,12 @@ uploads/*
 !uploads/index.html
 !uploads/.htaccess
 
-# ── Old / unused React & theme trees ──────────────────────────
-frontend/
-frontend1/
-react-frontend/
-frontend-dist/
+# ── Old / unused React & theme trees (root-only) ──────────────
+# Anchored so WooCommerce assets/js/frontend/ is still tracked.
+/frontend/
+/frontend1/
+/react-frontend/
+/frontend-dist/
 /website/
 /css/
 /fonts/
