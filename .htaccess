@@ -72,14 +72,8 @@ RewriteRule ^ - [R=404,L]
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
-# ── Single CodeIgniter front controller (no extra index.php folders) ──
+# ── Single CodeIgniter front controller (landing + admin + APIs) ──
 # Query-string form works on most cPanel hosts; CI reads REQUEST_URI.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(admin|shopkart-api|invoice)(/.*)?$ index.php?/$1$2 [L,QSA]
-
-# SPA
-RewriteRule ^$ frontend/index.html [L]
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ frontend/index.html [L]
+RewriteRule ^(.*)$ index.php?/$1 [L,QSA]

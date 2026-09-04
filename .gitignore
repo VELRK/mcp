@@ -1,6 +1,4 @@
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  deal — backend + frontend BUILD only (no React source)      ║
-# ╚══════════════════════════════════════════════════════════════╝
+# TalkAI Pilot — CodeIgniter shop + landing
 
 # ── OS ────────────────────────────────────────────────────────
 .DS_Store
@@ -26,56 +24,71 @@ nbproject/
 application/cache/*
 !application/cache/index.html
 !application/cache/.htaccess
-
 application/logs/*
 !application/logs/index.html
 !application/logs/.htaccess
-
 application/cache/api/
 
 # ── PHP / Composer ────────────────────────────────────────────
 vendor/
 composer.lock
 
-# Database credentials and config
+# ── Secrets (never commit) ────────────────────────────────────
 application/config/database.php
+application/config/deploy_webhook_secret.php
+application/config/firebase-service-account.json
+.env
+.env.local
+.env.*.local
+*.env
+config.local.php
+deploy-keys/
 
-# ── User uploads (live only; never commit) ────────────────────
+# ── User uploads (live only) ──────────────────────────────────
 assets/uploads/*
 !assets/uploads/.htaccess
 uploads/*
 !uploads/index.html
 !uploads/.htaccess
 
-# ── Environment / Secrets ─────────────────────────────────────
-.env
-.env.local
-.env.*.local
-*.env
-config.local.php
-application/config/deploy_webhook_secret.php
-
-# ── Frontend React SOURCE ──
-# Source is now tracked per request.
-
-# Stray lockfile next to build output
-frontend/package-lock.json
-
-# ── Old frontend locations ────────────────────────────────────
+# ── Old / unused React & theme trees ──────────────────────────
+frontend/
 frontend1/
 react-frontend/
 frontend-dist/
-
-# Root-level build folders (not frontend/assets)
+/website/
+/css/
+/fonts/
+/images/
+/js/
+/webfonts/
 /dist/
 /build/
 
-# ── Archives ──────────────────────────────────────────────────
+# Stray React build chunks dumped into assets root
+/assets/*.js
+/assets/*.css
+/assets/*.map
+
+# ── Archives & one-off junk ───────────────────────────────────
+*.zip
+*.rar
+*.7z
 frontend.zip
 assets.zip
-*.zip
+2deal-frontend-fix.zip
+assets/affiliate.zip
+fix_images.php
+fix_encoding.php
+make-2deal-zip.bat
+DEPLOY_2DEAL.md
+UPLOAD_TO_2DEAL.txt
+netlify.toml
+vercel.json
+package-lock.json
+package.json
 
-# ── Python scripts & cache ────────────────────────────────────
+# ── Scripts / seeds not needed in prod ────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
@@ -83,6 +96,14 @@ download_ai_saree_images.py
 download_product_images.py
 download_saree_images.py
 fill_product_html.sql
+seed_colors.php
+seed_colors.sql
+seed_multicolor.php
+verify_colors.php
+about.html
+blog.html
+contact.html
+projects.html
 
 # ── Logs ──────────────────────────────────────────────────────
 *.log
@@ -91,37 +112,19 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ── CodeIgniter user guide / test artefacts ───────────────────
+# ── Test / docs artefacts ─────────────────────────────────────
 user_guide_src/
 tests/tests/
 tests/results/
 tests/mocks/database/ci_test.sqlite
+artifacts/
+docs/
+/api/
 
-# ── Sublime Text cache ────────────────────────────────────────
+# ── Editor caches ─────────────────────────────────────────────
 *.tmlanguage.cache
 *.tmPreferences.cache
 *.stTheme.cache
 
-# ── Misc project-specific ─────────────────────────────────────
-artifacts/
-docs/
-/api/
-vercel.json
-fix_encoding.php
-about.html
-blog.html
-contact.html
-projects.html
-seed_colors.php
-seed_colors.sql
-seed_multicolor.php
-verify_colors.php
-
 # ── AI tooling ────────────────────────────────────────────────
 .claude/
-
-# ── Deploy SSH keys (never commit) ────────────────────────────
-deploy-keys/
-
-# ── Firebase Admin private key (never commit) ─────────────────
-application/config/firebase-service-account.json

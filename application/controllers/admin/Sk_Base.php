@@ -11,6 +11,7 @@ class Sk_Base extends CI_Controller {
 
     public function __construct() {
         parent::__construct();
+        $this->load->database();
         $this->load->model(['Sk_Admin_model', 'Sk_Product_model', 'Sk_Order_model', 'Sk_User_model', 'Sk_Promo_model', 'Sk_Vendor_model']);
         $this->load->library(['session', 'form_validation', 'upload', 'pagination', 'Sk_Activity_log', 'Sk_Vendor_context']);
         $this->load->helper(['url', 'form', 'text', 'date']);

@@ -1,0 +1,128 @@
+:root {
+  --primaryColor: #452FF4;
+  --secondarycolor: #41E295;
+}
+
+/* Icon Box CSS ----------------------
+----------------------------------------*/
+.tp-iconbox-area {
+  overflow: hidden;
+}
+.tp-iconbox-area .box-inner {
+  position: relative;
+  padding: 40px 25px 20px;
+  box-shadow: 0 0 38px 0 rgba(0, 0, 0, 0.12);
+  transition: 0.4s;
+  overflow: hidden;
+}
+.tp-iconbox-area .box-inner:hover {
+  box-shadow: 0 8px 38px 0 rgba(0, 0, 0, 0.2);
+}
+.tp-iconbox-area .box-inner .rs-badge {
+  position: absolute;
+  background: var(--primaryColor);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  color: #ffffff;
+  left: -4%;
+  top: -10%;
+  z-index: 1;
+  transform: rotate(0deg);
+  padding-top: 18px;
+  padding-left: 10px;
+  font-size: 22px;
+}
+.tp-iconbox-area .box-inner .rs-badge small {
+  font-size: 12px;
+  color: #fff;
+  padding-left: 2px;
+}
+.tp-iconbox-area .box-inner .icon-area {
+  display: inline-block;
+  color: var(--primaryColor);
+  transition: all ease 0.3s;
+}
+.tp-iconbox-area .box-inner .icon-area i {
+  transition: all ease 0.3s;
+  font-size: 50px;
+}
+.tp-iconbox-area .box-inner .text-area {
+  padding: 10px 0 0;
+  position: relative;
+}
+.tp-iconbox-area .box-inner .text-area .iconbox-title {
+  position: relative;
+}
+.tp-iconbox-area .box-inner .text-area .iconbox-title .title {
+  font-size: 20px;
+  margin: 0;
+  color: #FFFFFF;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.tp-iconbox-area .box-inner .text-area .iconbox-title .title a {
+  text-decoration: none !important;
+  color: #FFFFFF;
+}
+.tp-iconbox-area .box-inner .text-area .iconbox-title .title a:hover {
+  color: #ff6600;
+}
+.tp-iconbox-area .box-inner .text-area .iconbox-title .title:before {
+  content: "01.";
+  font-size: 50px;
+  font-weight: bold;
+  color: var(--primaryColor);
+  position: absolute;
+  transition: all 0.3s ease 0s;
+  top: 0;
+  left: 0;
+  z-index: 9;
+}
+.tp-iconbox-area .box-inner .text-area .services-txt {
+  font-size: 15px;
+  margin: 0;
+}
+.tp-iconbox-area .box-inner .services-btn-part {
+  margin: 15px 0 0;
+}
+.tp-iconbox-area .box-inner .services-btn-part .services-btn {
+  position: relative;
+  display: inline-block;
+  color: #FFFFFF;
+  transition: all ease 0.3s;
+}
+.tp-iconbox-area .box-inner .services-btn-part .services-btn i {
+  transition: all ease 0.3s;
+}
+.tp-iconbox-area .box-inner .services-btn-part .services-btn:hover {
+  color: var(--primaryColor)
+}
+.tp-iconbox-area .box-inner .services-btn-part .services-btn.icon-after span {
+  float: left;
+}
+.tp-iconbox-area .box-inner .services-btn-part .services-btn.icon-after i {
+  margin-left: 10px;
+  transition: 0.4s;
+}
+.tp-iconbox-area .box-inner .services-btn-part .services-btn.icon-before span {
+  float: right;
+}
+.tp-iconbox-area .box-inner .services-btn-part .services-btn.icon-before i {
+  margin-right: 10px;
+}
+.tp-iconbox-area.iconbox-after-arrow-image .box-inner {
+  box-shadow: none;
+  overflow: visible;
+}
+.tp-iconbox-area.iconbox-after-arrow-image .box-inner .icon-area {
+  position: relative;
+}
+.tp-iconbox-area.iconbox-after-arrow-image .box-inner .icon-area .after-arrow-image {
+  position: absolute;
+  width: 100px;
+  height: 21px;
+  right: -150px;
+  top: 68px;
+  z-index: 1;
+}/*# sourceMappingURL=iconbox.css.map */

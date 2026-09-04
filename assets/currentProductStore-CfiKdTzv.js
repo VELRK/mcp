@@ -1,1 +1,0 @@
-import{t as e}from"./react-XHOEVCdX.js";var t=e(e=>({product:null,setCurrentProduct:t=>e({product:t})}));export{t};

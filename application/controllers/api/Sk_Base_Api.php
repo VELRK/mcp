@@ -7,6 +7,7 @@ class Sk_Base_Api extends CI_Controller {
 
     public function __construct() {
         parent::__construct();
+        $this->load->database();
         $this->load->model(['Sk_Product_model','Sk_Order_model','Sk_User_model','Sk_Promo_model','Sk_Admin_model']);
         $this->load->library('Sk_JWT');
         $this->load->helper(['url']);

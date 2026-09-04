@@ -1,0 +1,12 @@
+:root {
+  --primaryColor: #452FF4;
+  --secondarycolor: #41E295;
+}
+
+.wpcf7 label {
+  display: block;
+}
+
+.wpcf7-form-control-wrap {
+  position: relative;
+}/*# sourceMappingURL=cf7.css.map */

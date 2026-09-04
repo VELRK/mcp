@@ -1,1 +1,0 @@
-function e(e){return`₹`+e.toLocaleString(`en-IN`,{minimumFractionDigits:0,maximumFractionDigits:2})}export{e as t};

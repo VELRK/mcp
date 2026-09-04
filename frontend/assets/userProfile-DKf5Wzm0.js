@@ -1,1 +1,0 @@
-function r(t){if(!t)return!0;const e=t.toLowerCase();return e.startsWith("ph_")||e.endsWith("@shopkart.app")||e.endsWith("@2deal.app")}function i(t){return!t||!t.trim()?!0:/^User\s+\d{2,6}$/i.test(t.trim())}function n(t){return t?i(t.name)||r(t.email):!0}export{i as a,r as b,n as i};

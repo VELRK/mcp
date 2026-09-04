@@ -1,0 +1,156 @@
+:root {
+  --primaryColor: #452FF4;
+  --secondarycolor: #41E295;
+}
+
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-badge {
+  position: absolute;
+  top: 0;
+  padding: 10px 10px;
+  background-color: #452FF4;
+  color: #0F2923;
+  line-height: 1;
+  z-index: 1;
+  right: 0;
+  font-size: 18px;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-title {
+  margin-bottom: 12px;
+  color: #354764;
+  font-size: 24px;
+  line-height: 30px;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-header p {
+  padding-bottom: 10px;
+  color: #777;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-price .tp-pricing-table-price-tag {
+  margin-bottom: 0.5rem;
+  color: #354764;
+  font-weight: 700;
+  font-size: 40px;
+  line-height: normal;
+  position: relative;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-price .tp-pricing-table-price-tag .tp-pricing-table-price-text {
+  font-weight: 700;
+  margin-left: -10px;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-price .tp-pricing-table-period {
+  color: #777;
+  font-size: 16px;
+  display: block;
+  font-weight: 400;
+  padding-top: 5px;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-price.display-inline .tp-pricing-table-period {
+  position: relative;
+  padding-left: 16px;
+  display: inline-block;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-price.display-inline .tp-pricing-table-period:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 2px;
+  position: absolute;
+  left: 0;
+  transform: rotate(20deg) translateY(-50%);
+  top: 50%;
+  background: #f2f2f2;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-body .tp-pricing-table-features-title {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-weight: 700;
+  font-size: 16px;
+  border-bottom: 1px solid #f2f2f2;
+  padding-bottom: 25px;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-body .tp-pricing-table-features-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-body .tp-pricing-table-features-list li {
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-body .tp-pricing-table-features-list li.active i {
+  color: #452FF4;
+  font-size: 18px;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-body .tp-pricing-table-features-list li.deactive {
+  color: #5D666F;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-body .tp-pricing-table-features-list li i {
+  margin-right: 10px;
+  min-width: 15px;
+  font-size: 16px;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-table-btn {
+  display: inline-block;
+  padding: 10px 20px;
+  border-radius: 40px;
+  background-color: #452FF4;
+  color: #0F2923;
+  text-decoration: none;
+  font-size: 16px;
+  -webkit-transition: all 0.3s;
+  transition: all 0.3s;
+  text-align: center;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-icon {
+  position: relative;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricing-icon i {
+  position: relative;
+  transition: 1.3s;
+  text-align: center;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricingt-style2 {
+  position: relative;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricingt-style2 .tp-pricing-table-price {
+  background: #452FF4;
+  display: inline-block;
+  position: absolute;
+  top: -10%;
+  left: 0;
+  padding: 18px 40px;
+  text-align: right;
+  animation: jump-1 5s linear infinite;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricingt-style2 .tp-pricing-table-header {
+  padding-top: 95px;
+  border-bottom: 1px solid #EAE2E2;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricingt-style2 .tp-pricing-table-header p {
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricingt-style2 .tp-pricing-table-price .tp-pricing-table-price-tag .tp-pricing-table-price-text {
+  margin: 0;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricingt-style2 .tp-pricing-table-price-tag {
+  margin-bottom: 0;
+}
+.elementor-widget-tp-price-table .elementor-widget-container .tp-pricingt-style2 .tp-pricing-table-period {
+  margin-top: 0;
+}
+
+.tp-pricingt-style3 .plan__valu__left {
+  display: flex;
+}
+
+.tp-pricingt-stylestyle3.plan__section__four::before {
+  display: none;
+}
+.tp-pricingt-stylestyle3.plan__section__four::after {
+  display: none;
+}
+
+/*# sourceMappingURL=pricing-table.css.map */

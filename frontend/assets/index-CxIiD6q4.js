@@ -1,1 +1,0 @@
-import{A as r,j as s,N as a}from"./index-JGj2P9Xq.js";const i=()=>{const t=r().search||"",e=new URLSearchParams(t).get("redirect"),o=e?`/login?redirect=${encodeURIComponent(e)}`:"/login";return s.jsx(a,{to:o,replace:!0})};export{i as default};

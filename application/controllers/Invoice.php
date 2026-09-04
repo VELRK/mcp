@@ -10,6 +10,7 @@ class Invoice extends CI_Controller {
 
     public function __construct() {
         parent::__construct();
+        $this->load->database();
         $this->load->model(['Sk_Order_model', 'Sk_Admin_model']);
         $this->load->helper(['sk_invoice', 'sk_invoice_pdf']);
         sk_invoice_ensure_vendor_schema();

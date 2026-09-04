@@ -1,1 +1,0 @@
-import{V as n,K as r}from"./index-jupH7x8z.js";const d="2Deal",p="Shop incense, soaps, and food products online.";function I(o,e){const t=n.find(a=>a.id===Number(o))||n[0],s=r(d),c=`${t.name} | ${e} | ${s}`,i=(t.description&&t.description.trim().length>0?`${t.name} — ${t.description}`:`${t.name} — ${p}`).slice(0,160);return{title:c,description:i}}export{p as I,d as a,I as b};

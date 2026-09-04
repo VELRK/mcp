@@ -1,0 +1,74 @@
+.site-hiw{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;padding:18px;font-family:Inter,system-ui,sans-serif}
+.site-hiw.is-open{display:flex}
+.site-hiw-overlay{position:absolute;inset:0;background:radial-gradient(1200px 600px at 20% 10%,rgba(69,47,244,.45),transparent 55%),radial-gradient(900px 500px at 90% 90%,rgba(165,142,255,.28),transparent 50%),rgba(5,12,28,.88);backdrop-filter:blur(8px)}
+.site-hiw-panel{position:relative;width:min(1080px,100%);max-height:calc(100vh - 36px);overflow:hidden;display:flex;flex-direction:column;color:#fff;border-radius:28px;padding:0;background:linear-gradient(180deg,rgba(18,32,62,.96),rgba(8,22,46,.98));border:1px solid rgba(165,142,255,.22);box-shadow:0 40px 100px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.04) inset;animation:siteHiwPanel .45s cubic-bezier(.2,.8,.2,1)}
+.site-hiw-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 64px 12px 22px;flex:0 0 auto}
+.site-hiw-brand{display:flex;flex-direction:column;gap:2px}
+.site-hiw-kicker{color:#A58EFF;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.site-hiw-panel h3{margin:0;font-size:26px;font-weight:800;letter-spacing:-.03em}
+button.site-hiw-close{position:absolute;top:14px;right:14px;left:auto;bottom:auto;z-index:30;width:40px;height:40px;padding:0;margin:0;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:transparent;font-size:0;line-height:0;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;float:none;appearance:none;-webkit-appearance:none;box-shadow:none;transform:none}
+button.site-hiw-close:before,button.site-hiw-close:after{content:"";position:absolute;width:16px;height:2px;background:#fff;border-radius:2px}
+button.site-hiw-close:before{transform:rotate(45deg)}
+button.site-hiw-close:after{transform:rotate(-45deg)}
+button.site-hiw-close:hover{background:rgba(255,255,255,.22)}
+.site-hiw-progress{height:3px;margin:0 22px 8px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;flex:0 0 auto}
+.site-hiw-progress span{display:block;height:100%;width:0;background:linear-gradient(90deg,#452FF4,#A58EFF);border-radius:99px;transition:width .35s linear}
+.site-hiw.is-playing .site-hiw-progress span{width:100%;transition:width 13s linear}
+.site-hiw-body{overflow:auto;flex:1 1 auto;min-height:0}
+.site-hiw-grid{display:grid;grid-template-columns:360px 1fr;gap:32px;padding:12px 22px 8px;align-items:stretch}
+.site-hiw-phone-wrap{display:flex;justify-content:center}
+.site-hiw-phone{width:300px;background:#0b1224;border:3px solid #1c2b4d;border-radius:36px;padding:10px 8px 14px;min-height:520px;position:relative;box-shadow:0 24px 50px rgba(69,47,244,.25),inset 0 1px 0 rgba(255,255,255,.08);overflow:hidden}
+.site-hiw-phone:before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.08) 48%,transparent 62%);transform:translateX(-120%);animation:none;pointer-events:none}
+.site-hiw.is-playing .site-hiw-phone:before{animation:siteHiwShine 2.2s ease .4s}
+.site-hiw-notch{width:108px;height:18px;background:#050b18;border-radius:0 0 14px 14px;margin:-10px auto 8px}
+.site-hiw-status{display:flex;justify-content:space-between;padding:0 12px 8px;font-size:10px;color:rgba(255,255,255,.55)}
+.site-hiw-channels{display:flex;gap:6px;padding:0 8px 10px}
+.site-hiw-chip{font-size:10px;padding:4px 8px;border-radius:99px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.06)}
+.site-hiw-chip.is-on{background:rgba(69,47,244,.35);color:#fff;border-color:rgba(165,142,255,.5);box-shadow:0 0 0 3px rgba(69,47,244,.15)}
+.site-hiw-head{display:flex;align-items:center;gap:10px;padding:6px 10px 10px;border-bottom:1px solid rgba(255,255,255,.08)}
+.site-hiw-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(180deg,#6a57ff,#452FF4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;box-shadow:0 0 16px rgba(69,47,244,.55)}
+.site-hiw-live{width:8px;height:8px;border-radius:50%;background:#5ee2a0;display:inline-block;margin-right:5px;box-shadow:0 0 8px #5ee2a0;animation:siteHiwPulse 1.4s infinite}
+.site-hiw-head strong{display:block;font-size:13px}
+.site-hiw-head span{display:block;font-size:11px;color:#A58EFF}
+.site-hiw-chat{padding:14px 8px 8px;min-height:318px;max-height:380px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.site-hiw-bubble,.site-hiw-card,.site-hiw-toast,.site-hiw-tag,.site-hiw-typing{opacity:0;transform:translateY(14px) scale(.98);pointer-events:none}
+.site-hiw-bubble.is-in,.site-hiw-card.is-in,.site-hiw-toast.is-in,.site-hiw-tag.is-in,.site-hiw-typing.is-in{opacity:1;transform:none;pointer-events:auto;transition:opacity .45s cubic-bezier(.2,.8,.2,1),transform .45s cubic-bezier(.2,.8,.2,1)}
+.site-hiw-typing.is-out{opacity:0;height:0;padding:0;margin:0;overflow:hidden;transition:.25s}
+.site-hiw-bubble{max-width:88%;padding:10px 12px;border-radius:16px;font-size:13px;line-height:1.5}
+.site-hiw-in{align-self:flex-start;background:#fff;color:#08162E;border-bottom-left-radius:4px}
+.site-hiw-out{align-self:flex-end;background:linear-gradient(180deg,#5b48ff,#452FF4);color:#fff;border-bottom-right-radius:4px;box-shadow:0 8px 18px rgba(69,47,244,.35)}
+.site-hiw-meta{display:block;margin-top:4px;font-size:10px;opacity:.65}
+.site-hiw-typing{align-self:flex-start;display:flex;gap:4px;padding:12px 14px;background:rgba(255,255,255,.1);border-radius:16px;width:54px}
+.site-hiw-typing i{width:6px;height:6px;border-radius:50%;background:#A58EFF;animation:siteHiwDot 1s infinite}
+.site-hiw-typing i:nth-child(2){animation-delay:.15s}
+.site-hiw-typing i:nth-child(3){animation-delay:.3s}
+.site-hiw-card{align-self:flex-end;width:86%;background:rgba(255,255,255,.08);border:1px solid rgba(165,142,255,.28);border-radius:14px;padding:10px}
+.site-hiw-card b{display:block;font-size:13px}
+.site-hiw-card small{color:#A58EFF;font-size:11px}
+.site-hiw-pay{background:linear-gradient(180deg,rgba(91,72,255,.35),rgba(69,47,244,.18));border-color:rgba(165,142,255,.55)}
+.site-hiw-invoice{background:rgba(255,255,255,.1)}
+.site-hiw-toast{align-self:stretch;background:rgba(94,226,160,.12);border:1px solid rgba(94,226,160,.35);color:#c8f7dc;border-radius:12px;padding:8px 10px;font-size:12px}
+.site-hiw-tag{margin:4px auto 0;background:#A58EFF;color:#08162E;font-size:11px;font-weight:800;padding:6px 10px;border-radius:999px}
+.site-hiw-steps{position:relative;display:flex;flex-direction:column;gap:10px;padding-left:6px}
+.site-hiw-steps:before{content:"";position:absolute;left:26px;top:18px;bottom:18px;width:2px;background:rgba(255,255,255,.08)}
+.site-hiw-step{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid rgba(255,255,255,.07);border-radius:16px;background:rgba(255,255,255,.02);opacity:.38;transform:translateX(8px);transition:all .45s cubic-bezier(.2,.8,.2,1)}
+.site-hiw-step.is-on{opacity:1;transform:none;border-color:rgba(165,142,255,.55);background:linear-gradient(90deg,rgba(69,47,244,.28),rgba(69,47,244,.08));box-shadow:0 10px 24px rgba(69,47,244,.18)}
+.site-hiw-step.is-done{opacity:.82;transform:none}
+.site-hiw-num{flex:0 0 28px;height:28px;border-radius:50%;background:rgba(69,47,244,.3);color:#A58EFF;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;position:relative;z-index:1}
+.site-hiw-step.is-on .site-hiw-num{background:#452FF4;color:#fff}
+.site-hiw-step h4{margin:0 0 4px;font-size:15px}
+.site-hiw-step p{margin:0;font-size:13px;color:rgba(255,255,255,.72);line-height:1.45}
+.site-hiw-actions{display:flex;flex-wrap:wrap;gap:10px;padding:8px 22px 22px}
+.site-hiw-actions a,.site-hiw-actions button{border:0;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none}
+.site-hiw-replay{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.22)!important}
+.site-hiw-cta{background:linear-gradient(180deg,#5b48ff,#452FF4);color:#fff;box-shadow:0 10px 24px rgba(69,47,244,.35)}
+@keyframes siteHiwPanel{from{opacity:0;transform:translateY(18px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes siteHiwShine{to{transform:translateX(120%)}}
+@keyframes siteHiwPulse{50%{opacity:.35}}
+@keyframes siteHiwDot{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-3px);opacity:1}}
+@media (max-width:860px){
+	.site-hiw-grid{grid-template-columns:1fr}
+	.site-hiw-phone{width:100%;max-width:340px;min-height:460px}
+	.site-hiw-panel h3{font-size:20px}
+	button.site-hiw-close{top:10px;right:10px}
+}

@@ -1,0 +1,30 @@
+:root {
+  --primaryColor: #452FF4;
+  --secondarycolor: #41E295;
+}
+
+/*------------------------------
+  Pie progress bar
+  -----------------------------*/
+.rs-pie-content {
+  text-align: center;
+}
+.rs-pie-content .rspie-title-center {
+  display: inline-block;
+  position: relative;
+  text-align: center;
+}
+.rs-pie-content .rspie-value {
+  display: block;
+  position: absolute;
+  font-size: 14px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.rs-pie-content .number {
+  text-align: center;
+  display: block;
+  padding: 10px 0 0;
+  font-size: 20px;
+}/*# sourceMappingURL=progress-pie.css.map */

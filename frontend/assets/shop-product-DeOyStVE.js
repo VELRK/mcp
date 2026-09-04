@@ -1,1 +1,0 @@
-import{I as n}from"./index-YnuMHtMo.js";const r="2DEAL",a="2DEAL";function I(o,s){const t=n.find(i=>i.id===Number(o))||n[0],c=`${t.name} | ${s} | ${r}`,e=(t.description&&t.description.trim().length>0?`${t.name} — ${t.description}`:`${t.name} — ${a}`).slice(0,160);return{title:c,description:e}}export{r as I,a,I as b};

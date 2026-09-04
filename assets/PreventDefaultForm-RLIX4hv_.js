@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-Cw4svHd9.js";var t=e();function n({onSubmit:e,...n}){return(0,t.jsx)(`form`,{...n,onSubmit:t=>{t.preventDefault(),e?.(t)}})}export{n as t};
