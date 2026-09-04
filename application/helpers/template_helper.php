@@ -718,6 +718,7 @@ function rewrite_template_html($html, $current = 'home')
 
 	if ($current === 'home') {
 		$html = inject_business_story($html);
+		$html = replace_key_features_journey($html);
 	}
 
 	$html = preg_replace('#https?://(?:www\.)?youtube\.com/watch\?v=[^"\']+#i', '#site-how-it-works', $html);
@@ -820,53 +821,128 @@ function site_business_story_html()
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-business-story.js'), ENT_QUOTES, 'UTF-8');
 
-	$road = 'M 90 92 H 880 Q 910 92 910 122 V 288 Q 910 318 880 318 H 90';
-	return '<link rel="stylesheet" href="'.$css.'?v=2">'
+	return '<link rel="stylesheet" href="'.$css.'?v=5">'
 		.'<section class="site-story" id="how-talkaipilot-works">'
 		.'<div class="site-story-inner">'
-		.'<span class="site-story-kicker">How the business works</span>'
-		.'<h2>One AI assistant. From first chat to paid invoice.</h2>'
-		.'<p class="site-story-lead">Follow the road: the customer chats, sees the product, pays, then gets the invoice. Each stop is one step in the same WhatsApp conversation.</p>'
-		.'<div class="site-story-map">'
-		.'<svg class="site-story-route" viewBox="0 0 1000 410" preserveAspectRatio="none" aria-hidden="true">'
-		.'<path class="site-story-route-bg" d="'.$road.'"></path>'
-		.'<path class="site-story-route-mid" d="'.$road.'"></path>'
-		.'<path class="site-story-route-dash" d="'.$road.'"></path>'
-		.'<circle r="9" fill="#fff" stroke="#A58EFF" stroke-width="3">'
-		.'<animateMotion dur="8s" repeatCount="indefinite" rotate="auto" path="'.$road.'"></animateMotion>'
-		.'</circle>'
-		.'<text class="site-story-flag" x="52" y="58">Start</text>'
-		.'<text class="site-story-flag" x="28" y="372">Sold</text>'
-		.'</svg>'
-		.'<div class="site-story-grid">'
-		.'<article class="site-story-card"><span class="site-story-num">1</span>'
-		.'<div class="site-story-stage ss-chat"><div class="ss-b in">Do you have a maroon Kanchipuram saree?</div><div class="ss-b out">Yes — in stock. Shall I send details?</div></div>'
-		.'<h3>Customer asks</h3><p>A shopper messages after hours. You do not miss the lead.</p></article>'
-		.'<article class="site-story-card"><span class="site-story-num">2</span>'
-		.'<div class="site-story-stage"><div class="ss-prod"><div class="ss-swatch"><i></i><i></i><i></i></div><b>Kanchipuram Silk Saree</b><small>Maroon &amp; gold zari · 6 yards · ₹12,499</small></div></div>'
-		.'<h3>Product details</h3><p>The AI shares colour, fabric, length, price and stock, then asks if they want this one.</p></article>'
-		.'<article class="site-story-card"><span class="site-story-num">3</span>'
-		.'<div class="site-story-stage"><div class="ss-pay">Pay ₹12,499<span>UPI / Card / Net banking</span></div></div>'
-		.'<h3>Payment link</h3><p>When they say yes, a payment link is sent in the same chat. No extra app needed.</p></article>'
-		.'<article class="site-story-card"><span class="site-story-num">4</span>'
-		.'<div class="site-story-stage"><div class="ss-ok"><span class="ss-tick"></span><em>Payment confirmed</em></div></div>'
-		.'<h3>Payment confirmed</h3><p>The order is marked paid only after the money is received. Nothing is sent before that.</p></article>'
-		.'<article class="site-story-card"><span class="site-story-num">5</span>'
-		.'<div class="site-story-stage"><div class="ss-inv"><b>Invoice · SA-1842</b><small>Silk House · WhatsApp PDF</small><div class="ss-line"></div><div class="ss-line"></div></div></div>'
-		.'<h3>Invoice sent</h3><p>After payment confirm, the invoice PDF is sent on WhatsApp. The sale is closed.</p></article>'
-		.'<article class="site-story-card"><span class="site-story-num">6</span>'
-		.'<div class="site-story-stage"><div class="ss-team"><span class="ss-avatar">You</span><div class="ss-note"><b>Ready buyer</b>Paid · invoice sent · assign to packing</div></div></div>'
-		.'<h3>Your team takes over</h3><p>Staff get a paid order with the full chat. They pack and ship. AI handles the rest 24/7.</p></article>'
-		.'</div></div>'
+		.'<span class="site-story-kicker">The conversation</span>'
+		.'<h2>Chat. Product. Pay. Invoice.</h2>'
+		.'<p class="site-story-lead">One WhatsApp thread. The AI stays with the customer from the first message until the invoice is sent.</p>'
+		.'<ol class="site-story-flow">'
+		.'<li class="site-story-card is-on"><span class="site-story-num">1</span><div class="site-story-stage ss-chat"><div class="ss-b in">Maroon Kanchipuram, this weekend?</div><div class="ss-b out">Yes — in stock. Sending it now.</div></div><h3>Chats</h3><p>The customer messages after hours. The AI picks it up in seconds.</p></li>'
+		.'<li class="site-story-card is-on"><span class="site-story-num">2</span><div class="site-story-stage"><div class="ss-prod"><div class="ss-swatch"><i></i><i></i><i></i></div><b>Kanchipuram Silk</b><small>Maroon &amp; gold · 6 yards · ₹12,499</small></div></div><h3>Sees the product</h3><p>Colour, fabric, length, price and stock — then a clear yes/no.</p></li>'
+		.'<li class="site-story-card is-on"><span class="site-story-num">3</span><div class="site-story-stage"><div class="ss-pay">Pay ₹12,499<span>UPI / Card / Net banking</span></div></div><h3>Pays</h3><p>A payment link in the same chat. Marked paid only after the money lands.</p></li>'
+		.'<li class="site-story-card is-on"><span class="site-story-num">4</span><div class="site-story-stage"><div class="ss-inv"><b>Invoice · SA-1842</b><small>WhatsApp PDF · Silk House</small><div class="ss-line"></div><div class="ss-line"></div></div></div><h3>Gets the invoice</h3><p>Invoice goes out on WhatsApp. Your team only packs a paid order.</p></li>'
+		.'</ol>'
 		.'<div class="site-story-who">'
-		.'<article><h4>Saree &amp; boutiques</h4><p>Catalogue, size, colour, pay link, invoice.</p></article>'
-		.'<article><h4>Clinics &amp; services</h4><p>FAQs, slot booking, reminders, handoff.</p></article>'
-		.'<article><h4>Stores &amp; D2C</h4><p>Stock, cart, payment and CRM update.</p></article>'
-		.'<article><h4>Any WhatsApp shop</h4><p>If customers message you, the AI can sell.</p></article>'
+		.'<article class="is-on"><h4>Saree &amp; boutiques</h4><p>Catalogue, colour, pay link, invoice.</p></article>'
+		.'<article class="is-on"><h4>Clinics &amp; services</h4><p>FAQs, slot booking, reminders.</p></article>'
+		.'<article class="is-on"><h4>Stores &amp; D2C</h4><p>Stock, cart, payment, CRM.</p></article>'
+		.'<article class="is-on"><h4>Any WhatsApp shop</h4><p>If they message you, the AI can sell.</p></article>'
 		.'</div>'
 		.'<div class="site-story-cta"><a href="'.$enquiry.'">Start Free</a></div>'
 		.'</div></section>'
-		.'<script src="'.$js.'?v=2"></script>';
+		.'<script src="'.$js.'?v=5"></script>';
+}
+
+function replace_div_by_marker($html, $marker, $replacement)
+{
+	$pos = strpos($html, $marker);
+	if ($pos === false) {
+		return $html;
+	}
+	$start = strrpos(substr($html, 0, $pos + 1), '<div');
+	if ($start === false || substr($html, $start, 4) !== '<div') {
+		return $html;
+	}
+
+	$open_end = strpos($html, '>', $start);
+	if ($open_end === false) {
+		return $html;
+	}
+
+	$cursor = $open_end + 1;
+	$depth = 1;
+	$len = strlen($html);
+	while ($depth > 0 && $cursor < $len) {
+		$next_open = strpos($html, '<div', $cursor);
+		$next_close = strpos($html, '</div>', $cursor);
+		if ($next_close === false) {
+			return $html;
+		}
+		if ($next_open !== false && $next_open < $next_close) {
+			$after = substr($html, $next_open + 4, 1);
+			if ($after === ' ' || $after === '>' || $after === "\n" || $after === "\r" || $after === "\t") {
+				$depth++;
+				$cursor = $next_open + 4;
+				continue;
+			}
+			$cursor = $next_open + 4;
+			continue;
+		}
+		$depth--;
+		if ($depth === 0) {
+			return substr($html, 0, $start).$replacement.substr($html, $next_close + 6);
+		}
+		$cursor = $next_close + 6;
+	}
+
+	return $html;
+}
+
+function site_sale_path_steps()
+{
+	return array(
+		array('1', 'Customer chats', 'A lead messages on WhatsApp after hours — colour, size, price or stock.'),
+		array('2', 'AI shows the product', 'The assistant replies with details, photo, price and whether it is in stock.'),
+		array('3', 'Customer says yes', 'They confirm the item in the same chat. No app switch, no lost thread.'),
+		array('4', 'Pays in chat', 'A UPI / card link is sent. The order is marked paid only after money is received.'),
+		array('5', 'Invoice sent', 'The invoice PDF goes out on WhatsApp. The sale is closed.'),
+		array('6', 'Your team ships', 'Staff get a paid order with the full chat. AI keeps covering the next lead.'),
+	);
+}
+
+function site_sale_path_html()
+{
+	$enquiry = htmlspecialchars(base_url('enquiry'), ENT_QUOTES, 'UTF-8');
+	$robot = htmlspecialchars(base_url('assets/website/wp-content/uploads/2024/06/feature.png'), ENT_QUOTES, 'UTF-8');
+	$steps = site_sale_path_steps();
+	$left = array_slice($steps, 0, 3);
+	$right = array_slice($steps, 3, 3);
+
+	$card = function ($step, $side) {
+		return '<article class="site-path-card site-path-'.$side.'">'
+			.'<span class="site-path-num">'.$step[0].'</span>'
+			.'<div class="site-path-body"><h3>'.$step[1].'</h3><p>'.$step[2].'</p></div>'
+			.'</article>';
+	};
+
+	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
+	$html = '<link rel="stylesheet" href="'.$css.'?v=5">'
+		.'<section class="site-path" id="site-sale-path">'
+		.'<div class="site-path-inner">'
+		.'<span class="site-path-kicker">How a sale happens</span>'
+		.'<h2>One AI assistant. From first chat to paid invoice.</h2>'
+		.'<p class="site-path-lead">Follow the path: the customer chats, sees the product, pays, then gets the invoice. Each stop is one step in the same WhatsApp conversation.</p>'
+		.'<div class="site-path-board">'
+		.'<div class="site-path-col">';
+	foreach ($left as $step) {
+		$html .= $card($step, 'left');
+	}
+	$html .= '</div>'
+		.'<div class="site-path-hero"><img src="'.$robot.'" alt="TalkAIPilot assistant" width="400" height="584">'
+		.'<a class="site-path-cta" href="'.$enquiry.'">Start Free</a></div>'
+		.'<div class="site-path-col">';
+	foreach ($right as $step) {
+		$html .= $card($step, 'right');
+	}
+	$html .= '</div></div></div></section>';
+
+	return $html;
+}
+
+function replace_key_features_journey($html)
+{
+	return replace_div_by_marker($html, 'class="elementor-element elementor-element-d37bc6d', site_sale_path_html());
 }
 
 function inject_business_story($html)
