@@ -67,8 +67,11 @@ button.site-hiw-close:hover{background:rgba(255,255,255,.22)}
 @keyframes siteHiwPulse{50%{opacity:.35}}
 @keyframes siteHiwDot{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-3px);opacity:1}}
 @media (max-width:860px){
-	.site-hiw-grid{grid-template-columns:1fr}
-	.site-hiw-phone{width:100%;max-width:340px;min-height:460px}
-	.site-hiw-panel h3{font-size:20px}
+	.site-hiw{padding:8px}
+	.site-hiw-grid{grid-template-columns:1fr;gap:12px;padding:8px 14px}
+	.site-hiw-phone-wrap{display:none}
+	.site-hiw-panel{border-radius:18px;max-height:calc(100vh - 16px)}
+	.site-hiw-panel h3{font-size:18px}
+	.site-hiw-top{padding:16px 52px 8px 16px}
 	button.site-hiw-close{top:10px;right:10px}
 }

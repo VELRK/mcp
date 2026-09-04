@@ -45,7 +45,11 @@
 .site-legal-page ul{margin:0 0 18px 22px}
 .site-legal-page a{color:var(--p);text-decoration:underline}
 @media (max-width:900px){
+	.site-page-wrap{padding:24px 14px}
 	.site-page-hero,.site-page-split,.site-page-grid,.site-page-checks,.site-form{grid-template-columns:1fr}
 	.site-page-visual{order:-1}
+	.site-page-visual img{width:min(100%,280px)}
+	.site-page-hero h2,.site-page-copy h2,.site-page-panel h2{font-size:26px}
 	.site-form .site-form-full,.site-form-ok,.site-form-err,.site-form button{grid-column:auto}
+	.site-page-info{padding:20px 18px}
 }

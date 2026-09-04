@@ -770,7 +770,7 @@ function site_how_it_works_html()
 	$css = htmlspecialchars(base_url('assets/website/site-how-it-works.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-how-it-works.js'), ENT_QUOTES, 'UTF-8');
 
-	return '<link rel="stylesheet" href="'.$css.'?v=4">'
+	return '<link rel="stylesheet" href="'.$css.'?v=5">'
 		.'<div id="site-how-it-works" class="site-hiw" aria-hidden="true">'
 		.'<div class="site-hiw-overlay"></div>'
 		.'<div class="site-hiw-panel" role="dialog" aria-labelledby="site-hiw-title">'
@@ -817,7 +817,7 @@ function site_business_story_html()
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-business-story.js'), ENT_QUOTES, 'UTF-8');
 
-	return '<link rel="stylesheet" href="'.$css.'?v=5">'
+	return '<link rel="stylesheet" href="'.$css.'?v=6">'
 		.'<section class="site-story" id="how-talkaipilot-works">'
 		.'<div class="site-story-inner">'
 		.'<span class="site-story-kicker">The conversation</span>'
@@ -913,7 +913,7 @@ function site_sale_path_html()
 	};
 
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=5">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=6">'
 		.'<section class="site-path" id="site-sale-path">'
 		.'<div class="site-path-inner">'
 		.'<span class="site-path-kicker">How a sale happens</span>'
@@ -931,7 +931,9 @@ function site_sale_path_html()
 	foreach ($right as $step) {
 		$html .= $card($step, 'right');
 	}
-	$html .= '</div></div></div></section>';
+	$html .= '</div></div>'
+		.'<div class="site-path-mobile-cta"><a class="site-path-cta" href="'.$enquiry.'">Start Free</a></div>'
+		.'</div></section>';
 
 	return $html;
 }
@@ -939,13 +941,19 @@ function site_sale_path_html()
 function site_hero_demo_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-hero-demo.css'), ENT_QUOTES, 'UTF-8');
-	return '<link rel="stylesheet" href="'.$css.'?v=1">'
+	return '<link rel="stylesheet" href="'.$css.'?v=3">'
 		.'<div class="site-hero-demo" aria-hidden="true">'
 		.'<div class="site-hero-glow"></div>'
 		.'<div class="site-hero-float site-hero-f1"><span>WA</span>Customer chats</div>'
 		.'<div class="site-hero-float site-hero-f2"><span>AI</span>Shows product</div>'
 		.'<div class="site-hero-float site-hero-f3"><span>₹</span>Pays in chat</div>'
 		.'<div class="site-hero-float site-hero-f4"><span>✓</span>Invoice sent</div>'
+		.'<ol class="site-hero-mobile">'
+		.'<li><span>1</span><b>Chats</b><small>Lead messages on WhatsApp</small></li>'
+		.'<li><span>2</span><b>Product</b><small>AI sends price and stock</small></li>'
+		.'<li><span>3</span><b>Pays</b><small>UPI link in the same chat</small></li>'
+		.'<li><span>4</span><b>Invoice</b><small>PDF after payment</small></li>'
+		.'</ol>'
 		.'<div class="site-hero-phone">'
 		.'<div class="site-hero-notch"></div>'
 		.'<div class="site-hero-status"><span>9:41</span><span>5G</span></div>'
@@ -1007,7 +1015,7 @@ function apply_page_chrome($html, $title, $content)
 	$html = preg_replace('#(<h1 class="page-title">\s*)[^<]+#', '$1'.$safe, $html, 1);
 	$html = preg_replace('#class="post post-page current-item">[^<]*</span>#', 'class="post post-page current-item">'.$safe.'</span>', $html, 1);
 
-	$css = '<link rel="stylesheet" href="'.htmlspecialchars(base_url('assets/website/site-pages.css'), ENT_QUOTES, 'UTF-8').'?v=1">';
+	$css = '<link rel="stylesheet" href="'.htmlspecialchars(base_url('assets/website/site-pages.css'), ENT_QUOTES, 'UTF-8').'?v=2">';
 	$html = preg_replace('#</head>#i', $css.'</head>', $html, 1);
 
 	$start = strpos($html, '<div id="content">');
