@@ -6,6 +6,22 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
 <nav id="sk-sidebar" class="sk-sidebar bg-dark text-white">
   <div class="sk-sidebar-inner pt-3 pb-5">
 
+    <?php
+      $waSide = $sidebar_wa ?? ['sent_today' => 0, 'sent_total' => 0, 'unread' => 0, 'mcp_open' => false, 'mcp_label' => 'Closed'];
+    ?>
+    <div class="sk-side-status mx-2 mb-3">
+      <a href="<?= site_url('shopkart/whatsapp') ?>" class="sk-side-stat">
+        <span class="sk-side-stat-label"><i class="bi bi-whatsapp me-1"></i>WhatsApp sent today</span>
+        <strong><?= (int)$waSide['sent_today'] ?></strong>
+      </a>
+      <a href="<?= site_url('admin/settings?tab=wacloud') ?>" class="sk-side-stat">
+        <span class="sk-side-stat-label"><i class="bi bi-hdd-network me-1"></i>MCP</span>
+        <span class="sk-mcp-pill <?= !empty($waSide['mcp_open']) ? 'is-open' : 'is-closed' ?>">
+          <?= htmlspecialchars($waSide['mcp_label'] ?? 'Closed') ?>
+        </span>
+      </a>
+    </div>
+
     <div class="px-3 mb-3">
       <small class="text-uppercase text-white-50 fw-bold" style="font-size:.65rem;letter-spacing:.08em;">Main Menu</small>
     </div>
@@ -187,6 +203,9 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
         <a href="<?= site_url('shopkart/whatsapp') ?>"
            class="nav-link sk-nav-link <?= ($uri === 'whatsapp' && !$this->uri->segment(3)) ? 'active' : '' ?>">
           <i class="bi bi-whatsapp me-2"></i> WhatsApp Inbox
+          <?php if ((int)($waSide['sent_today'] ?? 0) > 0): ?>
+          <span class="badge bg-success ms-auto"><?= (int)$waSide['sent_today'] ?></span>
+          <?php endif; ?>
         </a>
       </li>
       <li class="nav-item">

@@ -54,6 +54,45 @@ body.sk-has-panel-banner .sk-sidebar {
   min-height: calc(100vh - 96px);
 }
 
+.sk-side-status{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:10px;
+  border-radius:12px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);
+}
+.sk-side-stat{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  color:#fff;
+  text-decoration:none;
+  font-size:12px;
+}
+.sk-side-stat:hover{color:#fff}
+.sk-side-stat-label{color:rgba(255,255,255,.72);font-weight:600}
+.sk-side-stat strong{font-size:16px;line-height:1}
+.sk-mcp-pill{
+  display:inline-flex;
+  align-items:center;
+  padding:3px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:800;
+}
+.sk-mcp-pill.is-open{background:#166534;color:#bbf7d0}
+.sk-mcp-pill.is-closed{background:#7f1d1d;color:#fecaca}
+.sk-mcp-pill.is-open:before,
+.sk-mcp-pill.is-closed:before{
+  content:"";
+  width:7px;height:7px;border-radius:50%;margin-right:5px;display:inline-block;
+}
+.sk-mcp-pill.is-open:before{background:#4ade80}
+.sk-mcp-pill.is-closed:before{background:#f87171}
+
 .sk-nav-link {
   color: rgba(255,255,255,0.75);
   border-radius: 8px;
@@ -61,6 +100,8 @@ body.sk-has-panel-banner .sk-sidebar {
   font-size: 13.5px;
   transition: all 0.15s;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
 }
 .sk-nav-link:hover, .sk-nav-link.active {
   color: #fff;

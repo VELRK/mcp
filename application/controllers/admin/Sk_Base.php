@@ -150,6 +150,11 @@ class Sk_Base extends CI_Controller {
         $data['impersonating']   = (bool)$this->session->userdata('sk_vendor_id')
             && (bool)$this->session->userdata('sk_admin_id')
             && !$data['vendor_logged_in'];
+        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp_mcp']);
+        $data['sidebar_wa'] = function_exists('sk_wa_sidebar_stats') ? sk_wa_sidebar_stats() : [
+            'sent_today' => 0, 'sent_total' => 0, 'unread' => 0,
+            'mcp_enabled' => false, 'mcp_open' => false, 'mcp_label' => 'Closed',
+        ];
         $this->load->view('admin/layout/header', $data);
         $this->load->view('admin/layout/sidebar', $data);
         $this->load->view('admin/' . $view, $data);

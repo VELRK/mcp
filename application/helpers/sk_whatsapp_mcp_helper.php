@@ -430,3 +430,103 @@ function sk_wa_mcp_send_specs(string $to, array $specs, array $conversation, ?ar
     }
     return $sent;
 }
+
+/** Sidebar: WhatsApp messages sent today + whether MCP is open. */
+function sk_wa_sidebar_stats(): array {
+    static $memo = null;
+    if (is_array($memo)) {
+        return $memo;
+    }
+
+    $sentToday = 0;
+    $sentTotal = 0;
+    $unread = 0;
+    $CI =& get_instance();
+    try {
+        if (!isset($CI->db)) {
+            $CI->load->database();
+        }
+        if ($CI->db->table_exists('wa_cloud_messages')) {
+            $sentToday = (int)$CI->db->where('direction', 'out')
+                ->where('created_at >=', date('Y-m-d 00:00:00'))
+                ->count_all_results('wa_cloud_messages');
+            $sentTotal = (int)$CI->db->where('direction', 'out')->count_all_results('wa_cloud_messages');
+        }
+        if ($CI->db->table_exists('wa_cloud_conversations') && $CI->db->field_exists('unread', 'wa_cloud_conversations')) {
+            $row = $CI->db->select_sum('unread')->get('wa_cloud_conversations')->row();
+            $unread = (int)($row->unread ?? 0);
+        }
+    } catch (Throwable $e) {
+        // keep zeros
+    }
+
+    $settings = [];
+    try {
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
+    } catch (Throwable $e) {
+        $settings = [];
+    }
+
+    $cfg = function_exists('sk_wa_mcp_config') ? sk_wa_mcp_config($settings) : ['enabled' => false, 'url' => ''];
+    $enabled = !empty($cfg['enabled']) && trim((string)($cfg['url'] ?? '')) !== '';
+    $open = $enabled && sk_wa_mcp_is_online($cfg);
+
+    $memo = [
+        'sent_today'  => $sentToday,
+        'sent_total'  => $sentTotal,
+        'unread'      => $unread,
+        'mcp_enabled' => $enabled,
+        'mcp_open'    => $open,
+        'mcp_label'   => $open ? 'Open' : 'Closed',
+    ];
+    return $memo;
+}
+
+/** Fast reachability check; cached 60s so the sidebar does not ping every click. */
+function sk_wa_mcp_is_online(array $cfg): bool {
+    $CI =& get_instance();
+    $cached = $CI->session->userdata('sk_mcp_online');
+    if (is_array($cached) && (int)($cached['exp'] ?? 0) > time()) {
+        return !empty($cached['ok']);
+    }
+
+    $ok = false;
+    $url = trim((string)($cfg['url'] ?? ''));
+    if ($url !== '') {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_NOBODY         => true,
+            CURLOPT_TIMEOUT        => 2,
+            CURLOPT_CONNECTTIMEOUT => 2,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        curl_exec($ch);
+        $err = curl_errno($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        // Any HTTP answer means the MCP host is up (POST-only URLs often return 404/405).
+        $ok = ($err === 0 && $code > 0);
+        if (!$ok && $err !== 0) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 2,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_HTTPGET        => true,
+            ]);
+            curl_exec($ch);
+            $err = curl_errno($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            $ok = ($err === 0 && $code > 0);
+        }
+    }
+
+    $CI->session->set_userdata('sk_mcp_online', ['ok' => $ok, 'exp' => time() + 60]);
+    return $ok;
+}
