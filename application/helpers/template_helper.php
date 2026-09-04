@@ -951,28 +951,25 @@ function site_sale_path_html()
 function site_hero_demo_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-hero-demo.css'), ENT_QUOTES, 'UTF-8');
-	return '<link rel="stylesheet" href="'.$css.'?v=6">'
-		.'<div class="site-hero-demo" aria-hidden="true">'
-		.'<div class="site-hero-phone">'
-		.'<div class="site-hero-notch"></div>'
-		.'<div class="site-hero-status"><span>9:41</span><span>5G</span></div>'
-		.'<div class="site-hero-head"><div class="site-hero-ava">AI</div><div><strong>Silk House</strong><small><i class="site-hero-live"></i>Online · replies in seconds</small></div></div>'
+	return '<link rel="stylesheet" href="'.$css.'?v=7">'
+		.'<div class="site-hero-demo">'
+		.'<div class="site-hero-board">'
+		.'<div class="site-hero-head"><div class="site-hero-ava">AI</div><div><strong>Silk House</strong><small><i class="site-hero-live"></i>AI assistant · live</small></div><span class="site-hero-badge">Inbox</span></div>'
 		.'<div class="site-hero-chat">'
-		.'<div class="site-hero-b site-hero-in site-hero-b1">Do you have a maroon Kanchipuram saree for this weekend?<span class="site-hero-meta">Lead · after hours</span></div>'
-		.'<div class="site-hero-type"><i></i><i></i><i></i></div>'
+		.'<div class="site-hero-b site-hero-in site-hero-b1">Do you have a maroon Kanchipuram saree for this weekend?<span class="site-hero-meta">Customer · after hours</span></div>'
 		.'<div class="site-hero-b site-hero-out site-hero-b2">Yes — maroon &amp; gold zari, 6 yards, ₹12,499, in stock. Sending it now.</div>'
 		.'<div class="site-hero-card site-hero-prod"><div class="site-hero-sw"><i></i><i></i><i></i></div><b>Kanchipuram Silk Saree</b><small>Maroon &amp; gold · In stock · ₹12,499</small></div>'
 		.'<div class="site-hero-card site-hero-pay"><b>Pay ₹12,499</b><small>UPI / Card / Net banking</small></div>'
 		.'<div class="site-hero-toast">Payment confirmed · ₹12,499 received</div>'
-		.'<div class="site-hero-card site-hero-inv"><b>Invoice sent</b><small>Order #SA-1842 · WhatsApp PDF</small></div>'
-		.'<div class="site-hero-tag">Asked · paid · invoice sent</div>'
-		.'</div></div>'
-		.'<ol class="site-hero-mobile">'
-		.'<li><span>1</span><b>Chats</b><small>Lead messages on WhatsApp</small></li>'
-		.'<li><span>2</span><b>Product</b><small>AI sends price and stock</small></li>'
-		.'<li><span>3</span><b>Pays</b><small>UPI link in the same chat</small></li>'
-		.'<li><span>4</span><b>Invoice</b><small>PDF after payment</small></li>'
-		.'</ol></div>';
+		.'<div class="site-hero-card site-hero-inv"><b>Invoice sent</b><small>Order #SA-1842 · PDF to customer</small></div>'
+		.'</div>'
+		.'<ol class="site-hero-steps">'
+		.'<li><b>1</b>Chat</li>'
+		.'<li><b>2</b>Product</li>'
+		.'<li><b>3</b>Pay</li>'
+		.'<li><b>4</b>Invoice</li>'
+		.'</ol>'
+		.'</div></div>';
 }
 
 function replace_hero_thumb($html)
