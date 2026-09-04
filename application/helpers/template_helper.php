@@ -717,6 +717,7 @@ function rewrite_template_html($html, $current = 'home')
 	}
 
 	if ($current === 'home') {
+		$html = replace_hero_thumb($html);
 		$html = inject_business_story($html);
 		$html = replace_key_features_journey($html);
 	}
@@ -938,6 +939,37 @@ function site_sale_path_html()
 	$html .= '</div></div></div></section>';
 
 	return $html;
+}
+
+function site_hero_demo_html()
+{
+	$css = htmlspecialchars(base_url('assets/website/site-hero-demo.css'), ENT_QUOTES, 'UTF-8');
+	return '<link rel="stylesheet" href="'.$css.'?v=1">'
+		.'<div class="site-hero-demo" aria-hidden="true">'
+		.'<div class="site-hero-glow"></div>'
+		.'<div class="site-hero-float site-hero-f1"><span>WA</span>Customer chats</div>'
+		.'<div class="site-hero-float site-hero-f2"><span>AI</span>Shows product</div>'
+		.'<div class="site-hero-float site-hero-f3"><span>₹</span>Pays in chat</div>'
+		.'<div class="site-hero-float site-hero-f4"><span>✓</span>Invoice sent</div>'
+		.'<div class="site-hero-phone">'
+		.'<div class="site-hero-notch"></div>'
+		.'<div class="site-hero-status"><span>9:41</span><span>5G</span></div>'
+		.'<div class="site-hero-head"><div class="site-hero-ava">AI</div><div><strong>Silk House</strong><small><i class="site-hero-live"></i>Online · replies in seconds</small></div></div>'
+		.'<div class="site-hero-chat">'
+		.'<div class="site-hero-b site-hero-in site-hero-b1">Do you have a maroon Kanchipuram saree for this weekend?<span class="site-hero-meta">Lead · after hours</span></div>'
+		.'<div class="site-hero-type"><i></i><i></i><i></i></div>'
+		.'<div class="site-hero-b site-hero-out site-hero-b2">Yes — maroon &amp; gold zari, 6 yards, ₹12,499, in stock. Sending it now.</div>'
+		.'<div class="site-hero-card site-hero-prod"><div class="site-hero-sw"><i></i><i></i><i></i></div><b>Kanchipuram Silk Saree</b><small>Maroon &amp; gold · In stock · ₹12,499</small></div>'
+		.'<div class="site-hero-card site-hero-pay"><b>Pay ₹12,499</b><small>UPI / Card / Net banking</small></div>'
+		.'<div class="site-hero-toast">Payment confirmed · ₹12,499 received</div>'
+		.'<div class="site-hero-card site-hero-inv"><b>Invoice sent</b><small>Order #SA-1842 · WhatsApp PDF</small></div>'
+		.'<div class="site-hero-tag">Asked · paid · invoice sent</div>'
+		.'</div></div></div>';
+}
+
+function replace_hero_thumb($html)
+{
+	return replace_div_by_marker($html, 'class="banner__thumb"', '<div class="banner__thumb">'.site_hero_demo_html().'</div>');
 }
 
 function replace_key_features_journey($html)
