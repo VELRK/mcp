@@ -7,4 +7,14 @@ class Contact extends CI_Controller {
 	{
 		$this->output->set_output(render_template('contact.html', 'contact'));
 	}
+
+	public function save()
+	{
+		save_site_enquiry('contact');
+	}
+
+	public function submit()
+	{
+		$this->save();
+	}
 }

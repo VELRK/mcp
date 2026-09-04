@@ -642,7 +642,7 @@ function strip_search_and_category($html)
 	$html = remove_divs_by_marker($html, 'themephi-pcat');
 	$html = replace_recent_posts_widget($html);
 
-	$css = '<style id="site-hide-unused">.sticky_form.tps-search-popup,.hfe-search-layout-icon,.widget_tptheme_search_widget,.widget.themephi-pcat{display:none!important}a.site-service-card{display:block;color:inherit;text-decoration:none}a.site-service-card .title,a.site-service-card p{color:inherit}a.site-service-card .tp-iconbox-area{height:100%}.site-legal-page{max-width:920px;margin:0 auto;padding:70px 15px 100px;line-height:1.75}.site-legal-page h2{margin:32px 0 12px;font-size:22px}.site-legal-page p,.site-legal-page li{margin-bottom:12px}.site-legal-page ul{margin:0 0 18px 22px}.site-legal-page a{text-decoration:underline}.site-brand-text{display:inline-block;font-weight:800;font-size:22px;letter-spacing:-.04em;color:#fff;line-height:1;white-space:nowrap}.site-brand-text span{color:#A58EFF}</style>';
+	$css = '<style id="site-hide-unused">.sticky_form.tps-search-popup,.hfe-search-layout-icon,.widget_tptheme_search_widget,.widget.themephi-pcat{display:none!important}a.site-service-card{display:block;color:inherit;text-decoration:none}a.site-service-card .title,a.site-service-card p{color:inherit}a.site-service-card .tp-iconbox-area{height:100%}.site-legal-page,.site-inner-page{max-width:920px;margin:0 auto;padding:70px 15px 100px;line-height:1.75}.site-legal-page h2,.site-inner-page h2{margin:32px 0 12px;font-size:22px}.site-legal-page p,.site-legal-page li,.site-inner-page p,.site-inner-page li{margin-bottom:12px}.site-legal-page ul,.site-inner-page ul{margin:0 0 18px 22px}.site-legal-page a,.site-inner-page a{text-decoration:underline}.site-brand-text{display:inline-block;font-weight:800;font-size:22px;letter-spacing:-.04em;color:#fff;line-height:1;white-space:nowrap}.site-brand-text span{color:#A58EFF}.site-form{display:grid;gap:14px;margin-top:28px}.site-form label{font-weight:600}.site-form input,.site-form select,.site-form textarea{width:100%;padding:12px 14px;border:1px solid #d8d8e5;border-radius:8px;background:#fff;color:#111}.site-form button{justify-self:start;padding:12px 22px;border:0;border-radius:8px;background:#6C4DFF;color:#fff;font-weight:700;cursor:pointer}.site-form-ok{padding:14px 16px;border-radius:8px;background:#e8f8ee;color:#146c2e;margin-bottom:18px}.site-form-err{padding:14px 16px;border-radius:8px;background:#fdecea;color:#8a1f11;margin-bottom:18px}</style>';
 	$html = preg_replace('#</head>#i', $css.'</head>', $html, 1);
 
 	return $html;
@@ -894,15 +894,126 @@ function inject_how_it_works($html)
 
 function apply_enquiry_copy($html)
 {
-	$html = str_replace('Contact &#8211; intellicon', 'Enquiry &#8211; intellicon', $html);
-	$html = str_replace('<title>Contact', '<title>Enquiry', $html);
-	$html = preg_replace('#(<h1[^>]*>\s*)Contact(\s*</h1>)#', '$1Enquiry$2', $html);
-	$html = str_replace('Get in touch with us', 'Send an Enquiry', $html);
-	$html = str_replace('Fill up the form and our team will get back to you within 24 hours', 'Share your requirement and our team will get back to you within 24 hours', $html);
-	$html = str_replace('class="post post-page current-item">Contact</span>', 'class="post post-page current-item">Enquiry</span>', $html);
-	$html = str_replace('Send Message', 'Submit Enquiry', $html);
-	$html = str_replace('<h4 class="elementor-heading-title elementor-size-default">Contact</h4>', '<h4 class="elementor-heading-title elementor-size-default">Enquiry</h4>', $html);
+	return apply_page_chrome($html, 'Enquiry', site_contact_form_html('enquiry'));
+}
+
+function apply_page_chrome($html, $title, $content)
+{
+	$safe = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
+	$html = preg_replace('#<title>.*?</title>#', '<title>'.$safe.' &#8211; TalkAIPilot</title>', $html, 1);
+	$html = preg_replace('#(<h1 class="page-title">\s*)[^<]+#', '$1'.$safe, $html, 1);
+	$html = preg_replace('#class="post post-page current-item">[^<]*</span>#', 'class="post post-page current-item">'.$safe.'</span>', $html, 1);
+
+	$start = strpos($html, '<div id="content">');
+	$end = strpos($html, '</div><!-- .content -->');
+	if ($start !== false && $end !== false) {
+		$html = substr($html, 0, $start).'<div id="content">'.$content.substr($html, $end);
+	}
+
 	return $html;
+}
+
+function site_about_content_html()
+{
+	$enquiry = htmlspecialchars(base_url('enquiry'), ENT_QUOTES, 'UTF-8');
+	$service = htmlspecialchars(base_url('service'), ENT_QUOTES, 'UTF-8');
+	return '<div class="container site-inner-page"><div class="site-inner-inner">'
+		.'<p>TalkAIPilot helps shops and service businesses reply to every customer conversation — on WhatsApp, Instagram, Facebook, YouTube and the website — and turn those chats into paid orders.</p>'
+		.'<h2>What we do</h2>'
+		.'<p>Leads arrive after hours. Comments sit unread. Follow-ups get forgotten. Our AI answers product questions, qualifies interest, sends payment links, and hands a paid order to your team.</p>'
+		.'<h2>Who it is for</h2>'
+		.'<ul>'
+		.'<li>Saree shops, boutiques and D2C brands that sell on WhatsApp</li>'
+		.'<li>Clinics, classes and local services that book appointments in chat</li>'
+		.'<li>Stores that already get Instagram and Facebook comments but cannot reply to all of them</li>'
+		.'</ul>'
+		.'<h2>How it works</h2>'
+		.'<p>Connect a channel, add your products or FAQs, and the agent starts answering. You stay in control: complex or high-value chats go to a human.</p>'
+		.'<p><a href="'.$service.'">See services</a> &nbsp;·&nbsp; <a href="'.$enquiry.'">Start free</a></p>'
+		.'</div></div>';
+}
+
+function site_contact_form_html($type = 'contact')
+{
+	$is_enquiry = ($type === 'enquiry');
+	$action = htmlspecialchars(base_url($is_enquiry ? 'enquiry/save' : 'contact/save'), ENT_QUOTES, 'UTF-8');
+	$title = $is_enquiry ? 'Send an Enquiry' : 'Get in touch';
+	$intro = $is_enquiry
+		? 'Share your business and what you want the AI to handle. We will get back within 24 hours.'
+		: 'Questions about the platform, pricing or a demo — send a message and our team will reply.';
+	$button = $is_enquiry ? 'Submit Enquiry' : 'Send Message';
+
+	$notice = '';
+	$sent = isset($_GET['sent']) ? (string) $_GET['sent'] : '';
+	if ($sent === '1') {
+		$notice = '<div class="site-form-ok">Thank you. We received your message and will reply shortly.</div>';
+	} elseif ($sent === '0') {
+		$notice = '<div class="site-form-err">Please fill name, a valid email and a message, then try again.</div>';
+	}
+
+	$extra = '';
+	if ($is_enquiry) {
+		$extra = '<label for="site-business">Business name</label><input id="site-business" name="business" type="text" maxlength="150">'
+			.'<label for="site-industry">Industry</label><select id="site-industry" name="industry">'
+			.'<option value="">Select</option>'
+			.'<option>Saree / boutique</option><option>Ecommerce / D2C</option><option>Clinic / services</option>'
+			.'<option>Education</option><option>Real estate</option><option>Other</option>'
+			.'</select>';
+	}
+
+	return '<div class="container site-inner-page"><div class="site-inner-inner">'
+		.'<h2>'.$title.'</h2><p>'.$intro.'</p>'.$notice
+		.'<form class="site-form" method="post" action="'.$action.'">'
+		.'<label for="site-name">Name</label><input id="site-name" name="name" type="text" required maxlength="150">'
+		.'<label for="site-email">Email</label><input id="site-email" name="email" type="email" required maxlength="150">'
+		.'<label for="site-phone">Phone</label><input id="site-phone" name="phone" type="tel" maxlength="40">'
+		.$extra
+		.'<label for="site-subject">Subject</label><input id="site-subject" name="subject" type="text" maxlength="200">'
+		.'<label for="site-message">Message</label><textarea id="site-message" name="message" rows="6" required></textarea>'
+		.'<button type="submit">'.$button.'</button>'
+		.'</form></div></div>';
+}
+
+function save_site_enquiry($source = 'web')
+{
+	$CI =& get_instance();
+	$name = trim((string) $CI->input->post('name', true));
+	$email = trim((string) $CI->input->post('email', true));
+	$phone = trim((string) $CI->input->post('phone', true));
+	$subject = trim((string) $CI->input->post('subject', true));
+	$message = trim((string) $CI->input->post('message', true));
+	$business = trim((string) $CI->input->post('business', true));
+	$industry = trim((string) $CI->input->post('industry', true));
+
+	if ($business !== '') {
+		$message = "Business: {$business}\n".($industry !== '' ? "Industry: {$industry}\n" : '')."\n".$message;
+	}
+
+	$redirect = ($source === 'enquiry') ? 'enquiry' : 'contact';
+	if ($name === '' || $message === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+		redirect($redirect.'?sent=0');
+		return;
+	}
+
+	try {
+		$CI->load->database();
+		if ($CI->db && $CI->db->table_exists('contact_enquiries')) {
+			$CI->db->insert('contact_enquiries', array(
+				'name'       => substr($name, 0, 150),
+				'email'      => substr($email, 0, 150),
+				'phone'      => $phone !== '' ? substr($phone, 0, 40) : null,
+				'subject'    => $subject !== '' ? substr($subject, 0, 200) : ($source === 'enquiry' ? 'Website enquiry' : 'Website contact'),
+				'message'    => $message,
+				'source'     => 'web',
+				'status'     => 'new',
+				'created_at' => date('Y-m-d H:i:s'),
+			));
+		}
+	} catch (Exception $e) {
+		log_message('error', 'Landing enquiry save failed: '.$e->getMessage());
+	}
+
+	redirect($redirect.'?sent=1');
 }
 
 function site_legal_content_html($type)
@@ -981,29 +1092,28 @@ function apply_legal_copy($html, $type)
 {
 	$title = ($type === 'privacy') ? 'Privacy Policy' : 'Terms and Conditions';
 
-	$html = str_replace('<title>Contact &#8211; intellicon</title>', '<title>'.$title.' &#8211; AI Communication Platform</title>', $html);
-	$html = str_replace('<title>Contact', '<title>'.$title, $html);
-	$html = preg_replace('#(<h1[^>]*>\s*)Contact(\s*</h1>)#', '$1'.$title.'$2', $html);
-	$html = str_replace('class="post post-page current-item">Contact</span>', 'class="post post-page current-item">'.$title.'</span>', $html);
-
-	$start = strpos($html, '<div id="content">');
-	$end = strpos($html, '</div><!-- .content -->');
-	if ($start !== false && $end !== false) {
-		$html = substr($html, 0, $start).'<div id="content">'.site_legal_content_html($type).substr($html, $end);
-	}
-
-	return $html;
+	return apply_page_chrome($html, $title, site_legal_content_html($type));
 }
 
 function render_template($file, $current = 'home', $slug = '')
 {
 	$path = APPPATH.'views'.DIRECTORY_SEPARATOR.'website'.DIRECTORY_SEPARATOR.$file;
+	if (!is_file($path) && in_array($current, array('about', 'contact', 'enquiry', 'terms', 'privacy'), true)) {
+		$file = 'service.html';
+		$path = APPPATH.'views'.DIRECTORY_SEPARATOR.'website'.DIRECTORY_SEPARATOR.$file;
+	}
 	if (!is_file($path)) {
 		show_404();
 		return '';
 	}
 
 	$html = file_get_contents($path);
+	if ($current === 'about') {
+		$html = apply_page_chrome($html, 'About', site_about_content_html());
+	}
+	if ($current === 'contact') {
+		$html = apply_page_chrome($html, 'Contact', site_contact_form_html('contact'));
+	}
 	if ($current === 'enquiry') {
 		$html = apply_enquiry_copy($html);
 	}
