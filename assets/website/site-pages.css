@@ -1,0 +1,51 @@
+.site-page{--p:#452FF4;--lilac:#A58EFF;--navy:#08162E;font-family:Inter,system-ui,sans-serif;color:var(--navy);background:linear-gradient(180deg,#f4f0ff 0%,#fff 42%,#fff 100%);padding:0 0 80px}
+.site-page *{box-sizing:border-box}
+.site-page a{text-decoration:none}
+.site-page-wrap{max-width:1180px;margin:0 auto;padding:48px 20px 20px}
+.site-page-hero{display:grid;grid-template-columns:minmax(240px,.9fr) 1.1fr;gap:48px;align-items:center;margin-bottom:48px}
+.site-page-visual{position:relative;display:flex;justify-content:center}
+.site-page-visual img{width:min(100%,420px);height:auto;filter:drop-shadow(0 28px 40px rgba(69,47,244,.22))}
+.site-page-kicker{display:inline-block;color:var(--p);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin-bottom:10px}
+.site-page-hero h2,.site-page-copy h2{margin:0 0 14px;font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-.03em;line-height:1.15}
+.site-page-copy p,.site-page-intro{margin:0 0 16px;color:#4c4a63;font-size:17px;line-height:1.7}
+.site-page-checks{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin:22px 0 28px;padding:0;list-style:none}
+.site-page-checks li{position:relative;padding-left:28px;font-weight:600;color:#1c1a33}
+.site-page-checks li:before{content:"";position:absolute;left:0;top:4px;width:16px;height:16px;border-radius:50%;background:var(--p);box-shadow:inset 0 0 0 4px #fff,0 0 0 1px var(--p)}
+.site-page-actions{display:flex;flex-wrap:wrap;gap:12px}
+.site-page-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:12px 22px;font-weight:800;color:#fff;background:linear-gradient(180deg,#5b48ff,var(--p));box-shadow:0 10px 22px rgba(69,47,244,.28)}
+.site-page-btn-ghost{background:#fff;color:var(--p);border:1px solid #d9d0ff;box-shadow:none}
+.site-page-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:8px 0 12px}
+.site-page-card{background:#fff;border:1px solid #e6e0ff;border-radius:20px;padding:22px 20px;box-shadow:0 12px 28px rgba(69,47,244,.07)}
+.site-page-card h3{margin:0 0 8px;font-size:18px}
+.site-page-card p{margin:0;color:#5b5870;font-size:14px;line-height:1.55}
+.site-page-split{display:grid;grid-template-columns:minmax(260px,.85fr) 1.15fr;gap:28px;align-items:start}
+.site-page-aside{display:flex;flex-direction:column;gap:14px}
+.site-page-info{background:var(--navy);color:#fff;border-radius:22px;padding:28px 24px}
+.site-page-info h3{margin:0 0 8px;font-size:22px}
+.site-page-info p{margin:0 0 18px;color:rgba(255,255,255,.74);line-height:1.6}
+.site-page-info dl{margin:0;display:grid;gap:14px}
+.site-page-info dt{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--lilac);font-weight:800}
+.site-page-info dd{margin:4px 0 0;font-weight:600}
+.site-page-panel{background:#fff;border:1px solid #e6e0ff;border-radius:24px;padding:28px;box-shadow:0 18px 40px rgba(69,47,244,.08)}
+.site-page-panel h2{margin:0 0 8px;font-size:28px}
+.site-form{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;margin-top:18px}
+.site-form > div{display:flex;flex-direction:column;gap:6px}
+.site-form .site-form-full{grid-column:1 / -1}
+.site-form .site-form-full{grid-column:1 / -1}
+.site-form label{font-weight:700;font-size:13px;color:#2b2940}
+.site-form input,.site-form select,.site-form textarea{width:100%;padding:12px 14px;border:1px solid #ddd6ff;border-radius:12px;background:#faf9ff;color:#111;font:inherit}
+.site-form input:focus,.site-form select:focus,.site-form textarea:focus{outline:2px solid rgba(69,47,244,.35);border-color:var(--p);background:#fff}
+.site-form button{grid-column:1 / -1;justify-self:start;padding:12px 24px;border:0;border-radius:999px;background:linear-gradient(180deg,#5b48ff,var(--p));color:#fff;font-weight:800;cursor:pointer}
+.site-form-ok,.site-form-err{grid-column:1 / -1;padding:14px 16px;border-radius:12px;margin:0}
+.site-form-ok{background:#e8f8ee;color:#146c2e}
+.site-form-err{background:#fdecea;color:#8a1f11}
+.site-legal-page{max-width:860px;margin:0 auto;padding:48px 20px 80px;line-height:1.75;color:#1c1a33}
+.site-legal-page h2{margin:32px 0 12px;font-size:22px}
+.site-legal-page p,.site-legal-page li{margin-bottom:12px;color:#4c4a63}
+.site-legal-page ul{margin:0 0 18px 22px}
+.site-legal-page a{color:var(--p);text-decoration:underline}
+@media (max-width:900px){
+	.site-page-hero,.site-page-split,.site-page-grid,.site-page-checks,.site-form{grid-template-columns:1fr}
+	.site-page-visual{order:-1}
+	.site-form .site-form-full,.site-form-ok,.site-form-err,.site-form button{grid-column:auto}
+}
