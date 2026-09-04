@@ -951,23 +951,33 @@ function site_sale_path_html()
 function site_hero_demo_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-hero-demo.css'), ENT_QUOTES, 'UTF-8');
-	return '<link rel="stylesheet" href="'.$css.'?v=7">'
+	return '<link rel="stylesheet" href="'.$css.'?v=8">'
 		.'<div class="site-hero-demo">'
+		.'<div class="site-hero-glow" aria-hidden="true"></div>'
+		.'<div class="site-hero-float site-hero-float-a">After hours</div>'
+		.'<div class="site-hero-float site-hero-float-b">Paid in 47s</div>'
 		.'<div class="site-hero-board">'
+		.'<div class="site-hero-tabs" aria-hidden="true">'
+		.'<span class="is-on">'.site_channel_icon_svg('wa').' WhatsApp</span>'
+		.'<span>'.site_channel_icon_svg('ig').' Instagram</span>'
+		.'<span>'.site_channel_icon_svg('yt').' YouTube</span>'
+		.'</div>'
 		.'<div class="site-hero-head"><div class="site-hero-ava">AI</div><div><strong>Silk House</strong><small><i class="site-hero-live"></i>AI assistant · live</small></div><span class="site-hero-badge">Inbox</span></div>'
 		.'<div class="site-hero-chat">'
-		.'<div class="site-hero-b site-hero-in site-hero-b1">Do you have a maroon Kanchipuram saree for this weekend?<span class="site-hero-meta">Customer · after hours</span></div>'
-		.'<div class="site-hero-b site-hero-out site-hero-b2">Yes — maroon &amp; gold zari, 6 yards, ₹12,499, in stock. Sending it now.</div>'
-		.'<div class="site-hero-card site-hero-prod"><div class="site-hero-sw"><i></i><i></i><i></i></div><b>Kanchipuram Silk Saree</b><small>Maroon &amp; gold · In stock · ₹12,499</small></div>'
-		.'<div class="site-hero-card site-hero-pay"><b>Pay ₹12,499</b><small>UPI / Card / Net banking</small></div>'
-		.'<div class="site-hero-toast">Payment confirmed · ₹12,499 received</div>'
-		.'<div class="site-hero-card site-hero-inv"><b>Invoice sent</b><small>Order #SA-1842 · PDF to customer</small></div>'
+		.'<div class="site-hero-b site-hero-in site-hero-b1">Do you have a maroon Kanchipuram saree for this weekend?<span class="site-hero-meta">Customer · 11:42 pm</span></div>'
+		.'<div class="site-hero-b site-hero-out site-hero-b2">Yes — maroon &amp; gold zari, 6 yards, ₹12,499, in stock.</div>'
+		.'<div class="site-hero-deal site-hero-prod">'
+		.'<div class="site-hero-deal-media" aria-hidden="true"><i></i><i></i><i></i></div>'
+		.'<div class="site-hero-deal-copy"><b>Kanchipuram Silk Saree</b><small>Maroon &amp; gold · 6 yards · In stock</small></div>'
+		.'<div class="site-hero-deal-pay"><strong>₹12,499</strong><span>Pay now</span></div>'
+		.'</div>'
+		.'<div class="site-hero-done">Paid · Invoice #SA-1842 sent on WhatsApp</div>'
 		.'</div>'
 		.'<ol class="site-hero-steps">'
-		.'<li><b>1</b>Chat</li>'
-		.'<li><b>2</b>Product</li>'
-		.'<li><b>3</b>Pay</li>'
-		.'<li><b>4</b>Invoice</li>'
+		.'<li class="is-done"><b>1</b>Chat</li>'
+		.'<li class="is-done"><b>2</b>Product</li>'
+		.'<li class="is-done"><b>3</b>Pay</li>'
+		.'<li class="is-done"><b>4</b>Invoice</li>'
 		.'</ol>'
 		.'</div></div>';
 }
@@ -979,7 +989,13 @@ function replace_hero_thumb($html)
 
 function inject_hero_channel_pills($html)
 {
-	$pills = '<ul class="site-hero-channels"><li>WhatsApp</li><li>Instagram</li><li>YouTube</li><li>Facebook</li><li>Mobile app</li></ul>';
+	$pills = '<ul class="site-hero-channels">'
+		.'<li class="is-wa">'.site_channel_icon_svg('wa').' WhatsApp</li>'
+		.'<li class="is-ig">'.site_channel_icon_svg('ig').' Instagram</li>'
+		.'<li class="is-yt">'.site_channel_icon_svg('yt').' YouTube</li>'
+		.'<li class="is-fb">'.site_channel_icon_svg('fb').' Facebook</li>'
+		.'<li class="is-app">'.site_channel_icon_svg('app').' Mobile app</li>'
+		.'</ul>';
 	if (strpos($html, 'class="site-hero-channels"') !== false) {
 		return $html;
 	}
