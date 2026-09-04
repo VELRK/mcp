@@ -718,7 +718,9 @@ function rewrite_template_html($html, $current = 'home')
 
 	if ($current === 'home') {
 		$html = replace_hero_thumb($html);
+		$html = inject_hero_channel_pills($html);
 		$html = inject_business_story($html);
+		$html = inject_lead_channels($html);
 		$html = replace_key_features_journey($html);
 		$html = replace_case_studies_slider($html);
 	}
@@ -776,7 +778,7 @@ function site_how_it_works_html()
 	$css = htmlspecialchars(base_url('assets/website/site-how-it-works.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-how-it-works.js'), ENT_QUOTES, 'UTF-8');
 
-	return '<link rel="stylesheet" href="'.$css.'?v=5">'
+	return '<link rel="stylesheet" href="'.$css.'?v=6">'
 		.'<div id="site-how-it-works" class="site-hiw" aria-hidden="true">'
 		.'<div class="site-hiw-overlay"></div>'
 		.'<div class="site-hiw-panel" role="dialog" aria-labelledby="site-hiw-title">'
@@ -789,7 +791,7 @@ function site_how_it_works_html()
 		.'<div class="site-hiw-phone-wrap"><div class="site-hiw-phone">'
 		.'<div class="site-hiw-notch"></div>'
 		.'<div class="site-hiw-status"><span>9:41</span><span>5G</span></div>'
-		.'<div class="site-hiw-channels"><span class="site-hiw-chip" data-chip="whatsapp">WhatsApp</span><span class="site-hiw-chip" data-chip="instagram">Instagram</span><span class="site-hiw-chip" data-chip="facebook">Facebook</span></div>'
+		.'<div class="site-hiw-channels"><span class="site-hiw-chip" data-chip="whatsapp">WhatsApp</span><span class="site-hiw-chip" data-chip="instagram">Instagram</span><span class="site-hiw-chip" data-chip="youtube">YouTube</span><span class="site-hiw-chip" data-chip="facebook">Facebook</span><span class="site-hiw-chip" data-chip="app">App</span></div>'
 		.'<div class="site-hiw-head"><div class="site-hiw-avatar">AI</div><div><strong>Silk House</strong><span><i class="site-hiw-live"></i>Online · replies in seconds</span></div></div>'
 		.'<div class="site-hiw-chat">'
 		.'<div class="site-hiw-bubble site-hiw-in site-hiw-b1">Hi, do you have a Kanchipuram silk saree in maroon for a wedding this weekend?<span class="site-hiw-meta">Lead · after hours</span></div>'
@@ -814,7 +816,7 @@ function site_how_it_works_html()
 		.'<button type="button" class="site-hiw-replay">Replay</button>'
 		.'<a class="site-hiw-cta" href="'.$enquiry.'">Start Free</a>'
 		.'</div></div></div></div>'
-		.'<script src="'.$js.'?v=4"></script>';
+		.'<script src="'.$js.'?v=6"></script>';
 }
 
 function site_business_story_html()
@@ -823,7 +825,7 @@ function site_business_story_html()
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-business-story.js'), ENT_QUOTES, 'UTF-8');
 
-	return '<link rel="stylesheet" href="'.$css.'?v=8">'
+	return '<link rel="stylesheet" href="'.$css.'?v=9">'
 		.'<section class="site-story" id="how-talkaipilot-works">'
 		.'<div class="site-story-inner">'
 		.'<span class="site-story-kicker">The conversation</span>'
@@ -919,7 +921,7 @@ function site_sale_path_html()
 	};
 
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=8">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=9">'
 		.'<section class="site-path" id="site-sale-path">'
 		.'<div class="site-path-inner">'
 		.'<span class="site-path-kicker">How a sale happens</span>'
@@ -947,7 +949,7 @@ function site_sale_path_html()
 function site_hero_demo_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-hero-demo.css'), ENT_QUOTES, 'UTF-8');
-	return '<link rel="stylesheet" href="'.$css.'?v=4">'
+	return '<link rel="stylesheet" href="'.$css.'?v=5">'
 		.'<div class="site-hero-demo" aria-hidden="true">'
 		.'<div class="site-hero-phone">'
 		.'<div class="site-hero-notch"></div>'
@@ -974,6 +976,15 @@ function site_hero_demo_html()
 function replace_hero_thumb($html)
 {
 	return replace_div_by_marker($html, 'class="banner__thumb"', '<div class="banner__thumb">'.site_hero_demo_html().'</div>');
+}
+
+function inject_hero_channel_pills($html)
+{
+	$pills = '<ul class="site-hero-channels"><li>WhatsApp</li><li>Instagram</li><li>YouTube</li><li>Facebook</li><li>Mobile app</li></ul>';
+	if (strpos($html, 'class="site-hero-channels"') !== false) {
+		return $html;
+	}
+	return str_replace('<div class="ai__text">', $pills.'<div class="ai__text">', $html);
 }
 
 function replace_key_features_journey($html)
@@ -1008,18 +1019,65 @@ function site_use_cases()
 		),
 		array(
 			'img'   => $img.'capbi1.jpg',
-			'tag'   => 'Social',
-			'title' => 'Instagram & Facebook sellers',
-			'text'  => 'Comments and DMs become a sales conversation, then a CRM lead.',
+			'tag'   => 'Instagram',
+			'title' => 'Instagram & YouTube comments',
+			'text'  => 'A comment or DM becomes a chat, then a CRM lead — same as WhatsApp.',
 			'slug'  => 'actionable-insights',
 		),
 	);
 }
 
+function site_lead_channels()
+{
+	$service = 'service/actionable-insights';
+	return array(
+		array('wa', 'WhatsApp', 'Chat becomes a lead', 'Customer messages after hours. AI replies, qualifies and can take payment.', 'service/image-processing'),
+		array('ig', 'Instagram', 'Comment or DM → lead', 'Same flow as WhatsApp. A comment turns into a sales chat.', $service),
+		array('yt', 'YouTube', 'Comment → lead', 'YouTube comments come in like Instagram — ask, reply, convert.', $service),
+		array('fb', 'Facebook', 'Comment or Messenger', 'Facebook comments and DMs join the same inbox and CRM.', $service),
+		array('app', 'Mobile app', 'App enquiry → lead', 'Leads from the mobile app land in the same list as web and WhatsApp.', 'contact'),
+	);
+}
+
+function site_lead_channels_html()
+{
+	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
+	$html = '<link rel="stylesheet" href="'.$css.'?v=9">'
+		.'<section class="site-channels" id="site-lead-channels">'
+		.'<div class="site-channels-inner">'
+		.'<span class="site-channels-kicker">Where leads come from</span>'
+		.'<h2>WhatsApp, Instagram, YouTube and the app</h2>'
+		.'<p class="site-channels-lead">A WhatsApp chat, an Instagram comment, a YouTube comment or an app enquiry — each one becomes a lead in the same place.</p>'
+		.'<div class="site-channels-grid">';
+	foreach (site_lead_channels() as $ch) {
+		$url = htmlspecialchars(base_url($ch[4]), ENT_QUOTES, 'UTF-8');
+		$html .= '<a class="site-channel site-channel-'.$ch[0].'" href="'.$url.'">'
+			.'<span class="site-channel-icon" aria-hidden="true"></span>'
+			.'<b>'.htmlspecialchars($ch[1], ENT_QUOTES, 'UTF-8').'</b>'
+			.'<small>'.htmlspecialchars($ch[2], ENT_QUOTES, 'UTF-8').'</small>'
+			.'<p>'.htmlspecialchars($ch[3], ENT_QUOTES, 'UTF-8').'</p>'
+			.'</a>';
+	}
+	$html .= '</div></div></section>';
+	return $html;
+}
+
+function inject_lead_channels($html)
+{
+	$block = site_lead_channels_html();
+	if (strpos($html, 'id="site-lead-channels"') !== false) {
+		return $html;
+	}
+	if (strpos($html, 'class="site-story"') !== false) {
+		return preg_replace('#<section class="site-story"#', $block.'<section class="site-story"', $html, 1);
+	}
+	return preg_replace('#</main>#i', $block.'</main>', $html, 1);
+}
+
 function site_use_cases_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=8">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=9">'
 		.'<div class="site-cases" id="site-use-cases">';
 	foreach (site_use_cases() as $case) {
 		$url = htmlspecialchars(base_url('service/'.$case['slug']), ENT_QUOTES, 'UTF-8');
@@ -1103,9 +1161,9 @@ function site_about_content_html()
 		.'<p>Leads arrive after hours. Comments sit unread. Follow-ups get forgotten. The agent answers product questions, qualifies interest, sends a payment link, and hands a paid order to your team.</p>'
 		.'<ul class="site-page-checks">'
 		.'<li>24/7 WhatsApp replies</li>'
-		.'<li>Product, price and stock</li>'
-		.'<li>Pay link in the same chat</li>'
-		.'<li>Invoice after payment</li>'
+		.'<li>Instagram, YouTube and Facebook comments become leads</li>'
+		.'<li>Mobile app enquiries in the same inbox</li>'
+		.'<li>Pay link and invoice in the same chat</li>'
 		.'</ul>'
 		.'<div class="site-page-actions">'
 		.'<a class="site-page-btn" href="'.$enquiry.'">Start Free</a>'
@@ -1138,7 +1196,7 @@ function site_contact_form_html($type = 'contact')
 		.'<p>Questions, a demo, or getting started — send a message. We reply within 24 hours. No credit card to start.</p>'
 		.'<dl>'
 		.'<div><dt>Reply time</dt><dd>Within 24 hours</dd></div>'
-		.'<div><dt>Channels</dt><dd>WhatsApp · Instagram · Facebook · Voice</dd></div>'
+		.'<div><dt>Channels</dt><dd>WhatsApp · Instagram · YouTube · Facebook · Mobile app</dd></div>'
 		.'<div><dt>Plans</dt><dd>Starter ₹999 · Growth ₹2,999 · Business ₹5,999</dd></div>'
 		.'</dl></div></aside>'
 		.'<div class="site-page-panel">'

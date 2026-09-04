@@ -22,7 +22,7 @@ button.site-hiw-close:hover{background:rgba(255,255,255,.22)}
 .site-hiw.is-playing .site-hiw-phone:before{animation:siteHiwShine 2.2s ease .4s}
 .site-hiw-notch{width:108px;height:18px;background:#050b18;border-radius:0 0 14px 14px;margin:-10px auto 8px}
 .site-hiw-status{display:flex;justify-content:space-between;padding:0 12px 8px;font-size:10px;color:rgba(255,255,255,.55)}
-.site-hiw-channels{display:flex;gap:6px;padding:0 8px 10px}
+.site-hiw-channels{display:flex;flex-wrap:wrap;gap:6px;padding:0 8px 10px}
 .site-hiw-chip{font-size:10px;padding:4px 8px;border-radius:99px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.06)}
 .site-hiw-chip.is-on{background:rgba(69,47,244,.35);color:#fff;border-color:rgba(165,142,255,.5);box-shadow:0 0 0 3px rgba(69,47,244,.15)}
 .site-hiw-head{display:flex;align-items:center;gap:10px;padding:6px 10px 10px;border-bottom:1px solid rgba(255,255,255,.08)}

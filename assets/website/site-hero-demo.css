@@ -16,6 +16,8 @@
 .banner__content .d3{line-height:1.12!important}
 .banner__content .tp-el-desc{max-width:34em}
 .banner__content .btg__grp{flex-wrap:wrap}
+.site-hero-channels{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:16px 0 0;padding:0}
+.site-hero-channels li{padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(165,142,255,.35);color:#fff;font-size:12px;font-weight:700}
 .site-hero-demo{position:relative;z-index:3;width:268px;margin:0 auto;font-family:Inter,system-ui,sans-serif}
 .site-hero-glow{display:none}
 .site-hero-float{display:none!important}

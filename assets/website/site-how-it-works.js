@@ -118,6 +118,18 @@
 			setStep(modal, 1);
 			show(b1);
 		});
+		later(2400, function () {
+			setChip(modal, 'instagram');
+		});
+		later(4200, function () {
+			setChip(modal, 'youtube');
+		});
+		later(7000, function () {
+			setChip(modal, 'facebook');
+		});
+		later(9800, function () {
+			setChip(modal, 'app');
+		});
 		later(1100, function () {
 			show(typing);
 			setStep(modal, 2);
