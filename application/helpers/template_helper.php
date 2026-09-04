@@ -389,6 +389,8 @@ function apply_business_copy($html, $slug = '')
 		'tp-portfolio-category/robot/index.html',
 		'<a class="slider-btn capa__more tp-el-btn"  href="#">',
 		'<a class="cmn--btn border__btn" href="#">',
+		'>See All Case Studies</span>',
+		'AI (Artificial Intelligence) and ML (Machine Learning) are closely related fields that are focused on the development of computer systems...',
 	);
 
 	$more_replace = array(
@@ -443,6 +445,8 @@ function apply_business_copy($html, $slug = '')
 		base_url('service/ai-for-cloud-services'),
 		'<a class="slider-btn capa__more tp-el-btn"  href="'.htmlspecialchars(base_url('service'), ENT_QUOTES, 'UTF-8').'">',
 		'<a class="cmn--btn border__btn" href="'.htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8').'">',
+		'>See all services</span>',
+		'Saree shops, clinics, stores and social sellers — tap a story to see the matching service.',
 	);
 
 	$html = str_replace($more_search, $more_replace, $html);
@@ -689,6 +693,7 @@ function rewrite_template_html($html, $current = 'home')
 	$html = preg_replace('#(?:\.\./)*about-us-0[34]/index\.html#i', $base.'about', $html);
 	$html = preg_replace('#(?:\.\./)*about/index\.html#i', $base.'about', $html);
 	$html = preg_replace('#(?:\.\./)*contact/index\.html#i', $base.'contact', $html);
+	$html = preg_replace('#(?:\.\./)*case-studies-0[1-5]/index\.html#i', $base.'service', $html);
 
 	$html = replace_ul_inner_by_id($html, 'primary-menu-single1', site_menu_items($current));
 	$html = replace_ul_inner_by_id($html, 'menu-main-menu', site_menu_items($current));
@@ -715,6 +720,7 @@ function rewrite_template_html($html, $current = 'home')
 		$html = replace_hero_thumb($html);
 		$html = inject_business_story($html);
 		$html = replace_key_features_journey($html);
+		$html = replace_case_studies_slider($html);
 	}
 
 	$html = preg_replace('#https?://(?:www\.)?youtube\.com/watch\?v=[^"\']+#i', '#site-how-it-works', $html);
@@ -817,7 +823,7 @@ function site_business_story_html()
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-business-story.js'), ENT_QUOTES, 'UTF-8');
 
-	return '<link rel="stylesheet" href="'.$css.'?v=6">'
+	return '<link rel="stylesheet" href="'.$css.'?v=8">'
 		.'<section class="site-story" id="how-talkaipilot-works">'
 		.'<div class="site-story-inner">'
 		.'<span class="site-story-kicker">The conversation</span>'
@@ -913,7 +919,7 @@ function site_sale_path_html()
 	};
 
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=6">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=8">'
 		.'<section class="site-path" id="site-sale-path">'
 		.'<div class="site-path-inner">'
 		.'<span class="site-path-kicker">How a sale happens</span>'
@@ -941,19 +947,8 @@ function site_sale_path_html()
 function site_hero_demo_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-hero-demo.css'), ENT_QUOTES, 'UTF-8');
-	return '<link rel="stylesheet" href="'.$css.'?v=3">'
+	return '<link rel="stylesheet" href="'.$css.'?v=4">'
 		.'<div class="site-hero-demo" aria-hidden="true">'
-		.'<div class="site-hero-glow"></div>'
-		.'<div class="site-hero-float site-hero-f1"><span>WA</span>Customer chats</div>'
-		.'<div class="site-hero-float site-hero-f2"><span>AI</span>Shows product</div>'
-		.'<div class="site-hero-float site-hero-f3"><span>₹</span>Pays in chat</div>'
-		.'<div class="site-hero-float site-hero-f4"><span>✓</span>Invoice sent</div>'
-		.'<ol class="site-hero-mobile">'
-		.'<li><span>1</span><b>Chats</b><small>Lead messages on WhatsApp</small></li>'
-		.'<li><span>2</span><b>Product</b><small>AI sends price and stock</small></li>'
-		.'<li><span>3</span><b>Pays</b><small>UPI link in the same chat</small></li>'
-		.'<li><span>4</span><b>Invoice</b><small>PDF after payment</small></li>'
-		.'</ol>'
 		.'<div class="site-hero-phone">'
 		.'<div class="site-hero-notch"></div>'
 		.'<div class="site-hero-status"><span>9:41</span><span>5G</span></div>'
@@ -967,7 +962,13 @@ function site_hero_demo_html()
 		.'<div class="site-hero-toast">Payment confirmed · ₹12,499 received</div>'
 		.'<div class="site-hero-card site-hero-inv"><b>Invoice sent</b><small>Order #SA-1842 · WhatsApp PDF</small></div>'
 		.'<div class="site-hero-tag">Asked · paid · invoice sent</div>'
-		.'</div></div></div>';
+		.'</div></div>'
+		.'<ol class="site-hero-mobile">'
+		.'<li><span>1</span><b>Chats</b><small>Lead messages on WhatsApp</small></li>'
+		.'<li><span>2</span><b>Product</b><small>AI sends price and stock</small></li>'
+		.'<li><span>3</span><b>Pays</b><small>UPI link in the same chat</small></li>'
+		.'<li><span>4</span><b>Invoice</b><small>PDF after payment</small></li>'
+		.'</ol></div>';
 }
 
 function replace_hero_thumb($html)
@@ -978,6 +979,65 @@ function replace_hero_thumb($html)
 function replace_key_features_journey($html)
 {
 	return replace_div_by_marker($html, 'class="elementor-element elementor-element-d37bc6d', site_sale_path_html());
+}
+
+function site_use_cases()
+{
+	$img = base_url('assets/website/wp-content/uploads/2024/07/');
+	return array(
+		array(
+			'img'   => $img.'capbi1.jpg',
+			'tag'   => 'WhatsApp',
+			'title' => 'Saree & boutique shops',
+			'text'  => 'Colour, stock, pay link and invoice in one WhatsApp thread.',
+			'slug'  => 'image-processing',
+		),
+		array(
+			'img'   => $img.'capabi2.jpg',
+			'tag'   => 'Clinics',
+			'title' => 'Clinics & service bookings',
+			'text'  => 'FAQs, slot booking and reminders so the front desk is not the bottleneck.',
+			'slug'  => 'data-stored',
+		),
+		array(
+			'img'   => $img.'capabi3.jpg',
+			'tag'   => 'Stores',
+			'title' => 'Stores & D2C brands',
+			'text'  => 'Catalogue, cart and checkout inside chat. Staff only pack paid orders.',
+			'slug'  => 'deep-learning',
+		),
+		array(
+			'img'   => $img.'capbi1.jpg',
+			'tag'   => 'Social',
+			'title' => 'Instagram & Facebook sellers',
+			'text'  => 'Comments and DMs become a sales conversation, then a CRM lead.',
+			'slug'  => 'actionable-insights',
+		),
+	);
+}
+
+function site_use_cases_html()
+{
+	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
+	$html = '<link rel="stylesheet" href="'.$css.'?v=8">'
+		.'<div class="site-cases" id="site-use-cases">';
+	foreach (site_use_cases() as $case) {
+		$url = htmlspecialchars(base_url('service/'.$case['slug']), ENT_QUOTES, 'UTF-8');
+		$html .= '<a class="site-case" href="'.$url.'">'
+			.'<span class="site-case-media"><img src="'.htmlspecialchars($case['img'], ENT_QUOTES, 'UTF-8').'" alt="'.htmlspecialchars($case['title'], ENT_QUOTES, 'UTF-8').'" width="640" height="400"></span>'
+			.'<span class="site-case-tag">'.htmlspecialchars($case['tag'], ENT_QUOTES, 'UTF-8').'</span>'
+			.'<h3>'.htmlspecialchars($case['title'], ENT_QUOTES, 'UTF-8').'</h3>'
+			.'<p>'.htmlspecialchars($case['text'], ENT_QUOTES, 'UTF-8').'</p>'
+			.'<span class="site-case-more">Read more</span>'
+			.'</a>';
+	}
+	$html .= '</div>';
+	return $html;
+}
+
+function replace_case_studies_slider($html)
+{
+	return replace_div_by_marker($html, 'class="elementor-element elementor-element-138c83c', site_use_cases_html());
 }
 
 function inject_business_story($html)
