@@ -34,6 +34,7 @@ class Settings extends Sk_Base {
             'whatsapp_number',
             'askeva_api_url', 'askeva_api_token', 'askeva_order_template', 'askeva_template_lang',
             'wa_cloud_phone_number_id', 'wa_cloud_waba_id', 'wa_cloud_access_token',
+            'wa_cloud_app_id', 'wa_cloud_config_id',
             'wa_cloud_app_secret', 'wa_cloud_verify_token', 'wa_cloud_api_version',
             'wa_mcp_url', 'wa_mcp_token', 'wa_mcp_timeout',
             'company_legal_name', 'gstin', 'pan_no', 'state_code', 'invoice_prefix', 'invoice_footer',

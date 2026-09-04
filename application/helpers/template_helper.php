@@ -288,8 +288,8 @@ function apply_business_copy($html, $slug = '')
 		'Connect WhatsApp, social, CRM and ecommerce in one workflow.',
 		'We\'re Building the Future of Customer Communication.',
 		'Businesses should not need a separate tool for every customer conversation. We bring AI, WhatsApp, social media, CRM, ecommerce, voice and automation into one communication layer.',
-		'Mission, vision and a customer-first platform',
-		'Mission: help every business reply, qualify and convert on the channels customers already use. Vision: one AI communication layer for WhatsApp, social, voice and CRM.',
+		'What businesses say',
+		'Saree shops, clinics and stores — WhatsApp, Instagram and Facebook in one inbox, then a paid order.',
 		'We build for real operations — not vanity metrics. Product capability first, honest pricing, and human handoff when a conversation needs your team.',
 		'How It Works',
 		'How It Works',
@@ -319,7 +319,7 @@ function apply_business_copy($html, $slug = '')
 		'<title>Enquiry',
 		'<title>Service',
 		'About &#8211; AI Communication Platform',
-		'Starter ₹999, Growth ₹2,999 and Business ₹5,999 per month. WhatsApp, Instagram, Facebook, AI agents, CRM and ecommerce in one platform.',
+		'WhatsApp, Instagram, Facebook, AI agents, CRM and ecommerce in one platform. Plans start at ₹999 a month.',
 		'WhatsApp/Meta messaging fees, AI usage, voice provider charges and payment gateway fees may be billed separately where applicable.',
 		'Need a custom or enterprise plan? Talk to our team — honest pricing for the channels and automations your business needs.',
 		'>WhatsApp</span>',
@@ -339,6 +339,7 @@ function apply_business_copy($html, $slug = '')
 
 	$more_search = array(
 		'Lorem Ipsum is simply dummy text of the printing and typesetting industry.',
+		'  Lorem Ipsum is simply dummy text of the printing and typesetting industry.',
 		'>Robot</span>',
 		'Prescribe correct antibiotics including AI and ML',
 		'Unique capabilities in action',
@@ -346,6 +347,7 @@ function apply_business_copy($html, $slug = '')
 		'Our company has seen significant improvement in efficiency and accuracy since implementing AI and ML technology in our processes. The use of AI and ML has helped us stay ahead of the competition and stay on the cutting...',
 		'Our company has seen significant improvement in efficiency and accuracy since implementing AI and ML technology in our processes...',
 		'Louce Voiton',
+		'Luice Voitton',
 		'AI Expert',
 		'Industry Expert',
 		'For Multi Use',
@@ -395,6 +397,7 @@ function apply_business_copy($html, $slug = '')
 
 	$more_replace = array(
 		'AI replies, qualifies leads and hands off to your team on WhatsApp, Instagram and Facebook.',
+		'AI replies, qualifies leads and hands off to your team on WhatsApp, Instagram and Facebook.',
 		'>Voice</span>',
 		'AI voice that qualifies callers and books follow-ups',
 		'How businesses use the platform',
@@ -402,6 +405,7 @@ function apply_business_copy($html, $slug = '')
 		'WhatsApp AI now replies after hours, qualifies interest, and books follow-ups so the team only speaks to ready buyers.',
 		'WhatsApp AI now replies after hours, qualifies interest, and books follow-ups so the team only speaks to ready buyers.',
 		'WhatsApp automation',
+		'Saree boutique',
 		'Clinic operations',
 		'Store operations',
 		'Multi-channel teams',
@@ -655,7 +659,7 @@ function rewrite_template_html($html, $current = 'home')
 
 	$base = base_url();
 	$assets = base_url('assets/website/');
-	$layout = '<link rel="stylesheet" href="'.htmlspecialchars($assets.'site-layout.css', ENT_QUOTES, 'UTF-8').'?v=2">';
+	$layout = '<link rel="stylesheet" href="'.htmlspecialchars($assets.'site-layout.css', ENT_QUOTES, 'UTF-8').'?v=4">';
 	$html = preg_replace('#</head>#i', $layout.'</head>', $html, 1);
 
 	// Drop WP speculation rules (paths break after rewrite)
@@ -726,6 +730,8 @@ function rewrite_template_html($html, $current = 'home')
 		$html = replace_key_features_journey($html);
 		$html = replace_case_studies_slider($html);
 	}
+
+	$html = replace_testimonial_sections($html);
 
 	$html = preg_replace('#https?://(?:www\.)?youtube\.com/watch\?v=[^"\']+#i', '#site-how-it-works', $html);
 	$html = apply_site_brand($html);
@@ -827,8 +833,9 @@ function site_business_story_html()
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-business-story.js'), ENT_QUOTES, 'UTF-8');
 
-	return '<link rel="stylesheet" href="'.$css.'?v=11">'
+	return '<link rel="stylesheet" href="'.$css.'?v=13">'
 		.'<section class="site-story" id="how-talkaipilot-works">'
+		.site_float_decor_html('page')
 		.'<div class="site-story-inner">'
 		.'<span class="site-story-kicker">The conversation</span>'
 		.'<h2>Chat. Product. Pay. Invoice.</h2>'
@@ -923,7 +930,7 @@ function site_sale_path_html()
 	};
 
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=11">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=13">'
 		.'<section class="site-path" id="site-sale-path">'
 		.'<div class="site-path-inner">'
 		.'<span class="site-path-kicker">How a sale happens</span>'
@@ -948,12 +955,40 @@ function site_sale_path_html()
 	return $html;
 }
 
+function site_float_decor_html($variant = 'hero')
+{
+	$base = htmlspecialchars(base_url('assets/website/wp-content/uploads/2024/06/'), ENT_QUOTES, 'UTF-8');
+	$sets = array(
+		'hero' => array(
+			array('rocket-element.png', 'a'),
+			array('efect-ball.png', 'b'),
+			array('null-dimond.png', 'c'),
+			array('bulp.png', 'd'),
+			array('cloud-icon.png', 'e'),
+			array('ball-element.png', 'f'),
+			array('3dots-elements.png', 'g'),
+		),
+		'page' => array(
+			array('efect-ball.png', 'b'),
+			array('null-dimond.png', 'c'),
+			array('bulp.png', 'd'),
+			array('cloud-icon.png', 'e'),
+		),
+	);
+	$items = isset($sets[$variant]) ? $sets[$variant] : $sets['hero'];
+	$html = '<div class="site-floats site-floats-'.$variant.'" aria-hidden="true">';
+	foreach ($items as $item) {
+		$html .= '<span class="site-float site-float-'.$item[1].'"><img src="'.$base.$item[0].'" alt="" width="48" height="48"></span>';
+	}
+	$html .= '</div>';
+	return $html;
+}
+
 function site_hero_demo_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-hero-demo.css'), ENT_QUOTES, 'UTF-8');
-	return '<link rel="stylesheet" href="'.$css.'?v=8">'
+	return '<link rel="stylesheet" href="'.$css.'?v=10">'
 		.'<div class="site-hero-demo">'
-		.'<div class="site-hero-glow" aria-hidden="true"></div>'
 		.'<div class="site-hero-float site-hero-float-a">After hours</div>'
 		.'<div class="site-hero-float site-hero-float-b">Paid in 47s</div>'
 		.'<div class="site-hero-board">'
@@ -984,18 +1019,38 @@ function site_hero_demo_html()
 
 function replace_hero_thumb($html)
 {
-	return replace_div_by_marker($html, 'class="banner__thumb"', '<div class="banner__thumb">'.site_hero_demo_html().'</div>');
+	$html = replace_div_by_marker($html, 'class="banner__thumb"', '<div class="banner__thumb">'.site_hero_demo_html().'</div>');
+	if (strpos($html, 'class="site-floats site-floats-hero"') === false) {
+		$html = preg_replace(
+			'#<section class="banner__section bannerbg">#',
+			'<section class="banner__section bannerbg">'.site_float_decor_html('hero'),
+			$html,
+			1
+		);
+	}
+	return $html;
 }
 
 function inject_hero_channel_pills($html)
 {
-	$pills = '<ul class="site-hero-channels">'
-		.'<li class="is-wa">'.site_channel_icon_svg('wa').' WhatsApp</li>'
-		.'<li class="is-ig">'.site_channel_icon_svg('ig').' Instagram</li>'
-		.'<li class="is-yt">'.site_channel_icon_svg('yt').' YouTube</li>'
-		.'<li class="is-fb">'.site_channel_icon_svg('fb').' Facebook</li>'
-		.'<li class="is-app">'.site_channel_icon_svg('app').' Mobile app</li>'
-		.'</ul>';
+	$channels = array(
+		array('wa', 'WhatsApp', 'Chat becomes a lead'),
+		array('ig', 'Instagram', 'Comment or DM'),
+		array('yt', 'YouTube', 'Comment to lead'),
+		array('fb', 'Facebook', 'Messenger'),
+		array('app', 'Mobile app', 'App enquiry'),
+	);
+	$pills = '<ol class="site-hero-channels" aria-label="Lead path">';
+	$n = 1;
+	foreach ($channels as $ch) {
+		$pills .= '<li class="is-'.$ch[0].'">'
+			.'<span class="site-hero-ch-num">'.$n.'</span>'
+			.'<span class="site-hero-ch-icon" aria-hidden="true">'.site_channel_icon_svg($ch[0]).'</span>'
+			.'<span class="site-hero-ch-copy"><b>'.$ch[1].'</b><small>'.$ch[2].'</small></span>'
+			.'</li>';
+		$n++;
+	}
+	$pills .= '</ol>';
 	if (strpos($html, 'class="site-hero-channels"') !== false) {
 		return $html;
 	}
@@ -1069,8 +1124,9 @@ function site_channel_icon_svg($key)
 function site_lead_channels_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=11">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=13">'
 		.'<section class="site-channels" id="site-lead-channels">'
+		.site_float_decor_html('page')
 		.'<div class="site-channels-inner">'
 		.'<span class="site-channels-kicker">Where leads come from</span>'
 		.'<h2>WhatsApp, Instagram, YouTube and the app</h2>'
@@ -1104,7 +1160,7 @@ function inject_lead_channels($html)
 function site_use_cases_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=11">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=13">'
 		.'<div class="site-cases" id="site-use-cases">';
 	foreach (site_use_cases() as $case) {
 		$url = htmlspecialchars(base_url('service/'.$case['slug']), ENT_QUOTES, 'UTF-8');
@@ -1148,6 +1204,197 @@ function inject_how_it_works($html)
 	return $html.$block;
 }
 
+function site_default_testimonials()
+{
+	return array(
+		array(
+			'author_name'  => 'Silk House',
+			'author_title' => 'Saree boutique · Coimbatore',
+			'quote'        => 'After-hours WhatsApp now sends the saree, the pay link and the invoice. We only pack paid orders.',
+			'rating'       => 5,
+		),
+		array(
+			'author_name'  => 'City Care Clinic',
+			'author_title' => 'Clinic · Chennai',
+			'quote'        => 'Patients book slots on WhatsApp. Reminders go out automatically. The front desk is not the bottleneck anymore.',
+			'rating'       => 5,
+		),
+		array(
+			'author_name'  => 'Urban Store',
+			'author_title' => 'D2C store · Bengaluru',
+			'quote'        => 'Instagram comments and WhatsApp chats land in one inbox. Catalogue, payment and CRM update from the same conversation.',
+			'rating'       => 5,
+		),
+	);
+}
+
+function site_testimonial_is_dummy($row)
+{
+	$name = strtolower(trim((string) (isset($row['author_name']) ? $row['author_name'] : '')));
+	$dummy = array(
+		'davon lane', 'louce voiton', 'luice voitton', 'jhon smith', 'jhon lane',
+		'jhon willson', 'david smith', 'micheal smith', 'lorem ipsum', 'ai expert',
+	);
+	$quote = strtolower((string) (isset($row['quote']) ? $row['quote'] : ''));
+	if (in_array($name, $dummy, true)) {
+		return true;
+	}
+	return (strpos($quote, 'lorem ipsum') !== false || strpos($quote, 'ai and ml technology') !== false);
+}
+
+function ensure_testimonials_table()
+{
+	try {
+		$CI =& get_instance();
+		if (!isset($CI->db) || !$CI->db) {
+			$CI->load->database();
+		}
+	} catch (Exception $e) {
+		return false;
+	}
+	if (!isset($CI->db) || !$CI->db) {
+		return false;
+	}
+
+	if (!$CI->db->table_exists('sk_testimonials')) {
+		$CI->db->query("CREATE TABLE IF NOT EXISTS `sk_testimonials` (
+			`id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+			`author_name` VARCHAR(120) NOT NULL,
+			`author_title` VARCHAR(120) DEFAULT NULL,
+			`quote` TEXT NOT NULL,
+			`rating` TINYINT(1) NOT NULL DEFAULT 5,
+			`product_id` INT UNSIGNED DEFAULT NULL,
+			`status` TINYINT(1) NOT NULL DEFAULT 1,
+			`sort_order` SMALLINT(5) NOT NULL DEFAULT 0,
+			`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (`id`),
+			KEY `idx_status` (`status`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+	}
+
+	return $CI->db->table_exists('sk_testimonials');
+}
+
+function site_testimonial_is_platform($row)
+{
+	$quote = strtolower((string) (isset($row['quote']) ? $row['quote'] : ''));
+	$hints = array(
+		'whatsapp', 'instagram', 'facebook', 'inbox', 'crm', 'pay link',
+		'after-hours', 'after hours', 'book slot', 'clinic', 'lead',
+		'automation', 'talkaipilot',
+	);
+	foreach ($hints as $hint) {
+		if (strpos($quote, $hint) !== false) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function site_load_testimonials()
+{
+	$defaults = site_default_testimonials();
+
+	try {
+		if (!ensure_testimonials_table()) {
+			return $defaults;
+		}
+	} catch (Exception $e) {
+		return $defaults;
+	}
+
+	$CI =& get_instance();
+	if (!isset($CI->db) || !$CI->db || !$CI->db->table_exists('sk_testimonials')) {
+		return $defaults;
+	}
+
+	$rows = $CI->db
+		->where('status', 1)
+		->order_by('sort_order', 'ASC')
+		->order_by('created_at', 'DESC')
+		->get('sk_testimonials')
+		->result_array();
+
+	if (!is_array($rows)) {
+		return $defaults;
+	}
+
+	$out = array();
+	foreach ($rows as $row) {
+		if (site_testimonial_is_dummy($row) || !site_testimonial_is_platform($row)) {
+			continue;
+		}
+		$out[] = $row;
+	}
+
+	return $out ? $out : $defaults;
+}
+
+function site_testimonials_html()
+{
+	$items = site_load_testimonials();
+	if (!$items) {
+		return '';
+	}
+
+	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
+	$html = '<link rel="stylesheet" href="'.$css.'?v=13">'
+		.'<section class="site-quotes" id="site-testimonials">'
+		.site_float_decor_html('page')
+		.'<div class="site-quotes-inner">'
+		.'<span class="site-quotes-kicker">Testimonials</span>'
+		.'<h2>What businesses say</h2>'
+		.'<p class="site-quotes-lead">Saree shops, clinics and stores using WhatsApp, Instagram and Facebook in one inbox.</p>'
+		.'<div class="site-quotes-grid">';
+
+	foreach ($items as $item) {
+		$rating = max(1, min(5, (int) (isset($item['rating']) ? $item['rating'] : 5)));
+		$stars = str_repeat('★', $rating);
+		$initial = strtoupper(substr(trim((string) $item['author_name']), 0, 1));
+		$html .= '<article class="site-quote">'
+			.'<div class="site-quote-stars" aria-label="'.$rating.' out of 5">'.$stars.'</div>'
+			.'<blockquote>'.htmlspecialchars($item['quote'], ENT_QUOTES, 'UTF-8').'</blockquote>'
+			.'<div class="site-quote-who">'
+			.'<span class="site-quote-mark" aria-hidden="true">'.htmlspecialchars($initial, ENT_QUOTES, 'UTF-8').'</span>'
+			.'<div><strong>'.htmlspecialchars($item['author_name'], ENT_QUOTES, 'UTF-8').'</strong>'
+			.'<small>'.htmlspecialchars((string) (isset($item['author_title']) ? $item['author_title'] : ''), ENT_QUOTES, 'UTF-8').'</small></div>'
+			.'</div></article>';
+	}
+
+	$html .= '</div></div></section>';
+	return $html;
+}
+
+function replace_testimonial_sections($html)
+{
+	$markers = array(
+		'class="elementor-element elementor-element-4e22695',
+		'class="elementor-element elementor-element-816e016',
+		'class="elementor-element elementor-element-aac0327',
+	);
+	$found = false;
+	foreach ($markers as $marker) {
+		if (strpos($html, $marker) !== false) {
+			$found = true;
+			break;
+		}
+	}
+	if (!$found) {
+		return $html;
+	}
+
+	$block = site_testimonials_html();
+	if ($block === '') {
+		return $html;
+	}
+
+	foreach ($markers as $marker) {
+		$html = replace_div_by_marker($html, $marker, $block);
+	}
+
+	return $html;
+}
+
 function apply_enquiry_copy($html)
 {
 	return apply_page_chrome($html, 'Enquiry', site_contact_form_html('enquiry'));
@@ -1160,8 +1407,13 @@ function apply_page_chrome($html, $title, $content)
 	$html = preg_replace('#(<h1 class="page-title">\s*)[^<]+#', '$1'.$safe, $html, 1);
 	$html = preg_replace('#class="post post-page current-item">[^<]*</span>#', 'class="post post-page current-item">'.$safe.'</span>', $html, 1);
 
-	$css = '<link rel="stylesheet" href="'.htmlspecialchars(base_url('assets/website/site-pages.css'), ENT_QUOTES, 'UTF-8').'?v=2">';
+	$css = '<link rel="stylesheet" href="'.htmlspecialchars(base_url('assets/website/site-pages.css'), ENT_QUOTES, 'UTF-8').'?v=4">';
 	$html = preg_replace('#</head>#i', $css.'</head>', $html, 1);
+
+	$replaced = replace_div_by_marker($html, '<div id="content">', '<div id="content">'.$content.'</div><!-- .content -->');
+	if ($replaced !== $html) {
+		return $replaced;
+	}
 
 	$start = strpos($html, '<div id="content">');
 	$end = strpos($html, '</div><!-- .content -->');
@@ -1178,7 +1430,7 @@ function site_about_content_html()
 	$service = htmlspecialchars(base_url('service'), ENT_QUOTES, 'UTF-8');
 	$img = htmlspecialchars(base_url('assets/website/wp-content/uploads/2024/06/about1-1.png'), ENT_QUOTES, 'UTF-8');
 
-	return '<section class="site-page"><div class="site-page-wrap">'
+	return '<section class="site-page">'.site_float_decor_html('page').'<div class="site-page-wrap">'
 		.'<div class="site-page-hero">'
 		.'<div class="site-page-visual"><img src="'.$img.'" width="420" height="517" alt="TalkAIPilot"></div>'
 		.'<div class="site-page-copy">'
@@ -1201,7 +1453,27 @@ function site_about_content_html()
 		.'<article class="site-page-card"><h3>Clinics &amp; services</h3><p>FAQs, slot booking, reminders and a clean handoff to staff.</p></article>'
 		.'<article class="site-page-card"><h3>Stores &amp; D2C</h3><p>Stock, cart, payment and CRM update from one conversation.</p></article>'
 		.'<article class="site-page-card"><h3>Any WhatsApp shop</h3><p>If customers already message you, the AI can sell for you.</p></article>'
-		.'</div></div></section>';
+		.'</div>'
+		.'<div class="site-mv">'
+		.'<span class="site-page-kicker">Why we exist</span>'
+		.'<h2>Mission, vision and a customer-first platform</h2>'
+		.'<p>WhatsApp, Instagram, Facebook, AI agents, CRM and ecommerce in one place — so a customer never waits on a missed chat.</p>'
+		.'<div class="site-page-grid site-mv-grid">'
+		.'<article class="site-page-card"><h3>Mission</h3><p>Help every business reply, qualify and convert on the channels customers already use.</p></article>'
+		.'<article class="site-page-card"><h3>Vision</h3><p>One AI communication layer for WhatsApp, social, voice and CRM — not a separate tool for each chat.</p></article>'
+		.'<article class="site-page-card"><h3>Customer first</h3><p>Product capability first, honest pricing, and a human handoff when a conversation needs your team.</p></article>'
+		.'</div></div>'
+		.'<div class="site-plans">'
+		.'<span class="site-page-kicker">Plans</span>'
+		.'<h2>Starter ₹999, Growth ₹2,999 and Business ₹5,999</h2>'
+		.'<p>Per month. WhatsApp, Instagram, Facebook, AI agents, CRM and ecommerce in one platform.</p>'
+		.'<div class="site-page-grid site-plans-grid">'
+		.'<article class="site-page-card"><h3>Starter</h3><p class="site-plan-price">₹999<span>/month</span></p><p>WhatsApp AI replies, lead capture and a shared inbox to get started.</p></article>'
+		.'<article class="site-page-card"><h3>Growth</h3><p class="site-plan-price">₹2,999<span>/month</span></p><p>Instagram, Facebook, CRM follow-ups and catalogue selling in the same chat.</p></article>'
+		.'<article class="site-page-card"><h3>Business</h3><p class="site-plan-price">₹5,999<span>/month</span></p><p>Ecommerce, payments, voice and multi-team automation on one platform.</p></article>'
+		.'</div></div>'
+		.'</div></section>'
+		.site_testimonials_html();
 }
 
 function site_contact_form_html($type = 'contact')

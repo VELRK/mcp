@@ -1,4 +1,4 @@
-.site-story{--s-purple:#452FF4;--s-lilac:#A58EFF;--s-navy:#08162E;--s-ok:#5ee2a0;position:relative;z-index:2;padding:72px 24px 80px;background:linear-gradient(180deg,#f4f0ff 0%,#fff 100%);color:var(--s-navy);font-family:Inter,system-ui,sans-serif;overflow:visible}
+.site-story{--s-purple:#452FF4;--s-lilac:#A58EFF;--s-navy:#08162E;--s-ok:#5ee2a0;position:relative;z-index:2;padding:72px 24px 80px;background:#f4f0ff;color:var(--s-navy);font-family:Inter,system-ui,sans-serif;overflow:hidden}
 .site-story-inner{max-width:1180px;margin:0 auto;padding:0;text-align:center}
 .site-story-kicker{display:inline-block;color:var(--s-purple);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin-bottom:12px}
 .site-story-inner>h2{margin:0 0 14px;font-size:clamp(26px,4vw,40px);font-weight:800;letter-spacing:-.03em;line-height:1.15;color:var(--s-navy)}
@@ -49,7 +49,7 @@
 @keyframes ssPulse{50%{transform:translate(-50%,-50%) scale(1.05);box-shadow:0 0 0 8px rgba(69,47,244,.18)}}
 @keyframes ssSlide{0%,15%{opacity:0;transform:translateY(18px)}30%,78%{opacity:1;transform:none}92%,100%{opacity:0}}
 
-.site-path{background:linear-gradient(180deg,#efe9ff 0%,#f7f5ff 55%,#fff 100%);padding:20px 16px 70px;font-family:Inter,system-ui,sans-serif;color:#08162E}
+.site-path{background:#f4f0ff;padding:20px 16px 70px;font-family:Inter,system-ui,sans-serif;color:#08162E;position:relative}
 .site-path-inner{max-width:1180px;margin:0 auto;text-align:center}
 .site-path-kicker{display:inline-block;color:#452FF4;font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin-bottom:8px}
 .site-path-inner>h2{margin:0 0 12px;font-size:clamp(26px,4vw,42px);font-weight:800;letter-spacing:-.03em;line-height:1.15}
@@ -85,7 +85,7 @@
 	.site-path-col:before{display:none}
 	.site-path-left{flex-direction:row;text-align:left}
 }
-.site-channels{background:linear-gradient(180deg,#08162E 0%,#120c2b 100%);color:#fff;padding:72px 24px 80px;font-family:Inter,system-ui,sans-serif}
+.site-channels{background:#08162E;color:#fff;padding:72px 24px 80px;font-family:Inter,system-ui,sans-serif;position:relative;overflow:hidden}
 .site-channels-inner{max-width:1180px;margin:0 auto;text-align:center}
 .site-channels-kicker{display:inline-block;color:#A58EFF;font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin-bottom:12px}
 .site-channels-inner>h2{margin:0 0 14px;font-size:clamp(24px,4vw,38px);font-weight:800;letter-spacing:-.03em;line-height:1.15}
@@ -117,6 +117,22 @@
 .site-case-more{margin:0 16px 18px;color:#452FF4;font-size:13px;font-weight:800}
 @media (max-width:1100px){.site-cases{grid-template-columns:1fr 1fr}}
 @media (max-width:640px){.site-cases{grid-template-columns:1fr;gap:12px}}
+
+.site-quotes{--s-purple:#452FF4;--s-navy:#08162E;padding:72px 24px 80px;background:#f4f0ff;color:var(--s-navy);font-family:Inter,system-ui,sans-serif;position:relative;overflow:hidden}
+.site-quotes-inner{max-width:1180px;margin:0 auto;text-align:center}
+.site-quotes-kicker{display:inline-block;color:var(--s-purple);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin-bottom:12px}
+.site-quotes-inner>h2{margin:0 0 12px;font-size:clamp(26px,4vw,40px);font-weight:800;letter-spacing:-.03em;line-height:1.15}
+.site-quotes-lead{max-width:640px;margin:0 auto 36px;color:#4c4a63;font-size:17px;line-height:1.55}
+.site-quotes-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;text-align:left}
+.site-quote{display:flex;flex-direction:column;padding:24px 22px;border-radius:22px;background:#fff;border:1px solid #e6e0ff;box-shadow:0 14px 30px rgba(69,47,244,.08)}
+.site-quote-stars{color:#f5b301;letter-spacing:2px;font-size:15px;margin-bottom:12px}
+.site-quote blockquote{margin:0 0 20px;color:#2b2940;font-size:16px;line-height:1.6;font-weight:600}
+.site-quote-who{display:flex;align-items:center;gap:12px;margin-top:auto}
+.site-quote-mark{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#6a57ff,#452FF4);color:#fff;font-weight:800}
+.site-quote-who strong{display:block;font-size:15px}
+.site-quote-who small{display:block;color:#5b5870;font-size:13px}
+@media (max-width:900px){.site-quotes-grid{grid-template-columns:1fr}}
+@media (max-width:640px){.site-quotes{padding:48px 16px 56px}.site-quotes-lead{font-size:15px;margin-bottom:24px}}
 
 @media (max-width:640px){
 	.site-story{padding:48px 16px 56px}

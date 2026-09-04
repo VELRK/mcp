@@ -123,6 +123,13 @@ function sk_wa_cloud_ensure_schema(): void {
         'wa_cloud_phone_number_id' => '',
         'wa_cloud_waba_id'         => '',
         'wa_cloud_app_secret'      => '',
+        'wa_cloud_app_id'          => '',
+        'wa_cloud_config_id'       => '',
+        'wa_cloud_refresh_token'   => '',
+        'wa_cloud_token_expires'   => '',
+        'wa_cloud_fb_user_id'      => '',
+        'wa_cloud_business_id'     => '',
+        'wa_cloud_display_phone'   => '',
         'wa_cloud_verify_token'    => '2deal-wa-verify',
         'wa_cloud_api_version'     => 'v21.0',
         'wa_mcp_enabled'           => '0',
@@ -160,6 +167,13 @@ function sk_wa_cloud_config(?array $settings = null): array {
         'phone_number_id' => trim((string)($settings['wa_cloud_phone_number_id'] ?? '')),
         'waba_id'         => trim((string)($settings['wa_cloud_waba_id'] ?? '')),
         'app_secret'      => trim((string)($settings['wa_cloud_app_secret'] ?? '')),
+        'app_id'          => trim((string)($settings['wa_cloud_app_id'] ?? '')),
+        'config_id'       => trim((string)($settings['wa_cloud_config_id'] ?? '')),
+        'refresh_token'   => trim((string)($settings['wa_cloud_refresh_token'] ?? '')),
+        'token_expires'   => trim((string)($settings['wa_cloud_token_expires'] ?? '')),
+        'fb_user_id'      => trim((string)($settings['wa_cloud_fb_user_id'] ?? '')),
+        'business_id'     => trim((string)($settings['wa_cloud_business_id'] ?? '')),
+        'display_phone'   => trim((string)($settings['wa_cloud_display_phone'] ?? '')),
         'verify_token'    => trim((string)($settings['wa_cloud_verify_token'] ?? '2deal-wa-verify')),
         'api_version'     => $version,
         'graph_base'      => 'https://graph.facebook.com/' . $version,
@@ -370,4 +384,224 @@ function sk_wa_cloud_send_components(array $template, array $context): array {
         ];
     }
     return ['components' => $components, 'resolved' => $resolved];
+}
+
+function sk_wa_meta_redirect_uri(): string
+{
+    return site_url('admin/meta/callback');
+}
+
+function sk_wa_meta_webhook_uri(): string
+{
+    return site_url('shopkart-api/whatsapp/webhook');
+}
+
+function sk_wa_meta_graph(string $method, string $path, array $query = [], $body = null, string $token = '', ?array $settings = null): array
+{
+    $cfg = sk_wa_cloud_config($settings);
+    $url = rtrim($cfg['graph_base'], '/') . '/' . ltrim($path, '/');
+    if ($query) {
+        $url .= (strpos($url, '?') === false ? '?' : '&') . http_build_query($query);
+    }
+
+    $headers = array('Accept: application/json');
+    if ($token !== '') {
+        $headers[] = 'Authorization: Bearer ' . $token;
+    }
+
+    $ch = curl_init($url);
+    $opts = array(
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 12,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_CUSTOMREQUEST  => strtoupper($method),
+    );
+    if ($body !== null) {
+        if (is_array($body)) {
+            $opts[CURLOPT_POSTFIELDS] = http_build_query($body);
+        } else {
+            $opts[CURLOPT_POSTFIELDS] = $body;
+            $headers[] = 'Content-Type: application/json';
+            $opts[CURLOPT_HTTPHEADER] = $headers;
+        }
+    }
+    curl_setopt_array($ch, $opts);
+    $raw = curl_exec($ch);
+    $err = curl_error($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $json = json_decode((string) $raw, true);
+    if (!is_array($json)) {
+        $json = array();
+    }
+    $apiErr = '';
+    if (!empty($json['error']['message'])) {
+        $apiErr = (string) $json['error']['message'];
+    }
+
+    return array(
+        'ok'     => $status >= 200 && $status < 300 && $apiErr === '',
+        'status' => $status,
+        'data'   => $json,
+        'error'  => $err !== '' ? $err : $apiErr,
+    );
+}
+
+function sk_wa_meta_exchange_code(string $code, string $redirectUri, ?array $settings = null): array
+{
+    $cfg = sk_wa_cloud_config($settings);
+    if ($cfg['app_id'] === '' || $cfg['app_secret'] === '') {
+        return array('ok' => false, 'error' => 'Save Facebook App ID and App Secret first.', 'data' => array());
+    }
+
+    $res = sk_wa_meta_graph('GET', 'oauth/access_token', array(
+        'client_id'     => $cfg['app_id'],
+        'client_secret' => $cfg['app_secret'],
+        'redirect_uri'  => $redirectUri,
+        'code'          => $code,
+    ), null, '', $settings);
+
+    if (!$res['ok'] || empty($res['data']['access_token'])) {
+        return array(
+            'ok'    => false,
+            'error' => $res['error'] !== '' ? $res['error'] : 'Meta did not return an access token.',
+            'data'  => $res['data'],
+        );
+    }
+
+    return array('ok' => true, 'error' => '', 'data' => $res['data']);
+}
+
+function sk_wa_meta_long_lived(string $shortToken, ?array $settings = null): array
+{
+    $cfg = sk_wa_cloud_config($settings);
+    $res = sk_wa_meta_graph('GET', 'oauth/access_token', array(
+        'grant_type'        => 'fb_exchange_token',
+        'client_id'         => $cfg['app_id'],
+        'client_secret'     => $cfg['app_secret'],
+        'fb_exchange_token' => $shortToken,
+    ), null, '', $settings);
+
+    if (!$res['ok'] || empty($res['data']['access_token'])) {
+        return array('ok' => false, 'error' => $res['error'], 'data' => array('access_token' => $shortToken));
+    }
+
+    return array('ok' => true, 'error' => '', 'data' => $res['data']);
+}
+
+function sk_wa_meta_discover_assets(string $token, ?array $settings = null): array
+{
+    $out = array(
+        'fb_user_id'      => '',
+        'business_id'     => '',
+        'waba_id'         => '',
+        'phone_number_id' => '',
+        'display_phone'   => '',
+        'verified_name'   => '',
+    );
+
+    $me = sk_wa_meta_graph('GET', 'me', array('fields' => 'id,name'), null, $token, $settings);
+    if ($me['ok']) {
+        $out['fb_user_id'] = (string) ($me['data']['id'] ?? '');
+    }
+
+    $cfg = sk_wa_cloud_config($settings);
+    if ($cfg['app_id'] !== '' && $cfg['app_secret'] !== '') {
+        $debug = sk_wa_meta_graph('GET', 'debug_token', array(
+            'input_token'  => $token,
+            'access_token' => $cfg['app_id'] . '|' . $cfg['app_secret'],
+        ), null, '', $settings);
+        $granular = $debug['data']['data']['granular_scopes'] ?? array();
+        if (is_array($granular)) {
+            foreach ($granular as $scope) {
+                $name = (string) ($scope['scope'] ?? '');
+                $ids = $scope['target_ids'] ?? array();
+                if (($name === 'whatsapp_business_management' || $name === 'whatsapp_business_messaging') && !empty($ids[0])) {
+                    $out['waba_id'] = (string) $ids[0];
+                    break;
+                }
+            }
+        }
+    }
+
+    if ($out['waba_id'] === '') {
+        $biz = sk_wa_meta_graph('GET', 'me/businesses', array('fields' => 'id,name'), null, $token, $settings);
+        $businesses = $biz['data']['data'] ?? array();
+        if (is_array($businesses)) {
+            foreach ($businesses as $row) {
+                $bizId = (string) ($row['id'] ?? '');
+                if ($bizId === '') {
+                    continue;
+                }
+                if ($out['business_id'] === '') {
+                    $out['business_id'] = $bizId;
+                }
+                foreach (array('owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts') as $edge) {
+                    $wabas = sk_wa_meta_graph('GET', $bizId . '/' . $edge, array('fields' => 'id,name'), null, $token, $settings);
+                    $list = $wabas['data']['data'] ?? array();
+                    if (!empty($list[0]['id'])) {
+                        $out['waba_id'] = (string) $list[0]['id'];
+                        $out['business_id'] = $bizId;
+                        break 2;
+                    }
+                }
+            }
+        }
+    }
+
+    if ($out['waba_id'] !== '') {
+        $phones = sk_wa_meta_graph('GET', $out['waba_id'] . '/phone_numbers', array(
+            'fields' => 'id,display_phone_number,verified_name,quality_rating',
+        ), null, $token, $settings);
+        $list = $phones['data']['data'] ?? array();
+        if (!empty($list[0]['id'])) {
+            $out['phone_number_id'] = (string) $list[0]['id'];
+            $out['display_phone'] = (string) ($list[0]['display_phone_number'] ?? '');
+            $out['verified_name'] = (string) ($list[0]['verified_name'] ?? '');
+        }
+    }
+
+    return $out;
+}
+
+function sk_wa_meta_subscribe_waba(string $wabaId, string $token, ?array $settings = null): array
+{
+    if ($wabaId === '') {
+        return array('ok' => false, 'error' => 'Missing WABA id');
+    }
+    return sk_wa_meta_graph('POST', $wabaId . '/subscribed_apps', array(), array(), $token, $settings);
+}
+
+function sk_wa_meta_save_connection(array $tokenData, array $assets, array $signup = array()): array
+{
+    $CI =& get_instance();
+    $CI->load->model('Sk_Admin_model');
+
+    $access = trim((string) ($tokenData['access_token'] ?? ''));
+    $refresh = trim((string) ($tokenData['refresh_token'] ?? ''));
+    if ($refresh === '') {
+        $refresh = $access;
+    }
+    $expiresIn = (int) ($tokenData['expires_in'] ?? 0);
+    $expiresAt = $expiresIn > 0 ? date('Y-m-d H:i:s', time() + $expiresIn) : '';
+
+    $phoneId = trim((string) ($signup['phone_number_id'] ?? $assets['phone_number_id'] ?? ''));
+    $wabaId = trim((string) ($signup['waba_id'] ?? $signup['whatsapp_business_account_id'] ?? $assets['waba_id'] ?? ''));
+
+    $save = array(
+        'wa_cloud_enabled'         => ($access !== '' && $phoneId !== '') ? '1' : '0',
+        'wa_cloud_access_token'    => $access,
+        'wa_cloud_refresh_token'   => $refresh,
+        'wa_cloud_token_expires'   => $expiresAt,
+        'wa_cloud_phone_number_id' => $phoneId,
+        'wa_cloud_waba_id'         => $wabaId,
+        'wa_cloud_fb_user_id'      => (string) ($assets['fb_user_id'] ?? ''),
+        'wa_cloud_business_id'     => (string) ($assets['business_id'] ?? $signup['business_id'] ?? ''),
+        'wa_cloud_display_phone'   => (string) ($assets['display_phone'] ?? $signup['display_phone_number'] ?? ''),
+    );
+
+    $CI->Sk_Admin_model->save_settings($save);
+    return $save;
 }
