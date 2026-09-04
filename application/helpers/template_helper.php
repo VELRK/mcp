@@ -655,7 +655,7 @@ function rewrite_template_html($html, $current = 'home')
 
 	$base = base_url();
 	$assets = base_url('assets/website/');
-	$layout = '<link rel="stylesheet" href="'.htmlspecialchars($assets.'site-layout.css', ENT_QUOTES, 'UTF-8').'?v=1">';
+	$layout = '<link rel="stylesheet" href="'.htmlspecialchars($assets.'site-layout.css', ENT_QUOTES, 'UTF-8').'?v=2">';
 	$html = preg_replace('#</head>#i', $layout.'</head>', $html, 1);
 
 	// Drop WP speculation rules (paths break after rewrite)
@@ -827,7 +827,7 @@ function site_business_story_html()
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-business-story.js'), ENT_QUOTES, 'UTF-8');
 
-	return '<link rel="stylesheet" href="'.$css.'?v=10">'
+	return '<link rel="stylesheet" href="'.$css.'?v=11">'
 		.'<section class="site-story" id="how-talkaipilot-works">'
 		.'<div class="site-story-inner">'
 		.'<span class="site-story-kicker">The conversation</span>'
@@ -923,7 +923,7 @@ function site_sale_path_html()
 	};
 
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=10">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=11">'
 		.'<section class="site-path" id="site-sale-path">'
 		.'<div class="site-path-inner">'
 		.'<span class="site-path-kicker">How a sale happens</span>'
@@ -1038,10 +1038,22 @@ function site_lead_channels()
 	);
 }
 
+function site_channel_icon_svg($key)
+{
+	$icons = array(
+		'wa' => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2a9.9 9.9 0 0 0-8.59 14.86L2 22l5.26-1.38A9.9 9.9 0 1 0 12.04 2zm5.77 14.07c-.24.67-1.18 1.23-1.94 1.39-.52.11-1.2.2-3.49-.75-2.93-1.21-4.81-4.17-4.96-4.36-.14-.2-1.18-1.57-1.18-3 0-1.42.75-2.12 1.01-2.41.25-.28.55-.35.74-.35h.53c.17 0 .4-.06.63.48.24.56.82 1.94.89 2.08.07.14.12.3.02.49-.09.18-.14.3-.27.46l-.4.48c-.13.14-.27.29-.12.56.16.28.7 1.15 1.5 1.86 1.03.92 1.9 1.2 2.17 1.34.26.13.42.11.57-.07.16-.18.67-.78.85-1.05.18-.27.35-.22.59-.13.24.09 1.51.71 1.77.84.26.13.43.2.5.31.06.12.06.67-.18 1.34z"/></svg>',
+		'ig' => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2zm7.95 2.25a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2.1A2.9 2.9 0 1 1 9.1 12 2.9 2.9 0 0 1 12 9.1z"/></svg>',
+		'yt' => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 12.2s0-3.2-.4-4.6c-.22-.86-.9-1.54-1.76-1.76C19.5 5.4 12 5.4 12 5.4s-7.5 0-8.84.44c-.86.22-1.54.9-1.76 1.76C1 9 1 12.2 1 12.2s0 3.2.4 4.6c.22.86.9 1.54 1.76 1.76C4.5 19 12 19 12 19s7.5 0 8.84-.44c.86-.22 1.54-.9 1.76-1.76.4-1.4.4-4.6.4-4.6zM9.75 15.02V9.38l5.25 2.82-5.25 2.82z"/></svg>',
+		'fb' => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 8.5V6.7c0-.7.5-1 1.1-1h1.9V3h-2.6C11.9 3 11 5 11 6.8v1.7H9v2.7h2V21h3.5v-9.8h2.4l.4-2.7h-2.8z"/></svg>',
+		'app' => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 2h7A2.5 2.5 0 0 1 18 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 19.5v-15A2.5 2.5 0 0 1 8.5 2zm3.5 17.2a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM8.6 5.2v11.2h6.8V5.2H8.6z"/></svg>',
+	);
+	return isset($icons[$key]) ? $icons[$key] : '';
+}
+
 function site_lead_channels_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=10">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=11">'
 		.'<section class="site-channels" id="site-lead-channels">'
 		.'<div class="site-channels-inner">'
 		.'<span class="site-channels-kicker">Where leads come from</span>'
@@ -1051,7 +1063,7 @@ function site_lead_channels_html()
 	foreach (site_lead_channels() as $ch) {
 		$url = htmlspecialchars(base_url($ch[4]), ENT_QUOTES, 'UTF-8');
 		$html .= '<a class="site-channel site-channel-'.$ch[0].'" href="'.$url.'">'
-			.'<span class="site-channel-icon" aria-hidden="true"></span>'
+			.'<span class="site-channel-icon" aria-hidden="true">'.site_channel_icon_svg($ch[0]).'</span>'
 			.'<b>'.htmlspecialchars($ch[1], ENT_QUOTES, 'UTF-8').'</b>'
 			.'<small>'.htmlspecialchars($ch[2], ENT_QUOTES, 'UTF-8').'</small>'
 			.'<p>'.htmlspecialchars($ch[3], ENT_QUOTES, 'UTF-8').'</p>'
@@ -1076,7 +1088,7 @@ function inject_lead_channels($html)
 function site_use_cases_html()
 {
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
-	$html = '<link rel="stylesheet" href="'.$css.'?v=10">'
+	$html = '<link rel="stylesheet" href="'.$css.'?v=11">'
 		.'<div class="site-cases" id="site-use-cases">';
 	foreach (site_use_cases() as $case) {
 		$url = htmlspecialchars(base_url('service/'.$case['slug']), ENT_QUOTES, 'UTF-8');
