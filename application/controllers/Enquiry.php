@@ -5,11 +5,11 @@ class Enquiry extends CI_Controller {
 
 	public function index()
 	{
-		$this->output->set_output(render_template('contact.html', 'enquiry'));
+		redirect('contact');
 	}
 
 	public function save()
 	{
-		save_site_enquiry('enquiry');
+		redirect('contact');
 	}
 }

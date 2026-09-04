@@ -40,13 +40,11 @@ function site_menu_items($current = 'home')
 	$about_cls = ($current === 'about') ? $current_cls : '';
 	$service_cls = ($current === 'service') ? $current_cls : '';
 	$contact_cls = ($current === 'contact') ? $current_cls : '';
-	$enquiry_cls = ($current === 'enquiry') ? $current_cls : '';
 
 	$html  = '<li class="menu-item menu-item-home'.$home_cls.'"><a href="'.htmlspecialchars($base, ENT_QUOTES, 'UTF-8').'"'.($current === 'home' ? ' aria-current="page"' : '').'>Home</a></li>';
 	$html .= '<li class="menu-item'.$about_cls.'"><a href="'.htmlspecialchars($base.'about', ENT_QUOTES, 'UTF-8').'"'.($current === 'about' ? ' aria-current="page"' : '').'>About</a></li>';
 	$html .= '<li class="menu-item'.$service_cls.'"><a href="'.htmlspecialchars($base.'service', ENT_QUOTES, 'UTF-8').'"'.($current === 'service' ? ' aria-current="page"' : '').'>Service</a></li>';
 	$html .= '<li class="menu-item'.$contact_cls.'"><a href="'.htmlspecialchars($base.'contact', ENT_QUOTES, 'UTF-8').'"'.($current === 'contact' ? ' aria-current="page"' : '').'>Contact</a></li>';
-	$html .= '<li class="menu-item'.$enquiry_cls.'"><a href="'.htmlspecialchars($base.'enquiry', ENT_QUOTES, 'UTF-8').'"'.($current === 'enquiry' ? ' aria-current="page"' : '').'>Enquiry</a></li>';
 
 	return $html;
 }
@@ -57,7 +55,6 @@ function site_footer_quick_links()
 	return '<li class="menu-item"><a href="'.htmlspecialchars($base.'about', ENT_QUOTES, 'UTF-8').'">About</a></li>'
 		.'<li class="menu-item"><a href="'.htmlspecialchars($base.'service', ENT_QUOTES, 'UTF-8').'">Service</a></li>'
 		.'<li class="menu-item"><a href="'.htmlspecialchars($base.'contact', ENT_QUOTES, 'UTF-8').'">Contact</a></li>'
-		.'<li class="menu-item"><a href="'.htmlspecialchars($base.'enquiry', ENT_QUOTES, 'UTF-8').'">Enquiry</a></li>'
 		.'<li class="menu-item"><a href="'.htmlspecialchars($base.'privacy', ENT_QUOTES, 'UTF-8').'">Privacy Policy</a></li>'
 		.'<li class="menu-item"><a href="'.htmlspecialchars($base.'terms', ENT_QUOTES, 'UTF-8').'">Terms and Conditions</a></li>';
 }
@@ -445,7 +442,7 @@ function apply_business_copy($html, $slug = '')
 		base_url('service/actionable-insights'),
 		base_url('service/ai-for-cloud-services'),
 		'<a class="slider-btn capa__more tp-el-btn"  href="'.htmlspecialchars(base_url('service'), ENT_QUOTES, 'UTF-8').'">',
-		'<a class="cmn--btn border__btn" href="'.htmlspecialchars(base_url('enquiry'), ENT_QUOTES, 'UTF-8').'">',
+		'<a class="cmn--btn border__btn" href="'.htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8').'">',
 	);
 
 	$html = str_replace($more_search, $more_replace, $html);
@@ -453,7 +450,7 @@ function apply_business_copy($html, $slug = '')
 	$faq_answers = array(
 		'WhatsApp, Instagram, Facebook, YouTube comments, website chat and voice — one AI layer that captures leads, answers FAQs and updates your CRM.',
 		'Yes. The AI can qualify, share catalogues, collect payments and book slots, then update your CRM.',
-		'Share your industry and monthly lead volume on Enquiry. We connect WhatsApp and go live. No credit card is required to start.',
+		'Share your industry and monthly lead volume on Contact. We connect WhatsApp and go live. No credit card is required to start.',
 		'No. Use the no-code Automation Builder. APIs and webhooks are available if your team wants custom integrations.',
 		'WhatsApp/Meta messaging, AI usage, voice minutes and payment gateway fees may be billed separately where applicable.',
 		'The AI handles repetitive questions and qualification. Anything complex, angry or high-value is handed to your team with full chat context.',
@@ -693,8 +690,6 @@ function rewrite_template_html($html, $current = 'home')
 	$html = preg_replace('#(?:\.\./)*about/index\.html#i', $base.'about', $html);
 	$html = preg_replace('#(?:\.\./)*contact/index\.html#i', $base.'contact', $html);
 
-	$html = str_replace($base.'contact" class="tp-el-btn', $base.'enquiry" class="tp-el-btn', $html);
-
 	$html = replace_ul_inner_by_id($html, 'primary-menu-single1', site_menu_items($current));
 	$html = replace_ul_inner_by_id($html, 'menu-main-menu', site_menu_items($current));
 	$html = replace_ul_inner_by_id($html, 'menu-quick-links', site_footer_quick_links());
@@ -771,7 +766,7 @@ function apply_site_brand($html)
 
 function site_how_it_works_html()
 {
-	$enquiry = htmlspecialchars(base_url('enquiry'), ENT_QUOTES, 'UTF-8');
+	$enquiry = htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8');
 	$css = htmlspecialchars(base_url('assets/website/site-how-it-works.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-how-it-works.js'), ENT_QUOTES, 'UTF-8');
 
@@ -818,7 +813,7 @@ function site_how_it_works_html()
 
 function site_business_story_html()
 {
-	$enquiry = htmlspecialchars(base_url('enquiry'), ENT_QUOTES, 'UTF-8');
+	$enquiry = htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8');
 	$css = htmlspecialchars(base_url('assets/website/site-business-story.css'), ENT_QUOTES, 'UTF-8');
 	$js = htmlspecialchars(base_url('assets/website/site-business-story.js'), ENT_QUOTES, 'UTF-8');
 
@@ -904,7 +899,7 @@ function site_sale_path_steps()
 
 function site_sale_path_html()
 {
-	$enquiry = htmlspecialchars(base_url('enquiry'), ENT_QUOTES, 'UTF-8');
+	$enquiry = htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8');
 	$robot = htmlspecialchars(base_url('assets/website/wp-content/uploads/2024/06/feature.png'), ENT_QUOTES, 'UTF-8');
 	$steps = site_sale_path_steps();
 	$left = array_slice($steps, 0, 3);
@@ -1026,7 +1021,7 @@ function apply_page_chrome($html, $title, $content)
 
 function site_about_content_html()
 {
-	$enquiry = htmlspecialchars(base_url('enquiry'), ENT_QUOTES, 'UTF-8');
+	$enquiry = htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8');
 	$service = htmlspecialchars(base_url('service'), ENT_QUOTES, 'UTF-8');
 	$img = htmlspecialchars(base_url('assets/website/wp-content/uploads/2024/06/about1-1.png'), ENT_QUOTES, 'UTF-8');
 
@@ -1058,19 +1053,7 @@ function site_about_content_html()
 
 function site_contact_form_html($type = 'contact')
 {
-	$is_enquiry = ($type === 'enquiry');
-	$action = htmlspecialchars(base_url($is_enquiry ? 'enquiry/save' : 'contact/save'), ENT_QUOTES, 'UTF-8');
-	$other = htmlspecialchars(base_url($is_enquiry ? 'contact' : 'enquiry'), ENT_QUOTES, 'UTF-8');
-	$title = $is_enquiry ? 'Send an Enquiry' : 'Get in touch';
-	$kicker = $is_enquiry ? 'Start Free' : 'Contact';
-	$intro = $is_enquiry
-		? 'Share your business and what you want the AI to handle. We reply within 24 hours. No credit card to start.'
-		: 'Questions about the platform, pricing or a demo — send a message and our team will reply.';
-	$button = $is_enquiry ? 'Submit Enquiry' : 'Send Message';
-	$aside_title = $is_enquiry ? 'Tell us about your shop' : 'Talk to the team';
-	$aside_text = $is_enquiry
-		? 'WhatsApp volume, industry and what you sell is enough. We will suggest the right plan.'
-		: 'Prefer a walkthrough? Use Enquiry and we will set up a short demo.';
+	$action = htmlspecialchars(base_url('contact/save'), ENT_QUOTES, 'UTF-8');
 
 	$notice = '';
 	$sent = isset($_GET['sent']) ? (string) $_GET['sent'] : '';
@@ -1080,42 +1063,31 @@ function site_contact_form_html($type = 'contact')
 		$notice = '<div class="site-form-err site-form-full">Please fill name, a valid email and a message, then try again.</div>';
 	}
 
-	$extra = '';
-	if ($is_enquiry) {
-		$extra = '<div class="site-form-full"><label for="site-business">Business name</label><input id="site-business" name="business" type="text" maxlength="150"></div>'
-			.'<div><label for="site-industry">Industry</label><select id="site-industry" name="industry">'
-			.'<option value="">Select</option>'
-			.'<option>Saree / boutique</option><option>Ecommerce / D2C</option><option>Clinic / services</option>'
-			.'<option>Education</option><option>Real estate</option><option>Other</option>'
-			.'</select></div>'
-			.'<div><label for="site-subject">What do you need?</label><input id="site-subject" name="subject" type="text" maxlength="200" placeholder="WhatsApp AI, payments, demo…"></div>';
-	} else {
-		$extra = '<div class="site-form-full"><label for="site-subject">Subject</label><input id="site-subject" name="subject" type="text" maxlength="200"></div>';
-	}
-
-	$switch = $is_enquiry
-		? '<a class="site-page-btn site-page-btn-ghost" href="'.$other.'">Contact support</a>'
-		: '<a class="site-page-btn site-page-btn-ghost" href="'.$other.'">Start Free enquiry</a>';
-
 	return '<section class="site-page"><div class="site-page-wrap"><div class="site-page-split">'
 		.'<aside class="site-page-aside"><div class="site-page-info">'
-		.'<span class="site-page-kicker">'.$kicker.'</span>'
-		.'<h3>'.$aside_title.'</h3>'
-		.'<p>'.$aside_text.'</p>'
+		.'<span class="site-page-kicker">Contact</span>'
+		.'<h3>Talk to the team</h3>'
+		.'<p>Questions, a demo, or getting started — send a message. We reply within 24 hours. No credit card to start.</p>'
 		.'<dl>'
 		.'<div><dt>Reply time</dt><dd>Within 24 hours</dd></div>'
 		.'<div><dt>Channels</dt><dd>WhatsApp · Instagram · Facebook · Voice</dd></div>'
 		.'<div><dt>Plans</dt><dd>Starter ₹999 · Growth ₹2,999 · Business ₹5,999</dd></div>'
-		.'</dl></div>'.$switch.'</aside>'
+		.'</dl></div></aside>'
 		.'<div class="site-page-panel">'
-		.'<h2>'.$title.'</h2><p class="site-page-intro">'.$intro.'</p>'
+		.'<h2>Get in touch</h2><p class="site-page-intro">Share your business and what you want the AI to handle.</p>'
 		.'<form class="site-form" method="post" action="'.$action.'">'.$notice
 		.'<div><label for="site-name">Name</label><input id="site-name" name="name" type="text" required maxlength="150"></div>'
 		.'<div><label for="site-email">Email</label><input id="site-email" name="email" type="email" required maxlength="150"></div>'
 		.'<div class="site-form-full"><label for="site-phone">Phone</label><input id="site-phone" name="phone" type="tel" maxlength="40"></div>'
-		.$extra
+		.'<div class="site-form-full"><label for="site-business">Business name</label><input id="site-business" name="business" type="text" maxlength="150"></div>'
+		.'<div><label for="site-industry">Industry</label><select id="site-industry" name="industry">'
+		.'<option value="">Select</option>'
+		.'<option>Saree / boutique</option><option>Ecommerce / D2C</option><option>Clinic / services</option>'
+		.'<option>Education</option><option>Real estate</option><option>Other</option>'
+		.'</select></div>'
+		.'<div><label for="site-subject">Subject</label><input id="site-subject" name="subject" type="text" maxlength="200"></div>'
 		.'<div class="site-form-full"><label for="site-message">Message</label><textarea id="site-message" name="message" rows="6" required></textarea></div>'
-		.'<button type="submit">'.$button.'</button>'
+		.'<button type="submit">Send Message</button>'
 		.'</form></div></div></div></section>';
 }
 
@@ -1134,7 +1106,7 @@ function save_site_enquiry($source = 'web')
 		$message = "Business: {$business}\n".($industry !== '' ? "Industry: {$industry}\n" : '')."\n".$message;
 	}
 
-	$redirect = ($source === 'enquiry') ? 'enquiry' : 'contact';
+	$redirect = 'contact';
 	if ($name === '' || $message === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
 		redirect($redirect.'?sent=0');
 		return;
@@ -1164,7 +1136,7 @@ function save_site_enquiry($source = 'web')
 function site_legal_content_html($type)
 {
 	$contact = htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8');
-	$enquiry = htmlspecialchars(base_url('enquiry'), ENT_QUOTES, 'UTF-8');
+	$enquiry = htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8');
 	$privacy = htmlspecialchars(base_url('privacy'), ENT_QUOTES, 'UTF-8');
 	$terms = htmlspecialchars(base_url('terms'), ENT_QUOTES, 'UTF-8');
 
@@ -1195,7 +1167,7 @@ function site_legal_content_html($type)
 			.'<h2>9. Changes</h2>'
 			.'<p>We may update this policy. The “Last updated” date at the top will change when we do. Continued use of the site or service after an update means you accept the revised policy.</p>'
 			.'<h2>10. Contact</h2>'
-			.'<p>For privacy questions, use the <a href="'.$contact.'">Contact</a> page or send an <a href="'.$enquiry.'">Enquiry</a>. Related terms are in our <a href="'.$terms.'">Terms and Conditions</a>.</p>';
+			.'<p>For privacy questions, use the <a href="'.$contact.'">Contact</a> page. Related terms are in our <a href="'.$terms.'">Terms and Conditions</a>.</p>';
 	} else {
 		$body = '<p>Last updated: 4 September 2026</p>'
 			.'<p>These Terms and Conditions govern your use of this website and our WhatsApp, social media, AI chatbot, voice and automation platform. By using the site or starting a plan, you agree to these terms.</p>'
@@ -1227,7 +1199,7 @@ function site_legal_content_html($type)
 			.'<h2>11. Changes</h2>'
 			.'<p>We may update these terms. The “Last updated” date will change when we do. Continued use after an update means you accept the revised terms.</p>'
 			.'<h2>12. Contact</h2>'
-			.'<p>Questions about these terms can be sent through <a href="'.$contact.'">Contact</a> or <a href="'.$enquiry.'">Enquiry</a>.</p>';
+			.'<p>Questions about these terms can be sent through <a href="'.$contact.'">Contact</a>.</p>';
 	}
 
 	return '<section class="site-page"><div class="site-legal-page"><div class="site-legal-inner">'.$body.'</div></div></section>';
