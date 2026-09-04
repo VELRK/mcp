@@ -658,10 +658,12 @@ function rewrite_template_html($html, $current = 'home')
 	// Drop WP speculation rules (paths break after rewrite)
 	$html = preg_replace('#<script type="speculationrules">.*?</script>#is', '', $html);
 
-	// Drop emoji loader (wp-emoji-release.min.js was not mirrored; uses wordpress.org CDN in settings)
-	$html = preg_replace('#<script id="wp-emoji-settings"[^>]*>.*?</script>#is', '', $html);
-	$html = preg_replace('#<script[^>]*id="wp-emoji-loader-js"[^>]*>.*?</script>#is', '', $html);
-	$html = preg_replace('#<script[^>]*>.*?_wpemojiSettings.*?</script>#is', '', $html);
+	// Drop emoji loader pair only (never match arbitrary <script>…_wpemojiSettings — that ate the whole page)
+	$html = preg_replace(
+		'#<script id="wp-emoji-settings"[^>]*>.*?</script>\s*<script type="module">.*?</script>#is',
+		'',
+		$html
+	);
 
 	// Absolute mirrored host → local assets
 	$html = preg_replace('#https?://softivuslab\.com/wp/intellicon/(wp-content/)#i', $assets.'$1', $html);
