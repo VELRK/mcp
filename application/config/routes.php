@@ -403,17 +403,27 @@ $route['invoice/download/(:num)/(:any)'] = 'Invoice/download/$1/$2';
 $route['invoice/view/(:num)/(:any)'] = 'Invoice/view/$1/$2';
 // Customers
 $route['shopkart/customers'] = 'admin/Customers/index';
+$route['shopkart/customers/add'] = 'admin/Customers/add';
+$route['shopkart/customers/store'] = 'admin/Customers/store';
 $route['shopkart/customers/view/(:num)'] = 'admin/Customers/view/$1';
 $route['shopkart/customers/edit/(:num)'] = 'admin/Customers/edit/$1';
 $route['shopkart/customers/update/(:num)'] = 'admin/Customers/update/$1';
 $route['shopkart/customers/toggle/(:num)'] = 'admin/Customers/toggle/$1';
 $route['shopkart/customers/delete/(:num)'] = 'admin/Customers/delete/$1';
+$route['shopkart/customers/export'] = 'admin/Customers/export';
+$route['shopkart/customers/import'] = 'admin/Customers/import';
+$route['shopkart/customers/import_template'] = 'admin/Customers/import_template';
 $route['admin/customers'] = 'admin/Customers/index';
+$route['admin/customers/add'] = 'admin/Customers/add';
+$route['admin/customers/store'] = 'admin/Customers/store';
 $route['admin/customers/view/(:num)'] = 'admin/Customers/view/$1';
 $route['admin/customers/edit/(:num)'] = 'admin/Customers/edit/$1';
 $route['admin/customers/update/(:num)'] = 'admin/Customers/update/$1';
 $route['admin/customers/toggle/(:num)'] = 'admin/Customers/toggle/$1';
 $route['admin/customers/delete/(:num)'] = 'admin/Customers/delete/$1';
+$route['admin/customers/export'] = 'admin/Customers/export';
+$route['admin/customers/import'] = 'admin/Customers/import';
+$route['admin/customers/import_template'] = 'admin/Customers/import_template';
 // Promo
 $route['shopkart/promo'] = 'admin/Promo/index';
 $route['shopkart/promo/store'] = 'admin/Promo/store';

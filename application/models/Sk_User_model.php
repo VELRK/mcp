@@ -369,18 +369,80 @@ class Sk_User_model extends CI_Model {
     }
 
     // Admin
-    public function get_all_admin($limit, $offset, $search = '') {
-        if ($search) {
-            $this->db->group_start()->like('name', $search)->or_like('email', $search)->group_end();
+    public function get_all_admin($limit, $offset, $filters = []) {
+        if (!is_array($filters)) {
+            $filters = ['search' => (string)$filters];
         }
-        return $this->db->order_by('created_at', 'DESC')->limit($limit, $offset)->get('users')->result_array();
+        $this->_apply_admin_filters($filters);
+        return $this->db->order_by('created_at', 'DESC')
+            ->limit((int)$limit, (int)$offset)
+            ->get('users')
+            ->result_array();
     }
 
-    public function count_admin($search = '') {
-        if ($search) {
-            $this->db->group_start()->like('name', $search)->or_like('email', $search)->group_end();
+    public function count_admin($filters = []) {
+        if (!is_array($filters)) {
+            $filters = ['search' => (string)$filters];
         }
+        $this->_apply_admin_filters($filters);
         return $this->db->count_all_results('users');
+    }
+
+    public function export_rows(array $filters = []): array {
+        $this->_apply_admin_filters($filters);
+        return $this->db->order_by('created_at', 'DESC')
+            ->limit(50000, 0)
+            ->get('users')
+            ->result_array();
+    }
+
+    public function status_counts(): array {
+        $this->_apply_admin_filters([]);
+        $total = (int)$this->db->count_all_results('users');
+
+        $this->_apply_admin_filters(['status' => 1]);
+        $active = (int)$this->db->count_all_results('users');
+
+        $this->_apply_admin_filters(['status' => 0]);
+        $blocked = (int)$this->db->count_all_results('users');
+
+        return [
+            'total'   => $total,
+            'active'  => $active,
+            'blocked' => $blocked,
+        ];
+    }
+
+    protected function _apply_admin_filters(array $filters): void {
+        $search = trim((string)($filters['search'] ?? ''));
+        if ($search !== '') {
+            $this->db->group_start()
+                ->like('name', $search)
+                ->or_like('email', $search)
+                ->or_like('phone', $search)
+                ->group_end();
+        }
+
+        if (isset($filters['status']) && $filters['status'] !== '' && $filters['status'] !== null) {
+            $this->db->where('status', (int)$filters['status']);
+        }
+
+        $dateFrom = trim((string)($filters['date_from'] ?? ''));
+        if ($dateFrom !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $this->db->where('DATE(created_at) >=', $dateFrom);
+        }
+
+        $dateTo = trim((string)($filters['date_to'] ?? ''));
+        if ($dateTo !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $this->db->where('DATE(created_at) <=', $dateTo);
+        }
+
+        if ($this->db->field_exists('deleted_at', 'users')) {
+            $this->db->group_start()
+                ->where('deleted_at IS NULL', null, false)
+                ->or_where('deleted_at', '')
+                ->group_end();
+        }
     }
 
     public function total_users()     { return $this->db->count_all('users'); }
