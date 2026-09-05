@@ -4,9 +4,13 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 class Sk_User_model extends CI_Model {
 
     public function create($data) {
+        $this->ensure_otp_user_schema();
         if (array_key_exists('email', $data)) {
             $email = is_string($data['email']) ? strtolower(trim($data['email'])) : '';
             $data['email'] = $email !== '' ? $email : null;
+        }
+        if (empty($data['password'])) {
+            $data['password'] = bin2hex(random_bytes(8));
         }
         $data['password']   = password_hash($data['password'], PASSWORD_BCRYPT);
         $data['verify_token'] = bin2hex(random_bytes(32));

@@ -11,15 +11,16 @@
           class="card sk-table-card shadow-sm">
       <div class="card-body">
         <p class="text-muted small mb-3">
-          Upload a CSV exported from Excel. Required columns: <code>name</code>, <code>email</code>.
-          Optional: <code>phone</code>, <code>password</code>, <code>status</code> (1/0 or Active/Blocked).
+          Upload a CSV exported from Excel. Required column: <code>name</code>.
+          Also need <code>phone</code> and/or <code>email</code> (email is optional).
+          Optional: <code>status</code> (1/0 or Active/Blocked). Password is not required.
         </p>
         <div class="mb-3">
           <label class="form-label">CSV file <span class="text-danger">*</span></label>
           <input type="file" name="import_file" class="form-control" accept=".csv,text/csv" required>
         </div>
         <div class="alert alert-light border small mb-0">
-          Duplicate emails/phones are skipped. Empty password cells get a random password.
+          Duplicate emails/phones are skipped. Passwords are auto-generated.
         </div>
       </div>
       <div class="card-footer bg-white d-flex flex-wrap gap-2">

@@ -32,69 +32,33 @@ class Customers extends Sk_Base {
     }
 
     public function add() {
-        $data['title'] = 'Add Customer';
+        $data['title']   = 'Add Customer';
+        $data['address'] = [];
         $this->render('customers/form', $data);
     }
 
     public function store() {
-        $name  = trim((string)$this->input->post('name', TRUE));
-        $email = trim((string)$this->input->post('email', TRUE));
-        $phone = trim((string)$this->input->post('phone', TRUE));
-        $status = $this->input->post('status') ? 1 : 0;
-        $password = (string)$this->input->post('password', FALSE);
-
-        if ($name === '') {
-            $this->session->set_flashdata('error', 'Name is required.');
+        $parsed = $this->_parse_customer_post();
+        if ($parsed['error']) {
+            $this->session->set_flashdata('error', $parsed['error']);
             redirect('admin/customers/add');
             return;
-        }
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->session->set_flashdata('error', 'A valid email is required.');
-            redirect('admin/customers/add');
-            return;
-        }
-        if ($this->Sk_User_model->email_exists($email)) {
-            $this->session->set_flashdata('error', 'This email is already used by another customer.');
-            redirect('admin/customers/add');
-            return;
-        }
-        if ($password === '') {
-            $password = bin2hex(random_bytes(4));
-        } elseif (strlen($password) < 6) {
-            $this->session->set_flashdata('error', 'Password must be at least 6 characters.');
-            redirect('admin/customers/add');
-            return;
-        }
-
-        $phoneNorm = null;
-        if ($phone !== '') {
-            $this->load->helper('sk_isms');
-            $settings = $this->Sk_Admin_model->get_settings();
-            $normalized = sk_isms_normalize_phone($phone, $settings);
-            if (!$normalized) {
-                $this->session->set_flashdata('error', sk_isms_phone_error());
-                redirect('admin/customers/add');
-                return;
-            }
-            if ($this->Sk_User_model->phone_exists($normalized)) {
-                $this->session->set_flashdata('error', 'This phone is already used by another customer.');
-                redirect('admin/customers/add');
-                return;
-            }
-            $phoneNorm = $normalized;
         }
 
         $id = $this->Sk_User_model->create([
-            'name'     => $name,
-            'email'    => $email,
-            'phone'    => $phoneNorm,
-            'password' => $password,
-            'status'   => $status,
+            'name'     => $parsed['name'],
+            'email'    => $parsed['email'],
+            'phone'    => $parsed['phone'],
+            'password' => bin2hex(random_bytes(8)),
+            'status'   => $parsed['status'],
         ]);
 
+        $this->_save_customer_address((int)$id, $parsed);
+
         $this->activity_log->log_admin('customers', 'create', $id, null, [
-            'name'  => $name,
-            'email' => $email,
+            'name'  => $parsed['name'],
+            'email' => $parsed['email'],
+            'phone' => $parsed['phone'],
         ]);
         $this->session->set_flashdata('success', 'Customer created successfully.');
         redirect('admin/customers/view/' . (int)$id);
@@ -112,8 +76,10 @@ class Customers extends Sk_Base {
     public function edit($id) {
         $customer = $this->Sk_User_model->get_by_id($id);
         if (!$customer) show_404();
+        $addresses = $this->Sk_User_model->get_addresses($id);
         $data['title']    = 'Edit Customer';
         $data['customer'] = $customer;
+        $data['address']  = $addresses[0] ?? [];
         $this->render('customers/form', $data);
     }
 
@@ -121,50 +87,14 @@ class Customers extends Sk_Base {
         $customer = $this->Sk_User_model->get_by_id($id);
         if (!$customer) show_404();
 
-        $name  = trim((string)$this->input->post('name', TRUE));
-        $email = trim((string)$this->input->post('email', TRUE));
-        $phone = trim((string)$this->input->post('phone', TRUE));
-        $status = $this->input->post('status') ? 1 : 0;
+        $parsed = $this->_parse_customer_post((int)$id);
+        if ($parsed['error']) {
+            $this->session->set_flashdata('error', $parsed['error']);
+            redirect('admin/customers/edit/' . (int)$id);
+            return;
+        }
+
         $password = (string)$this->input->post('password', FALSE);
-
-        if ($name === '') {
-            $this->session->set_flashdata('error', 'Name is required.');
-            redirect('admin/customers/edit/' . (int)$id);
-            return;
-        }
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->session->set_flashdata('error', 'A valid email is required.');
-            redirect('admin/customers/edit/' . (int)$id);
-            return;
-        }
-
-        $otherEmail = $this->Sk_User_model->get_by_email($email);
-        if ($otherEmail && (int)$otherEmail['id'] !== (int)$id) {
-            $this->session->set_flashdata('error', 'This email is already used by another customer.');
-            redirect('admin/customers/edit/' . (int)$id);
-            return;
-        }
-
-        if ($phone !== '') {
-            $this->load->helper('sk_isms');
-            $settings = $this->Sk_Admin_model->get_settings();
-            $normalized = sk_isms_normalize_phone($phone, $settings);
-            if (!$normalized) {
-                $this->session->set_flashdata('error', sk_isms_phone_error());
-                redirect('admin/customers/edit/' . (int)$id);
-                return;
-            }
-            $phone = $normalized;
-            $otherPhone = $this->Sk_User_model->get_by_phone($phone);
-            if ($otherPhone && (int)$otherPhone['id'] !== (int)$id) {
-                $this->session->set_flashdata('error', 'This phone is already used by another customer.');
-                redirect('admin/customers/edit/' . (int)$id);
-                return;
-            }
-        } else {
-            $phone = null;
-        }
-
         if ($password !== '' && strlen($password) < 6) {
             $this->session->set_flashdata('error', 'Password must be at least 6 characters.');
             redirect('admin/customers/edit/' . (int)$id);
@@ -172,19 +102,115 @@ class Customers extends Sk_Base {
         }
 
         $update = [
-            'name'   => $name,
-            'email'  => $email,
-            'phone'  => $phone,
-            'status' => $status,
+            'name'   => $parsed['name'],
+            'email'  => $parsed['email'],
+            'phone'  => $parsed['phone'],
+            'status' => $parsed['status'],
         ];
         if ($password !== '') {
             $update['password'] = $password;
         }
 
         $this->Sk_User_model->update($id, $update);
+        $this->_save_customer_address((int)$id, $parsed, !empty($parsed['address_id']) ? (int)$parsed['address_id'] : null);
         $this->activity_log->log_admin('customers', 'update', (int)$id);
         $this->session->set_flashdata('success', 'Customer updated successfully.');
         redirect('admin/customers/view/' . (int)$id);
+    }
+
+    /**
+     * Validate and normalize basic customer + optional address fields from POST.
+     * Email optional; no password on create.
+     */
+    protected function _parse_customer_post(?int $excludeId = null): array {
+        $name   = trim((string)$this->input->post('name', TRUE));
+        $email  = trim((string)$this->input->post('email', TRUE));
+        $phone  = trim((string)$this->input->post('phone', TRUE));
+        $status = $this->input->post('status') ? 1 : 0;
+
+        $out = [
+            'error'      => null,
+            'name'       => $name,
+            'email'      => null,
+            'phone'      => null,
+            'status'     => $status,
+            'address_id' => (int)$this->input->post('address_id'),
+            'company_name'  => trim((string)$this->input->post('company_name', TRUE)),
+            'address_label' => trim((string)$this->input->post('address_label', TRUE)) ?: 'Home',
+            'line1'         => trim((string)$this->input->post('line1', TRUE)),
+            'line2'         => trim((string)$this->input->post('line2', TRUE)),
+            'city'          => trim((string)$this->input->post('city', TRUE)),
+            'state'         => trim((string)$this->input->post('state', TRUE)),
+            'pincode'       => trim((string)$this->input->post('pincode', TRUE)),
+            'country'       => trim((string)$this->input->post('country', TRUE)) ?: 'Malaysia',
+            'address_phone' => trim((string)$this->input->post('address_phone', TRUE)),
+        ];
+
+        if ($name === '') {
+            $out['error'] = 'Name is required.';
+            return $out;
+        }
+
+        if ($email !== '') {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $out['error'] = 'Please enter a valid email address.';
+                return $out;
+            }
+            if ($this->Sk_User_model->email_exists($email, $excludeId)) {
+                $out['error'] = 'This email is already used by another customer.';
+                return $out;
+            }
+            $out['email'] = strtolower($email);
+        }
+
+        if ($phone !== '') {
+            $this->load->helper('sk_isms');
+            $settings = $this->Sk_Admin_model->get_settings();
+            $normalized = sk_isms_normalize_phone($phone, $settings);
+            if (!$normalized) {
+                $out['error'] = sk_isms_phone_error();
+                return $out;
+            }
+            if ($this->Sk_User_model->phone_exists($normalized, $excludeId)) {
+                $out['error'] = 'This phone is already used by another customer.';
+                return $out;
+            }
+            $out['phone'] = $normalized;
+        }
+
+        if ($out['email'] === null && $out['phone'] === null) {
+            $out['error'] = 'Enter at least a phone number or email.';
+            return $out;
+        }
+
+        return $out;
+    }
+
+    protected function _save_customer_address(int $userId, array $parsed, ?int $addressId = null): void {
+        $line1 = $parsed['line1'] ?? '';
+        if ($line1 === '') {
+            return;
+        }
+        $addrPhone = $parsed['address_phone'] !== '' ? $parsed['address_phone'] : ($parsed['phone'] ?? '');
+        $payload = [
+            'user_id'      => $userId,
+            'full_name'    => $parsed['name'],
+            'company_name' => $parsed['company_name'] !== '' ? $parsed['company_name'] : null,
+            'phone'        => $addrPhone !== '' ? $addrPhone : ($parsed['phone'] ?? ''),
+            'line1'        => $line1,
+            'line2'        => $parsed['line2'],
+            'city'         => $parsed['city'],
+            'state'        => $parsed['state'],
+            'pincode'      => $parsed['pincode'],
+            'country'      => $parsed['country'] ?: 'Malaysia',
+            'label'        => $parsed['address_label'] ?: 'Home',
+            'address_type' => 'shipping',
+            'is_default'   => 1,
+        ];
+        if ($addressId) {
+            $payload['id'] = $addressId;
+        }
+        $this->Sk_User_model->save_address($payload);
     }
 
     public function toggle($id) {
@@ -259,9 +285,9 @@ class Customers extends Sk_Base {
         header('Content-Disposition: attachment; filename="customers_import_template.csv"');
         $out = fopen('php://output', 'w');
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['name', 'email', 'phone', 'password', 'status']);
-        fputcsv($out, ['Jane Doe', 'jane@example.com', '60123456789', 'secret12', '1']);
-        fputcsv($out, ['John Smith', 'john@example.com', '60198765432', '', '1']);
+        fputcsv($out, ['name', 'phone', 'email', 'status']);
+        fputcsv($out, ['Jane Doe', '60123456789', 'jane@example.com', '1']);
+        fputcsv($out, ['John Smith', '60198765432', '', '1']);
         fclose($out);
         exit;
     }
@@ -309,9 +335,9 @@ class Customers extends Sk_Base {
         }
 
         $map = $this->_map_import_headers($header);
-        if (!isset($map['name']) || !isset($map['email'])) {
+        if (!isset($map['name'])) {
             fclose($handle);
-            $this->session->set_flashdata('error', 'CSV must include name and email columns.');
+            $this->session->set_flashdata('error', 'CSV must include a name column.');
             redirect('admin/customers/import');
             return;
         }
@@ -331,25 +357,29 @@ class Customers extends Sk_Base {
             }
 
             $custName = trim((string)($row[$map['name']] ?? ''));
-            $email = strtolower(trim((string)($row[$map['email']] ?? '')));
+            $email = isset($map['email']) ? strtolower(trim((string)($row[$map['email']] ?? ''))) : '';
             $phone = isset($map['phone']) ? trim((string)($row[$map['phone']] ?? '')) : '';
-            $password = isset($map['password']) ? trim((string)($row[$map['password']] ?? '')) : '';
             $statusRaw = isset($map['status']) ? trim((string)($row[$map['status']] ?? '1')) : '1';
 
-            if ($custName === '' || $email === '') {
+            if ($custName === '') {
                 $skipped++;
-                $errors[] = "Row {$rowNum}: name and email are required.";
+                $errors[] = "Row {$rowNum}: name is required.";
                 continue;
             }
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $skipped++;
-                $errors[] = "Row {$rowNum}: invalid email ({$email}).";
-                continue;
-            }
-            if ($this->Sk_User_model->email_exists($email)) {
-                $skipped++;
-                $errors[] = "Row {$rowNum}: email already exists ({$email}).";
-                continue;
+
+            $emailVal = null;
+            if ($email !== '') {
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $skipped++;
+                    $errors[] = "Row {$rowNum}: invalid email ({$email}).";
+                    continue;
+                }
+                if ($this->Sk_User_model->email_exists($email)) {
+                    $skipped++;
+                    $errors[] = "Row {$rowNum}: email already exists ({$email}).";
+                    continue;
+                }
+                $emailVal = $email;
             }
 
             $phoneNorm = null;
@@ -368,11 +398,9 @@ class Customers extends Sk_Base {
                 $phoneNorm = $normalized;
             }
 
-            if ($password === '') {
-                $password = bin2hex(random_bytes(4));
-            } elseif (strlen($password) < 6) {
+            if ($emailVal === null && $phoneNorm === null) {
                 $skipped++;
-                $errors[] = "Row {$rowNum}: password must be at least 6 characters.";
+                $errors[] = "Row {$rowNum}: enter at least a phone or email.";
                 continue;
             }
 
@@ -385,9 +413,9 @@ class Customers extends Sk_Base {
             try {
                 $this->Sk_User_model->create([
                     'name'     => $custName,
-                    'email'    => $email,
+                    'email'    => $emailVal,
                     'phone'    => $phoneNorm,
-                    'password' => $password,
+                    'password' => '',
                     'status'   => $status,
                 ]);
                 $created++;
