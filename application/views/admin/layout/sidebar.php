@@ -177,6 +177,24 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
         </a>
       </li>
 
+      <?php if (empty($impersonating) && empty($vendor_logged_in) && ($admin['role'] ?? '') === 'superadmin'): ?>
+      <?php
+        // Show pending WA provisioning requests count to super-admins
+        $this->load->model('Sk_Wa_Provision_request_model');
+        $pending = $this->Sk_Wa_Provision_request_model->get_pending();
+        $pending_count = is_array($pending) ? count($pending) : 0;
+      ?>
+      <li class="nav-item">
+        <a href="<?= site_url('admin/whatsapp_requests/pending') ?>"
+           class="nav-link sk-nav-link <?= sk_active($uri,'whatsapp_requests') ?>">
+          <i class="bi bi-telephone-forward me-2"></i> WA Requests
+          <?php if ($pending_count > 0): ?>
+            <span class="badge bg-danger ms-auto"><?= (int)$pending_count ?></span>
+          <?php endif; ?>
+        </a>
+      </li>
+      <?php endif; ?>
+
       <li class="nav-item mt-3">
         <small class="text-uppercase text-white-50 fw-bold px-2" style="font-size:.65rem;letter-spacing:.08em;">SaaS</small>
       </li>
