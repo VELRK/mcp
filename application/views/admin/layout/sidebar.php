@@ -58,6 +58,11 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
           <i class="bi bi-shield-lock me-2"></i> Change Password
         </a>
       </li>
+      <li class="nav-item">
+        <a href="<?= site_url('admin/whatsapp_requests') ?>" class="nav-link sk-nav-link <?= sk_active($uri,'whatsapp_requests') ?>">
+          <i class="bi bi-telephone-forward me-2"></i> Request WhatsApp Number
+        </a>
+      </li>
       <?php endif; ?>
       <?php endif; ?>
 
@@ -96,61 +101,6 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
         <a href="<?= site_url('shopkart/variant-units') ?>"
            class="nav-link sk-nav-link <?= $uri==='variant-units'?'active':'' ?>">
           <i class="bi bi-rulers me-2"></i> Variant Units
-        </a>
-      </li>
-
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/banners') ?>"
-           class="nav-link sk-nav-link <?= sk_active($uri,'banners') ?>">
-          <i class="bi bi-images me-2"></i> Banners
-        </a>
-      </li>
-
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/wishlists') ?>"
-           class="nav-link sk-nav-link <?= sk_active($uri,'wishlists') ?>">
-          <i class="bi bi-heart me-2"></i> Wishlists
-        </a>
-      </li>
-
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/reviews') ?>"
-           class="nav-link sk-nav-link <?= sk_active($uri,'reviews') ?>">
-          <i class="bi bi-star-half me-2"></i> Reviews
-        </a>
-      </li>
-
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/testimonials') ?>"
-           class="nav-link sk-nav-link <?= sk_active($uri,'testimonials') ?>">
-          <i class="bi bi-chat-quote me-2"></i> Testimonials
-        </a>
-      </li>
-
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/blogs') ?>"
-           class="nav-link sk-nav-link <?= sk_active($uri,'blogs') ?>">
-          <i class="bi bi-journal-richtext me-2"></i> Blogs
-        </a>
-      </li>
-
-      <li class="nav-item">
-        <a href="<?= site_url('shopkart/contacts') ?>"
-           class="nav-link sk-nav-link <?= sk_active($uri,'contacts') ?>">
-          <i class="bi bi-envelope me-2"></i> Contacts
-          <?php
-            $sk_contact_new = 0;
-            try {
-              if ($this->db->table_exists('contact_enquiries') && $this->db->field_exists('status', 'contact_enquiries')) {
-                $sk_contact_new = (int)$this->db->where('status', 'new')->count_all_results('contact_enquiries');
-              }
-            } catch (Throwable $e) {
-              $sk_contact_new = 0;
-            }
-          ?>
-          <?php if ($sk_contact_new > 0): ?>
-          <span class="badge bg-warning text-dark ms-auto"><?= $sk_contact_new ?></span>
-          <?php endif; ?>
         </a>
       </li>
 
@@ -226,6 +176,30 @@ function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
           <i class="bi bi-clipboard-data me-2"></i> WhatsApp Report
         </a>
       </li>
+
+      <li class="nav-item mt-3">
+        <small class="text-uppercase text-white-50 fw-bold px-2" style="font-size:.65rem;letter-spacing:.08em;">SaaS</small>
+      </li>
+      <li class="nav-item">
+        <a href="<?= site_url('admin/saas-billing') ?>"
+           class="nav-link sk-nav-link <?= ($uri === 'saas-billing' && !$this->uri->segment(3)) ? 'active' : '' ?>">
+          <i class="bi bi-receipt me-2"></i> Billing
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="<?= site_url('admin/saas-billing/requests') ?>"
+           class="nav-link sk-nav-link <?= ($uri === 'saas-billing' && $this->uri->segment(3) === 'requests') ? 'active' : '' ?>">
+          <i class="bi bi-cpu me-2"></i> AI Requests
+        </a>
+      </li>
+      <?php if (empty($impersonating) && empty($vendor_logged_in) && ($admin['role'] ?? '') === 'superadmin'): ?>
+      <li class="nav-item">
+        <a href="<?= site_url('admin/saas-billing/amounts') ?>"
+           class="nav-link sk-nav-link <?= ($uri === 'saas-billing' && $this->uri->segment(3) === 'amounts') ? 'active' : '' ?>">
+          <i class="bi bi-tag me-2"></i> Client Amounts
+        </a>
+      </li>
+      <?php endif; ?>
 
       <li class="nav-item mt-3">
         <small class="text-uppercase text-white-50 fw-bold px-2" style="font-size:.65rem;letter-spacing:.08em;">System</small>
