@@ -28,12 +28,15 @@ $requests = $requests ?? [];
           <?php foreach ($requests as $r): ?>
             <tr>
               <td><?= (int)$r['id'] ?></td>
-              <td><?= (int)$r['vendor_id'] ?></td>
+              <td>
+                <a href="<?= site_url('admin/vendors/view/'.(int)$r['vendor_id']) ?>" class="fw-semibold"><?= htmlspecialchars($r['vendor_name'] ?? ('Vendor #'.(int)$r['vendor_id'])) ?></a>
+                <?php if (!empty($r['vendor_email'])): ?><div class="small text-muted"><?= htmlspecialchars($r['vendor_email']) ?></div><?php endif; ?>
+              </td>
               <td><?= htmlspecialchars($r['display_phone'] ?: $r['phone_number_id'] ?: '') ?></td>
               <td><?= htmlspecialchars($r['note'] ?? '') ?></td>
               <td><?= htmlspecialchars($r['created_at']) ?></td>
               <td class="text-end">
-                <a href="<?= site_url('admin/whatsapp_requests/approve/'.$r['id']) ?>" class="btn btn-sm btn-success">Approve</a>
+                <a href="<?= site_url('admin/whatsapp_requests/approve/'.$r['id']) ?>" class="btn btn-sm btn-success">Connect</a>
                 <form method="post" action="<?= site_url('admin/whatsapp_requests/reject/'.$r['id']) ?>" style="display:inline">
                   <button class="btn btn-sm btn-danger" type="submit">Reject</button>
                 </form>

@@ -63,6 +63,13 @@ class Whatsapp_requests extends Sk_Base {
     public function pending() {
         if (!$this->is_super_admin()) show_error('Admin only', 403);
         $rows = $this->Sk_Wa_Provision_request_model->get_pending();
+        // Attach vendor display name for admin convenience
+        foreach ($rows as &$r) {
+            $vendor = $this->Sk_Vendor_model->get_by_id((int)$r['vendor_id'], false);
+            $r['vendor_name'] = $vendor ? (trim((string)($vendor['business_name'] ?? $vendor['owner_name'] ?? '')) ?: 'Vendor #' . (int)$r['vendor_id']) : 'Vendor #' . (int)$r['vendor_id'];
+            $r['vendor_email'] = $vendor['email'] ?? '';
+        }
+        unset($r);
         $data['title'] = 'WhatsApp Provision Requests';
         $data['requests'] = $rows;
         $this->render('whatsapp_requests/pending', $data);
