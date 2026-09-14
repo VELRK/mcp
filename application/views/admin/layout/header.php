@@ -56,6 +56,19 @@ $body_class = trim(
       <?php if (!empty($vendor_logged_in)): ?>
       <span class="badge bg-primary d-none d-md-inline">Vendor</span>
       <?php endif; ?>
+      <?php if (empty($impersonating) && empty($vendor_logged_in) && ($admin['role'] ?? '') === 'superadmin'): ?>
+      <?php
+        $this->load->model('Sk_Wa_Provision_request_model');
+        $pending = $this->Sk_Wa_Provision_request_model->get_pending();
+        $pending_count = is_array($pending) ? count($pending) : 0;
+      ?>
+      <a href="<?= site_url('admin/whatsapp_requests/pending') ?>" class="btn btn-sm btn-outline-light position-relative me-2" title="WA Requests">
+        <i class="bi bi-telephone-forward"></i>
+        <?php if ($pending_count > 0): ?>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?= (int)$pending_count ?></span>
+        <?php endif; ?>
+      </a>
+      <?php endif; ?>
       <span class="text-white-50 small d-none d-md-inline" title="<?= htmlspecialchars($admin['email'] ?? '') ?>">
         <?= htmlspecialchars($admin['name'] ?? 'Admin') ?>
       </span>
