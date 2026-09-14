@@ -221,6 +221,124 @@ class Vendors extends Sk_Base {
         redirect('admin/vendors/view/' . $id);
     }
 
+    public function whatsapp_accounts($vendor_id) {
+        $vendor_id = (int)$vendor_id;
+        if ($vendor_id < 1) {
+            $this->json(['success' => false, 'message' => 'Vendor not found.'], 400);
+            return;
+        }
+
+        $this->load->model('Sk_Vendor_whatsapp_account_model');
+        $accounts = $this->Sk_Vendor_whatsapp_account_model->get_for_vendor($vendor_id);
+        $active = $this->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vendor_id);
+
+        $this->json([
+            'success' => true,
+            'vendor_id' => $vendor_id,
+            'count' => count($accounts),
+            'active' => $active,
+            'accounts' => $accounts,
+        ]);
+    }
+
+    public function add_whatsapp_account($vendor_id) {
+        $vendor_id = (int)$vendor_id;
+        $phoneNumberId = trim((string)$this->input->post('wa_phone_number_id', TRUE));
+        $wabaId = trim((string)$this->input->post('wa_waba_id', TRUE));
+        $displayPhone = trim((string)$this->input->post('wa_display_phone', TRUE));
+        $businessId = trim((string)$this->input->post('wa_business_id', TRUE));
+
+        if ($vendor_id < 1 || ($phoneNumberId === '' && $wabaId === '')) {
+            $this->session->set_flashdata('error', 'Phone Number ID or WABA ID is required.');
+            redirect('admin/vendors/view/' . $vendor_id);
+        }
+
+        $this->load->model('Sk_Vendor_whatsapp_account_model');
+        $result = $this->Sk_Vendor_whatsapp_account_model->save_for_vendor($vendor_id, [
+            'phone_number_id' => $phoneNumberId,
+            'waba_id' => $wabaId,
+            'display_phone' => $displayPhone,
+            'business_id' => $businessId,
+            'status' => 'active',
+            'is_default' => !empty($this->input->post('wa_make_default')) ? 1 : 0,
+        ]);
+
+        if (empty($result['ok'])) {
+            $this->session->set_flashdata('error', $result['message'] ?? 'Could not save WhatsApp account.');
+        } else {
+            $this->session->set_flashdata('success', 'WhatsApp account saved.');
+        }
+
+        redirect('admin/vendors/view/' . $vendor_id);
+    }
+
+    public function set_whatsapp_account_default($vendor_id, $account_id = null) {
+        $vendor_id = (int)$vendor_id;
+        $account_id = (int)($this->input->post('wa_account_id') ?: $account_id);
+        if ($vendor_id < 1 || $account_id < 1) {
+            $this->session->set_flashdata('error', 'Invalid WhatsApp account selected.');
+            redirect('admin/vendors/view/' . $vendor_id);
+        }
+
+        $this->load->model('Sk_Vendor_whatsapp_account_model');
+        $ok = $this->Sk_Vendor_whatsapp_account_model->set_default_for_vendor($vendor_id, $account_id);
+        if (!$ok) {
+            $this->session->set_flashdata('error', 'Could not set the active WhatsApp number.');
+        } else {
+            $this->session->set_flashdata('success', 'Default WhatsApp account updated.');
+        }
+
+        redirect('admin/vendors/view/' . $vendor_id);
+    }
+
+    public function whatsapp_report($account_id = 0) {
+        $account_id = (int)$account_id;
+        if ($account_id < 1) {
+            show_404();
+            return;
+        }
+
+        $this->load->model('Sk_Vendor_whatsapp_message_model');
+        $acc = $this->db->where('id', $account_id)->get('vendor_whatsapp_accounts')->row_array();
+        if (!$acc) show_404();
+
+        $from = $this->input->get('from', TRUE) ?: null;
+        $to = $this->input->get('to', TRUE) ?: null;
+
+        $report = $this->Sk_Vendor_whatsapp_message_model->get_report($account_id, $from, $to);
+
+        $data['title'] = 'WhatsApp Report - ' . ($acc['display_phone'] ?: $acc['phone_number_id']);
+        $data['account'] = $acc;
+        $data['report'] = $report;
+        $data['from'] = $from;
+        $data['to'] = $to;
+
+        // CSV export
+        $export = $this->input->get('export', TRUE);
+        if ($export === 'csv') {
+            header('Content-Type: text/csv');
+            header('Content-Disposition: attachment; filename="wa_report_account_' . $account_id . '_' . date('Y-m-d') . '.csv"');
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['sent_at','recipient','message_type','cost','currency','status','message_id','meta']);
+            foreach ($report['details'] as $d) {
+                fputcsv($out, [
+                    $d['sent_at'] ?? '',
+                    $d['recipient'] ?? '',
+                    $d['message_type'] ?? '',
+                    isset($d['cost']) ? (string)$d['cost'] : '',
+                    $d['currency'] ?? '',
+                    $d['status'] ?? '',
+                    $d['message_id'] ?? '',
+                    $d['meta'] ?? '',
+                ]);
+            }
+            fclose($out);
+            exit;
+        }
+
+        $this->render('vendors/wa_report', $data);
+    }
+
     public function login_as($id) {
         $vendor = $this->Sk_Vendor_model->get_by_id((int)$id, false);
         if (!$vendor || $vendor['status'] !== 'approved') {

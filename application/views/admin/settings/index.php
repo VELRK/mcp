@@ -32,13 +32,16 @@
   <!-- Nav Tabs -->
   <ul class="nav nav-tabs mb-3" id="settingsTabs">
     <li class="nav-item"><button type="button" class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-general">General</button></li>
+    <?php if (empty($vendor_logged_in)): ?>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-whatsapp"><i class="bi bi-whatsapp me-1"></i>Order WhatsApp</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-wacloud"><i class="bi bi-cloud me-1"></i>WhatsApp Cloud</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-invoice">Invoice</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-payment">Payment</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-email">Email</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-sms">SMS OTP (iSMS)</button></li>
+    <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-sql"><i class="bi bi-database me-1"></i>SQL</button></li>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-seo">SEO</button></li>
+    <?php endif; ?>
   </ul>
 
   <div class="tab-content">
@@ -137,7 +140,8 @@
       </div>
     </div>
 
-    <!-- Order WhatsApp (Syncr) — visible to admin + vendor accounts -->
+    <!-- Order WhatsApp (Syncr) -->
+    <?php if (empty($vendor_logged_in)): ?>
     <div class="tab-pane fade" id="tab-whatsapp">
       <div class="card sk-table-card shadow-sm">
         <div class="card-body">
@@ -199,7 +203,10 @@
           <div class="alert alert-info small">
             Webhook URL:
             <code class="user-select-all"><?= site_url('shopkart-api/whatsapp/webhook') ?></code>
-            · Callback fields: <code>messages</code>
+            · Callback fields: <code>messages</code><br>
+            Redirect URI:
+            <code class="user-select-all"><?= site_url('admin/meta/callback') ?></code>
+            · <a href="<?= site_url('admin/meta') ?>">Open Facebook login</a>
           </div>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" name="wa_cloud_enabled" value="1" id="waCloudOn"
@@ -216,6 +223,16 @@
               <label class="form-label">WhatsApp Business Account ID (WABA)</label>
               <input type="text" name="wa_cloud_waba_id" class="form-control font-monospace"
                      value="<?= htmlspecialchars($settings['wa_cloud_waba_id'] ?? '') ?>">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Facebook App ID</label>
+              <input type="text" name="wa_cloud_app_id" class="form-control font-monospace"
+                     value="<?= htmlspecialchars($settings['wa_cloud_app_id'] ?? '') ?>">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Embedded Signup config ID (optional)</label>
+              <input type="text" name="wa_cloud_config_id" class="form-control font-monospace"
+                     value="<?= htmlspecialchars($settings['wa_cloud_config_id'] ?? '') ?>">
             </div>
             <div class="col-12">
               <label class="form-label">Permanent access token</label>
@@ -279,6 +296,36 @@
           <div class="mt-3">
             <a href="<?= site_url('shopkart/whatsapp') ?>" class="btn btn-sm btn-success">Open inbox</a>
             <a href="<?= site_url('shopkart/whatsapp/templates') ?>" class="btn btn-sm btn-outline-success">Templates</a>
+          </div>
+
+          <hr class="my-4">
+          <h6 class="mb-1">SaaS billing</h6>
+          <p class="text-muted small mb-3">
+            AI usage logging and daily bill rollup.
+            Log API: <code class="user-select-all"><?= site_url('shopkart-api/saas/ai-requests') ?></code>
+            · Cron: <code>php index.php cron saas_daily_bills</code>
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">SaaS billing token</label>
+              <input type="password" name="saas_billing_token" class="form-control font-monospace" autocomplete="new-password"
+                     value="" placeholder="<?= !empty($settings['saas_billing_token']) ? '•••• saved (leave blank to keep)' : 'Bearer / X-SaaS-Token (or use MCP token)' ?>">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Default vendor ID</label>
+              <input type="number" name="saas_default_vendor_id" class="form-control" min="1"
+                     value="<?= htmlspecialchars($settings['saas_default_vendor_id'] ?? '') ?>"
+                     placeholder="For WA sync / API fallback">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Cron HTTP key</label>
+              <input type="password" name="saas_cron_key" class="form-control font-monospace" autocomplete="new-password"
+                     value="" placeholder="<?= !empty($settings['saas_cron_key']) ? '•••• saved (leave blank to keep)' : 'Optional ?key= for HTTP cron' ?>">
+            </div>
+          </div>
+          <div class="mt-3">
+            <a href="<?= site_url('admin/saas-billing') ?>" class="btn btn-sm btn-warning">Open SaaS Billing</a>
+            <a href="<?= site_url('admin/saas-billing/amounts') ?>" class="btn btn-sm btn-outline-secondary">Client Amounts</a>
           </div>
         </div>
       </div>
@@ -519,6 +566,64 @@
       </div>
     </div>
 
+    <!-- SQL -->
+    <div class="tab-pane fade" id="tab-sql">
+      <div class="card sk-table-card shadow-sm">
+        <div class="card-body">
+          <div class="alert alert-warning small mb-3">
+            <i class="bi bi-shield-lock me-1"></i>
+            Read-only queries only. The runner allows <strong>SELECT</strong>, <strong>SHOW</strong>, <strong>DESCRIBE</strong>/<strong>DESC</strong>, and <strong>EXPLAIN</strong>.
+            No updates, deletes, or multi-statement execution are permitted.
+          </div>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">MySQL query</label>
+              <textarea name="sql_query" class="form-control font-monospace" rows="8" placeholder="SELECT * FROM whatsapp_logs ORDER BY id DESC LIMIT 20;"><?= htmlspecialchars($sql_query ?? '') ?></textarea>
+              <div class="form-text">Example: <code>SELECT * FROM whatsapp_logs ORDER BY id DESC LIMIT 20;</code></div>
+            </div>
+            <div class="col-12">
+              <button type="button" id="runSqlBtn" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-play-circle me-1"></i> Run SQL
+              </button>
+            </div>
+          </div>
+
+          <div id="sqlResultBox" class="mt-3">
+            <?php if (!empty($sql_error)): ?>
+              <div class="alert alert-danger small mb-0">
+                <?= htmlspecialchars($sql_error) ?>
+              </div>
+            <?php elseif (!empty($sql_result)): ?>
+              <div>
+                <h6 class="mb-2">Query result</h6>
+                <div class="table-responsive">
+                  <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <?php $sqlColumns = array_keys((array) reset($sql_result)); ?>
+                        <?php foreach ($sqlColumns as $column): ?>
+                          <th><?= htmlspecialchars((string) $column) ?></th>
+                        <?php endforeach; ?>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php foreach ($sql_result as $row): ?>
+                        <tr>
+                          <?php foreach ($row as $value): ?>
+                            <td><?= htmlspecialchars((string) ($value ?? '')) ?></td>
+                          <?php endforeach; ?>
+                        </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- SEO -->
     <div class="tab-pane fade" id="tab-seo">
       <div class="card sk-table-card shadow-sm">
@@ -566,6 +671,7 @@
       </div>
     </div>
 
+    <?php endif; ?>
   </div><!-- end tab-content -->
 
   <div class="mt-3">
@@ -580,7 +686,8 @@
 (function () {
   var tabInput = document.getElementById('settingsTabInput');
   var params = new URLSearchParams(window.location.search);
-  var tab = params.get('tab');
+  var preferredTab = params.get('tab') || <?php echo json_encode($active_tab ?? 'general'); ?>;
+  var tab = preferredTab;
   if (tab) {
     var btn = document.querySelector('[data-bs-target="#tab-' + tab + '"]');
     if (btn && window.bootstrap) {
@@ -595,5 +702,76 @@
       tabInput.value = target.replace('#tab-', '');
     });
   });
+
+  var sqlBtn = document.getElementById('runSqlBtn');
+  var sqlBox = document.getElementById('sqlResultBox');
+  var sqlField = document.querySelector('textarea[name="sql_query"]');
+  if (sqlBtn && sqlBox && sqlField) {
+    sqlBtn.addEventListener('click', function () {
+      var query = (sqlField.value || '').trim();
+      if (!query) {
+        sqlBox.innerHTML = '<div class="alert alert-warning small mb-0">Enter a read-only MySQL query to run.</div>';
+        return;
+      }
+
+      sqlBtn.disabled = true;
+      sqlBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Running...';
+      sqlBox.innerHTML = '<div class="text-muted small">Running query...</div>';
+
+      var formData = new FormData();
+      formData.append('sql_query', query);
+
+      fetch('<?= site_url('admin/settings/run_sql') ?>', {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        },
+        body: formData,
+        credentials: 'same-origin'
+      })
+      .then(function (response) {
+        return response.json().then(function (payload) {
+          return { ok: response.ok, payload: payload };
+        });
+      })
+      .then(function (result) {
+        if (!result.ok || !result.payload || !result.payload.success) {
+          var error = result.payload && result.payload.error ? result.payload.error : 'SQL query failed.';
+          sqlBox.innerHTML = '<div class="alert alert-danger small mb-0">' + error + '</div>';
+          return;
+        }
+
+        var payload = result.payload;
+        var rows = Array.isArray(payload.rows) ? payload.rows : [];
+        var columns = Array.isArray(payload.columns) && payload.columns.length ? payload.columns : [];
+        if (!rows.length) {
+          sqlBox.innerHTML = '<div class="alert alert-success small mb-0">Query ran successfully. No rows returned.</div>';
+          return;
+        }
+
+        var thead = '<tr>' + columns.map(function (col) {
+          return '<th>' + String(col) + '</th>';
+        }).join('') + '</tr>';
+
+        var tbody = rows.map(function (row) {
+          var cells = columns.length ? columns.map(function (col) {
+            var value = row[col] === null || row[col] === undefined ? '' : row[col];
+            return '<td>' + String(value) + '</td>';
+          }).join('') : '<td>' + JSON.stringify(row) + '</td>';
+          return '<tr>' + cells + '</tr>';
+        }).join('');
+
+        sqlBox.innerHTML = '<div><h6 class="mb-2">Query result</h6><div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0"><thead class="table-light">' + thead + '</thead><tbody>' + tbody + '</tbody></table></div></div>';
+      })
+      .catch(function () {
+        sqlBox.innerHTML = '<div class="alert alert-danger small mb-0">Query request failed. Please try again.</div>';
+      })
+      .finally(function () {
+        sqlBtn.disabled = false;
+        sqlBtn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Run SQL';
+      });
+    });
+  }
 })();
 </script>

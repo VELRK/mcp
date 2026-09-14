@@ -70,6 +70,62 @@ $status_badges = [
   </div>
 
   <div class="col-lg-4">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">WhatsApp Numbers</div>
+      <div class="card-body">
+        <?php
+        $this->load->model('Sk_Vendor_whatsapp_account_model');
+        $wa_accounts = $this->Sk_Vendor_whatsapp_account_model->get_for_vendor((int)$vendor['id']);
+        ?>
+        <?php if ($wa_accounts): ?>
+          <?php foreach ($wa_accounts as $acc): ?>
+            <div class="border rounded p-2 mb-2 <?= !empty($acc['is_default']) ? 'border-success bg-success-subtle' : '' ?>">
+              <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                <strong><?= htmlspecialchars($acc['display_phone'] ?: 'WhatsApp Number') ?></strong>
+                <div class="d-flex gap-2 align-items-center">
+                  <?php if (!empty($acc['is_default'])): ?><span class="badge bg-success">Active</span><?php endif; ?>
+                  <a href="<?= site_url('admin/vendors/whatsapp_report/'.$acc['id']) ?>" class="btn btn-outline-secondary btn-sm">View report</a>
+                </div>
+              </div>
+              <div class="small text-muted mb-1">Phone ID: <span class="font-monospace text-dark"><?= htmlspecialchars($acc['phone_number_id']) ?></span></div>
+              <div class="small text-muted mb-2">WABA: <span class="font-monospace text-dark"><?= htmlspecialchars($acc['waba_id'] ?: '—') ?></span></div>
+              <form method="post" action="<?= site_url('admin/vendors/set_whatsapp_account_default/'.$vendor['id']) ?>">
+                <input type="hidden" name="wa_account_id" value="<?= (int)$acc['id'] ?>">
+                <button type="submit" class="btn btn-sm <?= !empty($acc['is_default']) ? 'btn-success disabled' : 'btn-outline-success' ?>" <?= !empty($acc['is_default']) ? 'disabled' : '' ?>><?= !empty($acc['is_default']) ? 'Current default' : 'Set as active' ?></button>
+              </form>
+            </div>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <div class="text-muted small">No WhatsApp numbers saved for this vendor yet.</div>
+        <?php endif; ?>
+
+        <hr class="my-3">
+        <form method="post" action="<?= site_url('admin/vendors/add_whatsapp_account/'.$vendor['id']) ?>" class="mt-2">
+          <div class="mb-2">
+            <label class="form-label small">Phone Number ID</label>
+            <input type="text" name="wa_phone_number_id" class="form-control form-control-sm font-monospace" placeholder="WhatsApp phone number id">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">WABA ID</label>
+            <input type="text" name="wa_waba_id" class="form-control form-control-sm font-monospace" placeholder="WhatsApp Business Account id">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Display Phone</label>
+            <input type="text" name="wa_display_phone" class="form-control form-control-sm" placeholder="+1 234 567 8900">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Business ID</label>
+            <input type="text" name="wa_business_id" class="form-control form-control-sm font-monospace" placeholder="Facebook business id">
+          </div>
+          <div class="form-check mb-3">
+            <input type="checkbox" class="form-check-input" id="wa_make_default_<?= (int)$vendor['id'] ?>" name="wa_make_default" value="1">
+            <label class="form-check-label" for="wa_make_default_<?= (int)$vendor['id'] ?>">Set as active/default</label>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">Add WhatsApp Number</button>
+        </form>
+      </div>
+    </div>
+
     <div class="card shadow-sm">
       <div class="card-header fw-semibold">Timeline</div>
       <div class="card-body small">
