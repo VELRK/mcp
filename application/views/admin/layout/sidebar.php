@@ -1,6 +1,8 @@
 <?php
 $uri = $this->uri->segment(2); // e.g. 'dashboard', 'products'
-function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
+if (!function_exists('sk_active')) {
+  function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
+}
 ?>
 <!-- Sidebar -->
 <nav id="sk-sidebar" class="sk-sidebar bg-dark text-white">
