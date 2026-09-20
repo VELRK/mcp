@@ -83,7 +83,8 @@ class Meta extends Sk_Base {
                 $signup['vendor_id'] = (int) $req['vendor_id'];
             }
         }
-        $result = $this->_finish_login($code, $signup);
+        // Browser redirect OAuth → exchange WITH redirect_uri (unlike Embedded Signup popup).
+        $result = $this->_finish_login($code, $signup, true);
         if (!$result['ok']) {
             $this->session->set_flashdata('error', $result['error']);
             redirect($provisionId > 0 ? 'admin/whatsapp_requests/pending' : $this->_after_oauth_path());
@@ -120,7 +121,8 @@ class Meta extends Sk_Base {
     {
         $code = trim((string) $this->input->post('code', FALSE));
         $signup = $this->_signup_from_request();
-        $result = $this->_finish_login($code, $signup);
+        // XCRM: FB.login Embedded Signup → exchange WITHOUT redirect_uri
+        $result = $this->_finish_login($code, $signup, false);
         $this->json($result, $result['ok'] ? 200 : 400);
     }
 
@@ -212,14 +214,18 @@ class Meta extends Sk_Base {
         return array();
     }
 
-    private function _finish_login(string $code, array $signup): array
+    /**
+     * @param bool $withRedirectUri true = browser OAuth redirect flow; false = FB.login Embedded Signup (omit redirect_uri like XCRM).
+     */
+    private function _finish_login(string $code, array $signup, bool $withRedirectUri = false): array
     {
         $settings = $this->Sk_Admin_model->get_settings();
         if ($code === '') {
             return array('ok' => false, 'error' => 'Facebook did not return an auth code.');
         }
 
-        $exchanged = sk_wa_meta_exchange_code($code, sk_wa_meta_redirect_uri(), $settings);
+        $redirectUri = $withRedirectUri ? sk_wa_meta_redirect_uri() : '';
+        $exchanged = sk_wa_meta_exchange_code($code, $redirectUri, $settings);
         if (!$exchanged['ok']) {
             return array('ok' => false, 'error' => 'Token exchange failed: ' . $exchanged['error']);
         }
@@ -241,7 +247,7 @@ class Meta extends Sk_Base {
 
         $phone = $saved['wa_cloud_phone_number_id'] !== '' ? $saved['wa_cloud_phone_number_id'] : 'not returned yet';
         $message = 'Facebook connected. Phone ID: ' . $phone
-            . '. Add this webhook in Meta: ' . sk_wa_meta_webhook_uri();
+            . '. Webhook (Meta WhatsApp → Configuration): ' . sk_wa_meta_webhook_uri();
 
         return array(
             'ok'      => true,

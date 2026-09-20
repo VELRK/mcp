@@ -561,19 +561,29 @@ function sk_wa_meta_graph(string $method, string $path, array $query = [], $body
     );
 }
 
-function sk_wa_meta_exchange_code(string $code, string $redirectUri, ?array $settings = null): array
+/**
+ * Exchange Embedded Signup / OAuth authorization code for an access token.
+ * Node (XCRM): for FB.login() embedded signup, omit redirect_uri entirely.
+ * Only pass redirect_uri for the browser redirect callback flow.
+ */
+function sk_wa_meta_exchange_code(string $code, string $redirectUri = '', ?array $settings = null): array
 {
     $cfg = sk_wa_cloud_config($settings);
     if ($cfg['app_id'] === '' || $cfg['app_secret'] === '') {
         return array('ok' => false, 'error' => 'Save Facebook App ID and App Secret first.', 'data' => array());
     }
 
-    $res = sk_wa_meta_graph('GET', 'oauth/access_token', array(
+    $query = array(
         'client_id'     => $cfg['app_id'],
         'client_secret' => $cfg['app_secret'],
-        'redirect_uri'  => $redirectUri,
         'code'          => $code,
-    ), null, '', $settings);
+    );
+    // Match XCRM-API-SERVER exchangeEmbeddedSignupCode: only append when non-empty.
+    if (trim($redirectUri) !== '') {
+        $query['redirect_uri'] = $redirectUri;
+    }
+
+    $res = sk_wa_meta_graph('GET', 'oauth/access_token', $query, null, '', $settings);
 
     if (!$res['ok'] || empty($res['data']['access_token'])) {
         return array(
@@ -686,6 +696,34 @@ function sk_wa_meta_subscribe_waba(string $wabaId, string $token, ?array $settin
     return sk_wa_meta_graph('POST', $wabaId . '/subscribed_apps', array(), array(), $token, $settings);
 }
 
+function sk_wa_meta_fetch_phones_for_waba(string $wabaId, string $token, ?array $settings = null): array
+{
+    $wabaId = trim($wabaId);
+    if ($wabaId === '' || $token === '') {
+        return array();
+    }
+    $phones = sk_wa_meta_graph('GET', $wabaId . '/phone_numbers', array(
+        'fields' => 'id,display_phone_number,verified_name,quality_rating',
+        'limit'  => 50,
+    ), null, $token, $settings);
+    $list = $phones['data']['data'] ?? array();
+    $out = array();
+    if (!is_array($list)) {
+        return $out;
+    }
+    foreach ($list as $p) {
+        if (empty($p['id'])) {
+            continue;
+        }
+        $out[] = array(
+            'phone_number_id'      => (string)$p['id'],
+            'display_phone_number' => (string)($p['display_phone_number'] ?? ''),
+            'verified_name'        => (string)($p['verified_name'] ?? ''),
+        );
+    }
+    return $out;
+}
+
 function sk_wa_meta_save_connection(array $tokenData, array $assets, array $signup = array()): array
 {
     $CI =& get_instance();
@@ -699,14 +737,40 @@ function sk_wa_meta_save_connection(array $tokenData, array $assets, array $sign
     $expiresIn = (int) ($tokenData['expires_in'] ?? 0);
     $expiresAt = $expiresIn > 0 ? date('Y-m-d H:i:s', time() + $expiresIn) : '';
 
-    $phoneId = trim((string) ($signup['phone_number_id'] ?? $assets['phone_number_id'] ?? ''));
-    if ($phoneId === '' && !empty($signup['phone_number_ids'][0])) {
-        $phoneId = trim((string)$signup['phone_number_ids'][0]);
-    }
-    $wabaId = trim((string) ($signup['waba_id'] ?? $signup['whatsapp_business_account_id'] ?? $assets['waba_id'] ?? ''));
+    // Same as XCRM: prefer WABA from Embedded Signup FINISH, but re-fetch phone from Graph
+    // (FINISH phone_number_id can be stale).
+    $wabaId = trim((string) (
+        $signup['waba_id']
+        ?? $signup['whatsapp_business_account_id']
+        ?? $signup['wh_biz_id']
+        ?? $assets['waba_id']
+        ?? ''
+    ));
     if ($wabaId === '' && !empty($signup['waba_ids'][0])) {
         $wabaId = trim((string)$signup['waba_ids'][0]);
     }
+
+    $phoneId = trim((string)($assets['phone_number_id'] ?? ''));
+    $displayPhone = trim((string)($assets['display_phone'] ?? ''));
+    if ($wabaId !== '' && $access !== '') {
+        $phones = sk_wa_meta_fetch_phones_for_waba($wabaId, $access);
+        if (!empty($phones[0]['phone_number_id'])) {
+            $phoneId = $phones[0]['phone_number_id'];
+            if (!empty($phones[0]['display_phone_number'])) {
+                $displayPhone = $phones[0]['display_phone_number'];
+            }
+        }
+    }
+    if ($phoneId === '' && !empty($signup['phone_number_id'])) {
+        $phoneId = trim((string)$signup['phone_number_id']);
+    }
+    if ($phoneId === '' && !empty($signup['phone_number_ids'][0])) {
+        $phoneId = trim((string)$signup['phone_number_ids'][0]);
+    }
+    if ($displayPhone === '') {
+        $displayPhone = (string)($signup['display_phone_number'] ?? '');
+    }
+
     $vendorId = (int)($signup['vendor_id'] ?? $CI->session->userdata('sk_vendor_id') ?? 0);
 
     $save = array(
@@ -718,7 +782,7 @@ function sk_wa_meta_save_connection(array $tokenData, array $assets, array $sign
         'wa_cloud_waba_id'         => $wabaId,
         'wa_cloud_fb_user_id'      => (string) ($assets['fb_user_id'] ?? ''),
         'wa_cloud_business_id'     => (string) ($assets['business_id'] ?? $signup['business_id'] ?? ''),
-        'wa_cloud_display_phone'   => (string) ($assets['display_phone'] ?? $signup['display_phone_number'] ?? ''),
+        'wa_cloud_display_phone'   => $displayPhone,
     );
 
     $CI->Sk_Admin_model->save_settings($save);
@@ -726,7 +790,7 @@ function sk_wa_meta_save_connection(array $tokenData, array $assets, array $sign
         $CI->Sk_Vendor_whatsapp_account_model->save_for_vendor($vendorId, [
             'phone_number_id' => $phoneId,
             'waba_id' => $wabaId,
-            'display_phone' => (string) ($assets['display_phone'] ?? $signup['display_phone_number'] ?? ''),
+            'display_phone' => $displayPhone,
             'business_id' => (string) ($assets['business_id'] ?? $signup['business_id'] ?? ''),
             'access_token' => $access,
             'refresh_token' => $refresh,

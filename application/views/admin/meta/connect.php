@@ -39,6 +39,7 @@ $cfgConfigId = (string)($cfg['config_id'] ?? '1661379532355089');
         <div class="form-text mb-0">
           Callback fields: <code>messages</code>.
           Verify token: <a href="<?= site_url('admin/settings?tab=wacloud') ?>">Settings → WhatsApp Cloud</a>.
+          Same pattern as XCRM Node: webhook is public; Embedded Signup exchanges code <em>without</em> redirect_uri.
         </div>
       </div>
     </div>
