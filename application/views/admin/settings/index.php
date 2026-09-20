@@ -197,62 +197,31 @@
         <div class="card-body">
           <h6 class="mb-1"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp Cloud API (Meta)</h6>
           <p class="text-muted small mb-3">
-            Direct Graph API for inbox chat and template CRUD.
-            Register the webhook in Meta Developer → WhatsApp → Configuration.
+            Register this webhook in Meta Developer → WhatsApp → Configuration.
+            Phone Number ID, WABA, and tokens are filled dynamically from Meta login / inbound webhook metadata — not typed here.
           </p>
-          <div class="alert alert-info small">
-            Webhook URL:
-            <code class="user-select-all"><?= site_url('shopkart-api/whatsapp/webhook') ?></code>
-            · Callback fields: <code>messages</code><br>
-            Redirect URI:
-            <code class="user-select-all"><?= site_url('admin/meta/callback') ?></code>
-            · <a href="<?= site_url('admin/meta') ?>">Open Facebook login</a>
+          <div class="alert alert-info small mb-3">
+            <div class="mb-2"><strong>Webhook callback URL</strong> (copy into Meta)</div>
+            <div class="input-group input-group-sm mb-2">
+              <input type="text" class="form-control font-monospace" id="waCloudWebhookUrl" readonly
+                     value="<?= htmlspecialchars(site_url('shopkart-api/whatsapp/webhook')) ?>">
+              <button type="button" class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('waCloudWebhookUrl').value)">Copy</button>
+            </div>
+            Callback field: <code>messages</code>
+            · App ID / secret / connect:
+            <a href="<?= site_url('admin/meta') ?>">Facebook / WhatsApp login</a>
           </div>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" name="wa_cloud_enabled" value="1" id="waCloudOn"
               <?= !empty($settings['wa_cloud_enabled']) && $settings['wa_cloud_enabled'] !== '0' ? 'checked' : '' ?>>
-            <label class="form-check-label" for="waCloudOn">Enable Meta Cloud inbox / templates</label>
+            <label class="form-check-label" for="waCloudOn">Enable webhook inbox + MCP replies</label>
           </div>
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label">Phone Number ID</label>
-              <input type="text" name="wa_cloud_phone_number_id" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['wa_cloud_phone_number_id'] ?? '') ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">WhatsApp Business Account ID (WABA)</label>
-              <input type="text" name="wa_cloud_waba_id" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['wa_cloud_waba_id'] ?? '') ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Facebook App ID</label>
-              <input type="text" name="wa_cloud_app_id" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['wa_cloud_app_id'] ?? '') ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Embedded Signup config ID (optional)</label>
-              <input type="text" name="wa_cloud_config_id" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['wa_cloud_config_id'] ?? '') ?>">
-            </div>
-            <div class="col-12">
-              <label class="form-label">Permanent access token</label>
-              <input type="password" name="wa_cloud_access_token" class="form-control font-monospace" autocomplete="new-password"
-                     value="" placeholder="<?= !empty($settings['wa_cloud_access_token']) ? '•••• saved (leave blank to keep)' : 'Paste Meta system-user token' ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">App secret</label>
-              <input type="password" name="wa_cloud_app_secret" class="form-control font-monospace" autocomplete="new-password"
-                     value="" placeholder="<?= !empty($settings['wa_cloud_app_secret']) ? '•••• saved (leave blank to keep)' : 'Webhook signature' ?>">
-            </div>
-            <div class="col-md-3">
               <label class="form-label">Verify token</label>
-              <input type="text" name="wa_cloud_verify_token" class="form-control"
+              <input type="text" name="wa_cloud_verify_token" class="form-control font-monospace"
                      value="<?= htmlspecialchars($settings['wa_cloud_verify_token'] ?? 'Velmurugn0071@!!!') ?>">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Graph API version</label>
-              <input type="text" name="wa_cloud_api_version" class="form-control"
-                     value="<?= htmlspecialchars($settings['wa_cloud_api_version'] ?? 'v21.0') ?>">
+              <div class="form-text">Must match the verify token you enter in Meta webhook settings.</div>
             </div>
           </div>
 

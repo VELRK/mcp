@@ -137,9 +137,7 @@ class Settings extends Sk_Base {
             'head_scripts', 'footer_scripts', 'google_analytics', 'top_bar_text',
             'whatsapp_number',
             'askeva_api_url', 'askeva_api_token', 'askeva_order_template', 'askeva_template_lang',
-            'wa_cloud_phone_number_id', 'wa_cloud_waba_id', 'wa_cloud_access_token',
-            'wa_cloud_app_id', 'wa_cloud_config_id',
-            'wa_cloud_app_secret', 'wa_cloud_verify_token', 'wa_cloud_api_version',
+            'wa_cloud_verify_token',
             'wa_mcp_url', 'wa_mcp_token', 'wa_mcp_timeout',
             'saas_billing_token', 'saas_default_vendor_id', 'saas_cron_key',
             'company_legal_name', 'gstin', 'pan_no', 'state_code', 'invoice_prefix', 'invoice_footer',
@@ -149,7 +147,7 @@ class Settings extends Sk_Base {
         $raw_fields = [
             'isms_password', 'isms_api_key', 'smtp_pass', 'razorpay_key_secret',
             'razorpay_webhook_secret',
-            'askeva_api_token', 'wa_cloud_access_token', 'wa_cloud_app_secret',
+            'askeva_api_token',
             'wa_mcp_token', 'saas_billing_token', 'saas_cron_key',
         ];
         $preserve_if_empty = $raw_fields;
@@ -186,7 +184,7 @@ class Settings extends Sk_Base {
         $data['askeva_whatsapp_enabled'] = $this->input->post('askeva_whatsapp_enabled') ? '1' : '0';
         $data['isms_enabled'] = $this->input->post('isms_enabled') ? '1' : '0';
         $settingsTab = trim((string)$this->input->post('settings_tab'));
-        if ($settingsTab === 'wacloud' || $this->input->post('wa_cloud_phone_number_id') !== null) {
+        if ($settingsTab === 'wacloud' || $this->input->post('wa_cloud_verify_token') !== null) {
             $data['wa_cloud_enabled'] = $this->input->post('wa_cloud_enabled') ? '1' : '0';
             $data['wa_mcp_enabled'] = $this->input->post('wa_mcp_enabled') ? '1' : '0';
         }

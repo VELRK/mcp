@@ -34,8 +34,8 @@ class Meta extends Sk_Base {
         $settings = $this->Sk_Admin_model->get_settings();
         $cfg = sk_wa_cloud_config($settings);
         if ($cfg['app_id'] === '' || $cfg['app_secret'] === '') {
-            $this->session->set_flashdata('error', 'Save Facebook App ID and App Secret in WhatsApp Cloud settings first.');
-            redirect('admin/settings?tab=wacloud');
+            $this->session->set_flashdata('error', 'Save Facebook App ID and App Secret on this page first.');
+            redirect('admin/meta');
             return;
         }
         $state = bin2hex(random_bytes(16));
@@ -110,6 +110,28 @@ class Meta extends Sk_Base {
         $signup = $this->_signup_from_request();
         $result = $this->_finish_login($code, $signup);
         $this->json($result, $result['ok'] ? 200 : 400);
+    }
+
+    /** Save Meta app credentials used for OAuth (phone/WABA stay dynamic from login). */
+    public function save_app()
+    {
+        if (strtoupper((string)$this->input->server('REQUEST_METHOD')) !== 'POST') {
+            redirect('admin/meta');
+            return;
+        }
+        $data = [
+            'wa_cloud_app_id'      => trim((string)$this->input->post('wa_cloud_app_id', TRUE)),
+            'wa_cloud_config_id'   => trim((string)$this->input->post('wa_cloud_config_id', TRUE)),
+            'wa_cloud_api_version' => trim((string)$this->input->post('wa_cloud_api_version', TRUE)) ?: 'v21.0',
+            'wa_cloud_enabled'     => '1',
+        ];
+        $secret = trim((string)$this->input->post('wa_cloud_app_secret', FALSE));
+        if ($secret !== '') {
+            $data['wa_cloud_app_secret'] = $secret;
+        }
+        $this->Sk_Admin_model->save_settings($data);
+        $this->session->set_flashdata('success', 'Meta app credentials saved. Phone / WABA still come from Facebook login.');
+        redirect('admin/meta');
     }
 
     private function _oauth_url(array $cfg, string $state): string

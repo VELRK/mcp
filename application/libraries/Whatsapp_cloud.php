@@ -9,8 +9,9 @@ class Whatsapp_cloud {
     public function __construct($settings = []) {
         $CI =& get_instance();
         $CI->load->helper('sk_whatsapp_cloud');
-        $vendorId = null;
-        if (isset($CI->session) && method_exists($CI->session, 'userdata')) {
+        $settings = is_array($settings) ? $settings : [];
+        $vendorId = (int)($settings['vendor_id'] ?? 0);
+        if ($vendorId < 1 && isset($CI->session) && method_exists($CI->session, 'userdata')) {
             $vendorId = (int)($CI->session->userdata('sk_vendor_id') ?? 0);
             if ($vendorId < 1) {
                 $adminId = (int)($CI->session->userdata('sk_admin_id') ?? 0);
@@ -20,14 +21,13 @@ class Whatsapp_cloud {
                 }
             }
         }
-        $this->cfg = sk_wa_cloud_config(is_array($settings) ? $settings : null, $vendorId);
+        $this->cfg = sk_wa_cloud_config($settings ?: null, $vendorId > 0 ? $vendorId : null);
     }
 
     public function is_ready(): bool {
-        return $this->cfg['enabled']
+        return !empty($this->cfg['enabled'])
             && $this->cfg['access_token'] !== ''
-            && $this->cfg['phone_number_id'] !== ''
-            && $this->cfg['waba_id'] !== '';
+            && $this->cfg['phone_number_id'] !== '';
     }
 
     public function config(): array {

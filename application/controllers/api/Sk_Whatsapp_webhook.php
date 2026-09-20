@@ -145,8 +145,11 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         if ($vendorId > 0) {
             $resolvedSettings['vendor_id'] = $vendorId;
         }
-        $resolvedCfg = sk_wa_cloud_config($resolvedSettings, $vendorId);
-        if (!sk_wa_mcp_is_ready($resolvedSettings) || !sk_wa_cloud_is_ready($resolvedSettings)) {
+        if ($phoneNumberId !== '') {
+            $resolvedSettings['_wa_phone_number_id'] = $phoneNumberId;
+        }
+        $vid = $vendorId > 0 ? $vendorId : null;
+        if (!sk_wa_mcp_is_ready($resolvedSettings) || !sk_wa_cloud_is_ready($resolvedSettings, $vid)) {
             return;
         }
         $conv = $job['conversation'] ?? null;
@@ -154,12 +157,13 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         if (!$conv || trim((string)($parsed['text'] ?? $parsed['id'] ?? '')) === '') {
             return;
         }
+        $resolvedCfg = sk_wa_cloud_config($resolvedSettings, $vid);
         $req = [
             'channel'          => 'whatsapp',
             'phone'            => (string)$conv['phone'],
             'name'             => (string)($conv['name'] ?? ''),
             'conversation_id'  => (int)$conv['id'],
-            'phone_number_id'  => $phoneNumberId !== '' ? $phoneNumberId : (string)($resolvedCfg['phone_number_id'] ?? $settings['wa_cloud_phone_number_id'] ?? ''),
+            'phone_number_id'  => $phoneNumberId !== '' ? $phoneNumberId : (string)($resolvedCfg['phone_number_id'] ?? ''),
             'message'          => $parsed,
         ];
         $res = sk_wa_mcp_call($req, $resolvedSettings);

@@ -523,6 +523,7 @@ $route['admin/meta'] = 'admin/Meta/index';
 $route['admin/meta/connect'] = 'admin/Meta/connect';
 $route['admin/meta/callback'] = 'admin/Meta/callback';
 $route['admin/meta/exchange'] = 'admin/Meta/exchange';
+$route['admin/meta/save_app'] = 'admin/Meta/save_app';
 
 $route['admin/whatsapp_requests'] = 'admin/Whatsapp_requests/index';
 $route['admin/whatsapp_requests/submit'] = 'admin/Whatsapp_requests/submit';

@@ -227,7 +227,18 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
     }
 
     $account = null;
-    if ($vendorId > 0 && isset($CI) && method_exists($CI, 'load')) {
+    $phoneHint = trim((string)($settings['_wa_phone_number_id'] ?? ''));
+    if ($phoneHint !== '') {
+        $CI->load->model('Sk_Vendor_whatsapp_account_model');
+        $byPhone = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneHint);
+        if ($byPhone) {
+            $account = $byPhone;
+            if ($vendorId < 1 && !empty($byPhone['vendor_id'])) {
+                $vendorId = (int)$byPhone['vendor_id'];
+            }
+        }
+    }
+    if (!$account && $vendorId > 0 && isset($CI) && method_exists($CI, 'load')) {
         $CI->load->model('Sk_Vendor_whatsapp_account_model');
         $account = $CI->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vendorId);
     }
@@ -242,7 +253,11 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
         $version = 'v' . $version;
     }
 
+    // Prefer vendor / webhook-resolved account; global settings only as fallback after Meta OAuth.
     $phoneNumberId = trim((string)($account['phone_number_id'] ?? $settings['wa_cloud_phone_number_id'] ?? getenv('WA_CLOUD_PHONE_NUMBER_ID') ?: ''));
+    if ($phoneHint !== '') {
+        $phoneNumberId = $phoneHint;
+    }
     $wabaId = trim((string)($account['waba_id'] ?? $settings['wa_cloud_waba_id'] ?? getenv('WA_CLOUD_WABA_ID') ?: ''));
     $accessToken = trim((string)($account['access_token'] ?? $settings['wa_cloud_access_token'] ?? getenv('WA_CLOUD_ACCESS_TOKEN') ?: ''));
     $displayPhone = trim((string)($account['display_phone'] ?? $settings['wa_cloud_display_phone'] ?? getenv('WA_CLOUD_DISPLAY_PHONE') ?: ''));
@@ -264,15 +279,16 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
         'verify_token'    => trim((string)($settings['wa_cloud_verify_token'] ?? getenv('WA_CLOUD_VERIFY_TOKEN') ?: 'Velmurugn0071@!!!')),
         'api_version'     => $version,
         'graph_base'      => 'https://graph.facebook.com/' . $version,
+        'vendor_id'       => $vendorId,
     ];
 }
 
-function sk_wa_cloud_is_ready(?array $settings = null): bool {
-    $cfg = sk_wa_cloud_config($settings);
-    return $cfg['enabled']
+function sk_wa_cloud_is_ready(?array $settings = null, ?int $vendorId = null): bool {
+    $cfg = sk_wa_cloud_config($settings, $vendorId);
+    // Messaging needs token + phone; both come from Meta OAuth / vendor account / webhook metadata.
+    return !empty($cfg['enabled'])
         && $cfg['access_token'] !== ''
-        && $cfg['phone_number_id'] !== ''
-        && $cfg['waba_id'] !== '';
+        && $cfg['phone_number_id'] !== '';
 }
 
 function sk_wa_cloud_normalize_phone(string $phone): string {

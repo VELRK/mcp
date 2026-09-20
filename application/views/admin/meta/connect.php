@@ -29,12 +29,47 @@ $oauth = htmlspecialchars((string)($oauth_url ?? '#'), ENT_QUOTES, 'UTF-8');
           <input class="form-control font-monospace" id="metaRedirect" readonly value="<?= htmlspecialchars($redirect) ?>">
           <button type="button" class="btn btn-outline-secondary" data-copy="#metaRedirect">Copy</button>
         </div>
-        <label class="form-label">WhatsApp webhook</label>
+        <label class="form-label">WhatsApp webhook callback</label>
         <div class="input-group mb-2">
           <input class="form-control font-monospace" id="metaWebhook" readonly value="<?= htmlspecialchars($webhook) ?>">
           <button type="button" class="btn btn-outline-secondary" data-copy="#metaWebhook">Copy</button>
         </div>
-        <div class="form-text mb-0">Callback fields: <code>messages</code>. Verify token is the one saved in WhatsApp Cloud settings.</div>
+        <div class="form-text mb-0">
+          Callback fields: <code>messages</code>.
+          Verify token: <a href="<?= site_url('admin/settings?tab=wacloud') ?>">Settings → WhatsApp Cloud</a>.
+        </div>
+      </div>
+    </div>
+
+    <div class="card sk-table-card shadow-sm mt-3">
+      <div class="card-body">
+        <h6 class="mb-2">Meta app (for Facebook login)</h6>
+        <p class="small text-muted">Phone Number ID / WABA / tokens are filled automatically after login — do not paste them here.</p>
+        <form method="post" action="<?= site_url('admin/meta/save_app') ?>" class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Facebook App ID</label>
+            <input type="text" name="wa_cloud_app_id" class="form-control font-monospace"
+                   value="<?= htmlspecialchars((string)($cfg['app_id'] ?? '')) ?>" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">App secret</label>
+            <input type="password" name="wa_cloud_app_secret" class="form-control font-monospace" autocomplete="new-password"
+                   value="" placeholder="<?= !empty($cfg['app_secret']) ? '•••• saved (leave blank to keep)' : 'Required' ?>">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Embedded Signup config ID (optional)</label>
+            <input type="text" name="wa_cloud_config_id" class="form-control font-monospace"
+                   value="<?= htmlspecialchars((string)($cfg['config_id'] ?? '')) ?>">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Graph API version</label>
+            <input type="text" name="wa_cloud_api_version" class="form-control"
+                   value="<?= htmlspecialchars((string)($cfg['api_version'] ?? 'v21.0')) ?>">
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-sm btn-primary">Save app credentials</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -43,11 +78,10 @@ $oauth = htmlspecialchars((string)($oauth_url ?? '#'), ENT_QUOTES, 'UTF-8');
         <h6 class="mb-2">Facebook embed login</h6>
         <?php if ($appId === ''): ?>
           <div class="alert alert-warning mb-0">
-            Save <strong>App ID</strong> and <strong>App Secret</strong> in
-            <a href="<?= site_url('admin/settings?tab=wacloud') ?>">Settings → WhatsApp Cloud</a>, then open this page again.
+            Save <strong>App ID</strong> and <strong>App Secret</strong> above, then open this page again.
           </div>
         <?php else: ?>
-          <p class="small text-muted">Login with Facebook. Meta returns a code; we call Graph API, then save phone ID, WABA ID and tokens.</p>
+          <p class="small text-muted">Login with Facebook. Meta returns a code; we call Graph API, then save phone ID, WABA ID and tokens automatically.</p>
           <div id="fb-root"></div>
           <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
             <div class="fb-login-button"
