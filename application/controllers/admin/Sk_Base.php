@@ -19,8 +19,20 @@ class Sk_Base extends CI_Controller {
         $this->vendor_context = $this->sk_vendor_context;
         $this->activity_log   = $this->sk_activity_log;
 
-        if (get_class($this) !== 'Login' && get_class($this) !== 'Vendor_login') {
+        // Meta OAuth redirect must accept Facebook's GET with ?code=&state= even if
+        // the admin cookie briefly drops; callback validates state itself.
+        $cls = get_class($this);
+        $method = strtolower((string)($this->router->method ?? ''));
+        $publicAdmin = ($cls === 'Login' || $cls === 'Vendor_login'
+            || ($cls === 'Meta' && $method === 'callback'));
+        if (!$publicAdmin) {
             $this->_require_admin();
+        } elseif ($cls === 'Meta' && $method === 'callback') {
+            // Soft-load admin if session still present (for provision approval notes).
+            $admin_id = $this->session->userdata('sk_admin_id');
+            if ($admin_id) {
+                $this->admin = $this->Sk_Admin_model->get_by_id($admin_id) ?: null;
+            }
         }
     }
 

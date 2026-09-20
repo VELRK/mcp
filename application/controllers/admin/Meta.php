@@ -18,6 +18,7 @@ class Meta extends Sk_Base {
         $cfg = sk_wa_cloud_config($settings);
         $state = bin2hex(random_bytes(16));
         $this->session->set_userdata('wa_meta_oauth_state', $state);
+        $this->_store_oauth_state_cookie($state);
 
         $data['title'] = 'Connect Facebook / WhatsApp';
         $data['settings'] = $settings;
@@ -40,6 +41,7 @@ class Meta extends Sk_Base {
         }
         $state = bin2hex(random_bytes(16));
         $this->session->set_userdata('wa_meta_oauth_state', $state);
+        $this->_store_oauth_state_cookie($state);
         redirect($this->_oauth_url($cfg, $state));
     }
 
@@ -51,15 +53,23 @@ class Meta extends Sk_Base {
         }
         if ($error !== '') {
             $this->session->set_flashdata('error', 'Facebook login cancelled: ' . $error);
-            redirect('admin/meta');
+            redirect($this->_after_oauth_path());
             return;
         }
 
         $state = (string) $this->input->get('state', TRUE);
         $expect = (string) $this->session->userdata('wa_meta_oauth_state');
+        if ($expect === '') {
+            $expect = (string)($this->input->cookie('wa_meta_oauth_state', TRUE) ?: '');
+        }
         if ($expect === '' || $state === '' || !hash_equals($expect, $state)) {
-            $this->session->set_flashdata('error', 'Facebook login state did not match. Try Connect again.');
-            redirect('admin/meta');
+            // Bare visit without Facebook params → send to login/meta, not a confusing error.
+            if ($state === '' && trim((string)$this->input->get('code', FALSE)) === '') {
+                redirect($this->_after_oauth_path());
+                return;
+            }
+            $this->session->set_flashdata('error', 'Facebook login state did not match. Open Connect again from admin.');
+            redirect($this->_after_oauth_path());
             return;
         }
 
@@ -76,7 +86,7 @@ class Meta extends Sk_Base {
         $result = $this->_finish_login($code, $signup);
         if (!$result['ok']) {
             $this->session->set_flashdata('error', $result['error']);
-            redirect($provisionId > 0 ? 'admin/whatsapp_requests/pending' : 'admin/meta');
+            redirect($provisionId > 0 ? 'admin/whatsapp_requests/pending' : $this->_after_oauth_path());
             return;
         }
 
@@ -94,14 +104,16 @@ class Meta extends Sk_Base {
             }
             $this->session->unset_userdata('wa_provision_request_id');
             $this->session->unset_userdata('wa_meta_oauth_state');
+            $this->_clear_oauth_state_cookie();
             $this->session->set_flashdata('success', $result['message']);
-            redirect('admin/whatsapp_requests/pending');
+            redirect($this->_after_oauth_path('admin/whatsapp_requests/pending'));
             return;
         }
 
         $this->session->unset_userdata('wa_meta_oauth_state');
+        $this->_clear_oauth_state_cookie();
         $this->session->set_flashdata('success', $result['message']);
-        redirect('admin/meta');
+        redirect($this->_after_oauth_path('admin/meta'));
     }
 
     public function exchange()
@@ -132,6 +144,38 @@ class Meta extends Sk_Base {
         $this->Sk_Admin_model->save_settings($data);
         $this->session->set_flashdata('success', 'Meta app credentials saved. Phone / WABA still come from Facebook login.');
         redirect('admin/meta');
+    }
+
+    private function _after_oauth_path(string $preferred = 'admin/meta'): string
+    {
+        if (!empty($this->admin['id']) || $this->session->userdata('sk_admin_id') || $this->session->userdata('sk_vendor_login')) {
+            return $preferred;
+        }
+        return 'admin/login';
+    }
+
+    private function _store_oauth_state_cookie(string $state): void
+    {
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        setcookie('wa_meta_oauth_state', $state, [
+            'expires'  => time() + 1800,
+            'path'     => '/',
+            'secure'   => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+
+    private function _clear_oauth_state_cookie(): void
+    {
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        setcookie('wa_meta_oauth_state', '', [
+            'expires'  => time() - 3600,
+            'path'     => '/',
+            'secure'   => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
     }
 
     private function _oauth_url(array $cfg, string $state): string
