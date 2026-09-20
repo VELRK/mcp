@@ -62,7 +62,7 @@ if (!function_exists('sk_active')) {
       </li>
       <li class="nav-item">
         <a href="<?= site_url('admin/whatsapp_requests') ?>" class="nav-link sk-nav-link <?= sk_active($uri,'whatsapp_requests') ?>">
-          <i class="bi bi-telephone-forward me-2"></i> Request WhatsApp Number
+          <i class="bi bi-whatsapp me-2"></i> Connect WhatsApp
         </a>
       </li>
       <?php endif; ?>

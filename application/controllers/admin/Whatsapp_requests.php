@@ -13,17 +13,85 @@ class Whatsapp_requests extends Sk_Base {
         sk_wa_cloud_ensure_schema();
     }
 
-    // Vendor view: list requests and show form to create
+    // Vendor: connect WhatsApp (multiple numbers via Embedded Signup)
     public function index() {
         $vid = $this->current_vendor_id();
         if (!$vid) {
-            show_error('Only vendors may request WhatsApp numbers.', 403);
+            show_error('Only vendors may manage WhatsApp numbers.', 403);
             return;
         }
+        $this->Sk_Vendor_whatsapp_account_model->ensure_schema();
+        $accounts = $this->Sk_Vendor_whatsapp_account_model->get_for_vendor($vid);
         $requests = $this->Sk_Wa_Provision_request_model->get_for_vendor($vid);
-        $data['title'] = 'WhatsApp Number Requests';
+        $settings = $this->Sk_Admin_model->get_settings();
+        $cfg = sk_wa_cloud_config($settings);
+
+        $data['title'] = 'Connect WhatsApp';
+        $data['accounts'] = $accounts;
         $data['requests'] = $requests;
+        $data['cfg'] = $cfg;
+        $data['vendor_id'] = $vid;
+        $data['webhook_uri'] = sk_wa_meta_webhook_uri();
         $this->render('whatsapp_requests/index', $data);
+    }
+
+    /** Vendor Embedded Signup code exchange → store phone/WABA for this vendor only. */
+    public function vendor_exchange() {
+        $vid = $this->current_vendor_id();
+        if (!$vid) {
+            return $this->json(['ok' => false, 'error' => 'Vendor login required.'], 403);
+        }
+
+        $accountId = (int)$this->input->post('account_id');
+        $code = trim((string)$this->input->post('code', FALSE));
+        $signup = $this->_signup_from_request();
+        $signup['vendor_id'] = $vid;
+
+        $req = ['id' => 0, 'vendor_id' => $vid];
+        if ($accountId > 0) {
+            $acc = $this->Sk_Vendor_whatsapp_account_model->get_by_id($accountId);
+            if (!$acc || (int)$acc['vendor_id'] !== $vid) {
+                return $this->json(['ok' => false, 'error' => 'WhatsApp account not found for your store.'], 400);
+            }
+            $req['account_id'] = $accountId;
+        }
+
+        $result = $this->_finish_vendor_login($code, $signup, $req);
+        return $this->json($result, !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function vendor_set_default() {
+        $vid = $this->current_vendor_id();
+        if (!$vid) {
+            show_error('Vendor only', 403);
+            return;
+        }
+        $accountId = (int)$this->input->post('wa_account_id');
+        $ok = $this->Sk_Vendor_whatsapp_account_model->set_default_for_vendor($vid, $accountId);
+        $this->session->set_flashdata($ok ? 'success' : 'error', $ok ? 'Default WhatsApp number updated.' : 'Could not update default.');
+        redirect('admin/whatsapp_requests');
+    }
+
+    public function vendor_set_status() {
+        $vid = $this->current_vendor_id();
+        if (!$vid) {
+            show_error('Vendor only', 403);
+            return;
+        }
+        $accountId = (int)$this->input->post('wa_account_id');
+        $status = trim((string)$this->input->post('status', TRUE));
+        $acc = $this->Sk_Vendor_whatsapp_account_model->get_by_id($accountId);
+        if (!$acc || (int)$acc['vendor_id'] !== $vid) {
+            $this->session->set_flashdata('error', 'Account not found.');
+            redirect('admin/whatsapp_requests');
+            return;
+        }
+        if (!in_array($status, ['active', 'inactive'], true)) {
+            $status = 'inactive';
+        }
+        $this->Sk_Vendor_whatsapp_account_model->set_status($accountId, $status);
+        $this->session->set_flashdata('success', 'Number marked ' . $status . '.');
+        redirect('admin/whatsapp_requests');
     }
 
     public function submit() {
