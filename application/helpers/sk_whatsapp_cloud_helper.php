@@ -150,8 +150,8 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
         'wa_cloud_phone_number_id' => '',
         'wa_cloud_waba_id'         => '',
         'wa_cloud_app_secret'      => '',
-        'wa_cloud_app_id'          => '',
-        'wa_cloud_config_id'       => '',
+        'wa_cloud_app_id'          => '1775381900284261',
+        'wa_cloud_config_id'       => '1661379532355089',
         'wa_cloud_refresh_token'   => '',
         'wa_cloud_token_expires'   => '',
         'wa_cloud_fb_user_id'      => '',
@@ -175,10 +175,19 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
         }
         $CI->db->insert('settings', $row);
     }
-    // Keep webhook verify token in sync with Meta app config (only when drifted).
+    // Keep webhook verify token + Embedded Signup config in sync when empty/drifted.
     $tok = $CI->db->get_where('settings', ['key' => 'wa_cloud_verify_token'], 1)->row_array();
     if ($tok && (string)($tok['value'] ?? '') !== 'Velmurugn0071@!!!') {
         $CI->db->where('key', 'wa_cloud_verify_token')->update('settings', ['value' => 'Velmurugn0071@!!!']);
+    }
+    foreach ([
+        'wa_cloud_app_id'    => '1775381900284261',
+        'wa_cloud_config_id' => '1661379532355089',
+    ] as $k => $v) {
+        $row = $CI->db->get_where('settings', ['key' => $k], 1)->row_array();
+        if ($row && trim((string)($row['value'] ?? '')) === '') {
+            $CI->db->where('key', $k)->update('settings', ['value' => $v]);
+        }
     }
 }
 
@@ -691,11 +700,17 @@ function sk_wa_meta_save_connection(array $tokenData, array $assets, array $sign
     $expiresAt = $expiresIn > 0 ? date('Y-m-d H:i:s', time() + $expiresIn) : '';
 
     $phoneId = trim((string) ($signup['phone_number_id'] ?? $assets['phone_number_id'] ?? ''));
+    if ($phoneId === '' && !empty($signup['phone_number_ids'][0])) {
+        $phoneId = trim((string)$signup['phone_number_ids'][0]);
+    }
     $wabaId = trim((string) ($signup['waba_id'] ?? $signup['whatsapp_business_account_id'] ?? $assets['waba_id'] ?? ''));
+    if ($wabaId === '' && !empty($signup['waba_ids'][0])) {
+        $wabaId = trim((string)$signup['waba_ids'][0]);
+    }
     $vendorId = (int)($signup['vendor_id'] ?? $CI->session->userdata('sk_vendor_id') ?? 0);
 
     $save = array(
-        'wa_cloud_enabled'         => ($access !== '' && $phoneId !== '') ? '1' : '0',
+        'wa_cloud_enabled'         => ($access !== '') ? '1' : '0',
         'wa_cloud_access_token'    => $access,
         'wa_cloud_refresh_token'   => $refresh,
         'wa_cloud_token_expires'   => $expiresAt,

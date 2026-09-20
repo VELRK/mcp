@@ -51,7 +51,7 @@ class Meta extends Sk_Base {
         }
         if ($error !== '') {
             $this->session->set_flashdata('error', 'Facebook login cancelled: ' . $error);
-            redirect('admin/settings?tab=wacloud');
+            redirect('admin/meta');
             return;
         }
 
@@ -101,7 +101,7 @@ class Meta extends Sk_Base {
 
         $this->session->unset_userdata('wa_meta_oauth_state');
         $this->session->set_flashdata('success', $result['message']);
-        redirect('admin/settings?tab=wacloud');
+        redirect('admin/meta');
     }
 
     public function exchange()
@@ -120,8 +120,8 @@ class Meta extends Sk_Base {
             return;
         }
         $data = [
-            'wa_cloud_app_id'      => trim((string)$this->input->post('wa_cloud_app_id', TRUE)),
-            'wa_cloud_config_id'   => trim((string)$this->input->post('wa_cloud_config_id', TRUE)),
+            'wa_cloud_app_id'      => trim((string)$this->input->post('wa_cloud_app_id', TRUE)) ?: '1775381900284261',
+            'wa_cloud_config_id'   => trim((string)$this->input->post('wa_cloud_config_id', TRUE)) ?: '1661379532355089',
             'wa_cloud_api_version' => trim((string)$this->input->post('wa_cloud_api_version', TRUE)) ?: 'v21.0',
             'wa_cloud_enabled'     => '1',
         ];
@@ -148,7 +148,7 @@ class Meta extends Sk_Base {
             $query['override_default_response_type'] = 'true';
             $query['extras'] = json_encode(array(
                 'setup'              => new stdClass(),
-                'featureType'        => 'whatsapp_business_app_onboarding',
+                'featureType'        => '',
                 'sessionInfoVersion' => '3',
             ));
         }
