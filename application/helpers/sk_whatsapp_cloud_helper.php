@@ -12,6 +12,14 @@ function sk_wa_cloud_ensure_schema(): void {
         $CI->load->database();
     }
 
+    try {
+        sk_wa_cloud_ensure_schema_inner($CI);
+    } catch (Throwable $e) {
+        log_message('error', 'sk_wa_cloud_ensure_schema: '.$e->getMessage());
+    }
+}
+
+function sk_wa_cloud_ensure_schema_inner($CI): void {
     if (!$CI->db->table_exists('wa_cloud_templates')) {
         $CI->db->query("CREATE TABLE `wa_cloud_templates` (
             `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -167,8 +175,11 @@ function sk_wa_cloud_ensure_schema(): void {
         }
         $CI->db->insert('settings', $row);
     }
-    // Keep webhook verify token in sync with Meta app config
-    $CI->db->where('key', 'wa_cloud_verify_token')->update('settings', ['value' => 'Velmurugn0071@!!!']);
+    // Keep webhook verify token in sync with Meta app config (only when drifted).
+    $tok = $CI->db->get_where('settings', ['key' => 'wa_cloud_verify_token'], 1)->row_array();
+    if ($tok && (string)($tok['value'] ?? '') !== 'Velmurugn0071@!!!') {
+        $CI->db->where('key', 'wa_cloud_verify_token')->update('settings', ['value' => 'Velmurugn0071@!!!']);
+    }
 }
 
 function sk_wa_cloud_resolve_vendor_from_phone(string $phoneNumberId, ?array $settings = null): ?array {

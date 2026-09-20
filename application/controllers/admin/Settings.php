@@ -7,13 +7,29 @@ class Settings extends Sk_Base {
 
     public function index() {
         $this->load->helper(['sk_invoice', 'sk_isms', 'sk_whatsapp', 'sk_whatsapp_cloud']);
-        sk_invoice_ensure_vendor_schema();
-        sk_isms_ensure_schema();
-        sk_whatsapp_ensure_settings();
-        sk_wa_cloud_ensure_schema();
-        $data['title']    = 'Settings - 2DEAL Admin';
-        $data['settings'] = $this->Sk_Admin_model->get_settings();
-        $this->render('settings/index', $data);
+        foreach ([
+            'sk_invoice_ensure_vendor_schema',
+            'sk_isms_ensure_schema',
+            'sk_whatsapp_ensure_settings',
+            'sk_wa_cloud_ensure_schema',
+        ] as $fn) {
+            if (!function_exists($fn)) {
+                continue;
+            }
+            try {
+                $fn();
+            } catch (Throwable $e) {
+                log_message('error', 'Settings '.$fn.': '.$e->getMessage());
+            }
+        }
+        try {
+            $data['title']    = 'Settings - 2DEAL Admin';
+            $data['settings'] = $this->Sk_Admin_model->get_settings();
+            $this->render('settings/index', $data);
+        } catch (Throwable $e) {
+            log_message('error', 'Admin Settings index: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+            show_error('Settings page error: '.htmlspecialchars($e->getMessage()), 500, 'Settings unavailable');
+        }
     }
 
     public function run_sql() {

@@ -109,9 +109,16 @@ $body_class = trim(
       <?php endif; ?>
       <?php if (empty($impersonating) && empty($vendor_logged_in) && ($admin['role'] ?? '') === 'superadmin'): ?>
       <?php
-        $this->load->model('Sk_Wa_Provision_request_model');
-        $pending = $this->Sk_Wa_Provision_request_model->get_pending();
-        $pending_count = is_array($pending) ? count($pending) : 0;
+        $pending_count = 0;
+        try {
+          $this->load->model('Sk_Wa_Provision_request_model');
+          if (isset($this->Sk_Wa_Provision_request_model)) {
+            $pending = $this->Sk_Wa_Provision_request_model->get_pending();
+            $pending_count = is_array($pending) ? count($pending) : 0;
+          }
+        } catch (Throwable $e) {
+          $pending_count = 0;
+        }
       ?>
       <a href="<?= site_url('admin/whatsapp_requests/pending') ?>" class="btn btn-sm btn-outline-light position-relative" title="WA Requests">
         <i class="bi bi-telephone-forward"></i>

@@ -784,8 +784,16 @@ function sk_mail_order_invoice(array $order, array $settings = []): bool {
 
 /** Ensure vendor_stores has invoice columns. */
 function sk_invoice_ensure_vendor_schema(): void {
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
     $CI =& get_instance();
-    if (!$CI->db->table_exists('vendor_stores')) return;
+    if (!isset($CI->db) || !$CI->db->table_exists('vendor_stores')) {
+        return;
+    }
 
     $cols = [
         'invoice_prefix' => "VARCHAR(20) DEFAULT 'INV'",
@@ -795,19 +803,30 @@ function sk_invoice_ensure_vendor_schema(): void {
     ];
     foreach ($cols as $col => $def) {
         if (!$CI->db->field_exists($col, 'vendor_stores')) {
-            $CI->db->query("ALTER TABLE `vendor_stores` ADD COLUMN `{$col}` {$def}");
+            @$CI->db->query("ALTER TABLE `vendor_stores` ADD COLUMN `{$col}` {$def}");
         }
     }
 
-    // Contact phone was VARCHAR(20) — too short for formatted numbers like "03-6242 2232".
-    if ($CI->db->field_exists('contact_phone', 'vendor_stores')) {
-        $CI->db->query('ALTER TABLE `vendor_stores` MODIFY COLUMN `contact_phone` VARCHAR(50) DEFAULT NULL');
-    }
-    if ($CI->db->field_exists('contact_email', 'vendor_stores')) {
-        $CI->db->query('ALTER TABLE `vendor_stores` MODIFY COLUMN `contact_email` VARCHAR(190) DEFAULT NULL');
-    }
-
-    if (!$CI->db->field_exists('invoice_emailed_at', 'orders')) {
-        $CI->db->query('ALTER TABLE `orders` ADD COLUMN `invoice_emailed_at` DATETIME DEFAULT NULL AFTER `updated_at`');
+    // Widen contact fields only when still short (avoid ALTER on every Settings page load).
+    try {
+        if ($CI->db->field_exists('contact_phone', 'vendor_stores')) {
+            $row = $CI->db->query("SHOW COLUMNS FROM `vendor_stores` LIKE 'contact_phone'")->row_array();
+            $type = strtolower((string)($row['Type'] ?? ''));
+            if (preg_match('/varchar\((\d+)\)/', $type, $m) && (int)$m[1] < 50) {
+                @$CI->db->query('ALTER TABLE `vendor_stores` MODIFY COLUMN `contact_phone` VARCHAR(50) DEFAULT NULL');
+            }
+        }
+        if ($CI->db->field_exists('contact_email', 'vendor_stores')) {
+            $row = $CI->db->query("SHOW COLUMNS FROM `vendor_stores` LIKE 'contact_email'")->row_array();
+            $type = strtolower((string)($row['Type'] ?? ''));
+            if (preg_match('/varchar\((\d+)\)/', $type, $m) && (int)$m[1] < 190) {
+                @$CI->db->query('ALTER TABLE `vendor_stores` MODIFY COLUMN `contact_email` VARCHAR(190) DEFAULT NULL');
+            }
+        }
+        if ($CI->db->table_exists('orders') && !$CI->db->field_exists('invoice_emailed_at', 'orders')) {
+            @$CI->db->query('ALTER TABLE `orders` ADD COLUMN `invoice_emailed_at` DATETIME DEFAULT NULL');
+        }
+    } catch (Throwable $e) {
+        log_message('error', 'sk_invoice_ensure_vendor_schema: '.$e->getMessage());
     }
 }
