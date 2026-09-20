@@ -4,26 +4,64 @@
 
 :root {
   --sk-sidebar-width: 240px;
-  --sk-sidebar-collapsed: 0px;
   --sk-bg: #f4f6f9;
   --sk-accent: #f59e0b;
   --sk-topbar-h: 56px;
   --sk-banner-h: 40px;
 }
 
-body { background: var(--sk-bg); font-size: 14px; margin: 0; }
-
-/* Fixed topbar offset */
-.sk-topbar { min-height: var(--sk-topbar-h); }
-.sk-wrapper {
-  margin-top: var(--sk-topbar-h);
-  min-height: calc(100vh - var(--sk-topbar-h));
-  align-items: stretch;
+html, body {
+  margin: 0;
+  padding: 0;
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  background: var(--sk-bg);
+}
+body { font-size: 14px; }
+
+/* Topbar */
+.sk-topbar {
+  min-height: var(--sk-topbar-h);
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+.sk-topbar .container-fluid {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+.sk-topbar .navbar-brand {
+  margin-right: 0.5rem;
+  flex: 0 0 auto;
+}
+#sidebarToggle {
+  flex: 0 0 auto;
+  margin-left: 0 !important;
+  margin-right: 0.5rem;
+}
+.sk-topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+/* Wrapper under fixed topbar */
+.sk-wrapper {
+  margin-top: var(--sk-topbar-h);
+  min-height: calc(100vh - var(--sk-topbar-h));
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  display: block;
 }
 body.sk-has-panel-banner .sk-wrapper { margin-top: 0; }
+
 .sk-panel-banner {
   margin-top: var(--sk-topbar-h);
   margin-bottom: 0;
@@ -41,19 +79,22 @@ body.sk-has-panel-banner .sk-wrapper { margin-top: 0; }
 }
 body.sk-has-panel-banner .sk-flash-area { top: 104px; }
 
-/* Sidebar — fixed column, dark thin scrollbar (no white strip) */
+/* Fixed left sidebar — avoids flex gap / sticky offset bugs */
 .sk-sidebar {
-  width: var(--sk-sidebar-width);
-  flex: 0 0 var(--sk-sidebar-width);
-  flex-shrink: 0;
-  transition: width 0.25s ease, flex-basis 0.25s ease;
-  position: sticky;
-  top: var(--sk-topbar-h);
-  align-self: flex-start;
-  height: calc(100vh - var(--sk-topbar-h));
-  max-height: calc(100vh - var(--sk-topbar-h));
+  position: fixed !important;
+  top: var(--sk-topbar-h) !important;
+  left: 0 !important;
+  bottom: 0;
+  width: var(--sk-sidebar-width) !important;
+  max-width: var(--sk-sidebar-width) !important;
+  height: calc(100vh - var(--sk-topbar-h)) !important;
+  max-height: calc(100vh - var(--sk-topbar-h)) !important;
+  z-index: 1030;
   overflow-x: hidden;
   overflow-y: auto;
+  margin: 0 !important;
+  padding: 0;
+  transform: none !important;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,.28) transparent;
 }
@@ -63,30 +104,42 @@ body.sk-has-panel-banner .sk-flash-area { top: 104px; }
   background: rgba(255,255,255,.28);
   border-radius: 999px;
 }
-.sk-sidebar.collapsed {
-  width: 0;
-  flex-basis: 0;
-  overflow: hidden;
-  border: 0;
-  padding: 0;
-}
-.sk-main {
-  min-width: 0;
-  flex: 1 1 auto;
+.sk-sidebar-inner {
   width: 100%;
   max-width: 100%;
-  background: var(--sk-bg);
-  overflow-x: auto;
+  box-sizing: border-box;
 }
-.sk-main.expanded { margin-left: 0; }
+.sk-sidebar.collapsed {
+  width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
 
 body.sk-has-panel-banner .sk-sidebar {
-  top: calc(var(--sk-topbar-h) + var(--sk-banner-h));
-  height: calc(100vh - var(--sk-topbar-h) - var(--sk-banner-h));
-  max-height: calc(100vh - var(--sk-topbar-h) - var(--sk-banner-h));
+  top: calc(var(--sk-topbar-h) + var(--sk-banner-h)) !important;
+  height: calc(100vh - var(--sk-topbar-h) - var(--sk-banner-h)) !important;
+  max-height: calc(100vh - var(--sk-topbar-h) - var(--sk-banner-h)) !important;
 }
 
-/* Settings / Bootstrap tabs: never leave invisible panes taking vertical space */
+/* Main content sits to the right of fixed sidebar */
+.sk-main {
+  display: block;
+  margin-left: var(--sk-sidebar-width) !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+  min-height: calc(100vh - var(--sk-topbar-h));
+  background: var(--sk-bg);
+  box-sizing: border-box;
+  overflow-x: auto;
+}
+.sk-main.expanded {
+  margin-left: 0 !important;
+}
+
+/* Settings / Bootstrap tabs: never leave invisible panes taking space */
 .tab-content > .tab-pane { display: none !important; }
 .tab-content > .tab-pane.active,
 .tab-content > .tab-pane.show.active { display: block !important; }
@@ -195,21 +248,20 @@ body.sk-has-panel-banner .sk-sidebar {
 /* Responsive */
 @media (max-width: 768px) {
   .sk-sidebar {
-    position: fixed;
-    z-index: 1000;
-    top: var(--sk-topbar-h);
-    left: 0;
-    height: calc(100vh - var(--sk-topbar-h));
-    max-height: calc(100vh - var(--sk-topbar-h));
+    box-shadow: 4px 0 12px rgba(0,0,0,.3);
   }
-  body.sk-has-panel-banner .sk-sidebar {
-    top: calc(var(--sk-topbar-h) + var(--sk-banner-h));
-    height: calc(100vh - var(--sk-topbar-h) - var(--sk-banner-h));
-    max-height: calc(100vh - var(--sk-topbar-h) - var(--sk-banner-h));
+  .sk-sidebar.collapsed {
+    width: 0 !important;
+    max-width: 0 !important;
   }
-  .sk-sidebar:not(.collapsed) { box-shadow: 4px 0 12px rgba(0,0,0,.3); }
-  .sk-sidebar.collapsed { width: 0; flex-basis: 0; }
-  .sk-main { padding: 1rem !important; }
+  .sk-main {
+    margin-left: 0 !important;
+    padding: 1rem !important;
+  }
+  .sk-main:not(.expanded) {
+    /* On mobile keep content full-width; sidebar overlays when open */
+    margin-left: 0 !important;
+  }
 }
 
 /* Login page */

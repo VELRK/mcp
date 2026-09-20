@@ -11,7 +11,7 @@
   <!-- DataTables -->
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
   <!-- Custom Admin CSS -->
-  <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin.css') ?>?v=20260920">
+  <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin.css') ?>?v=20260920b">
   <!-- Chart.js — must be in <head> so inline chart init scripts in views can use it -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Quill rich-text editor -->
@@ -44,15 +44,15 @@ $body_class = trim(
 <body class="<?= $body_class ?>">
 
 <!-- Top Navbar -->
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top sk-topbar">
+<nav class="navbar navbar-dark bg-dark fixed-top sk-topbar">
   <div class="container-fluid">
     <a class="navbar-brand fw-bold" href="<?= site_url('shopkart/dashboard') ?>">
       <i class="bi bi-bag-heart-fill text-warning me-1"></i> 2DEAL
     </a>
-    <button class="btn btn-sm btn-outline-secondary ms-auto me-2" id="sidebarToggle">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="sidebarToggle" title="Toggle menu">
       <i class="bi bi-list"></i>
     </button>
-    <div class="d-flex align-items-center gap-2">
+    <div class="sk-topbar-right">
       <?php if (!empty($vendor_logged_in)): ?>
       <span class="badge bg-primary d-none d-md-inline">Vendor</span>
       <?php endif; ?>
@@ -62,7 +62,7 @@ $body_class = trim(
         $pending = $this->Sk_Wa_Provision_request_model->get_pending();
         $pending_count = is_array($pending) ? count($pending) : 0;
       ?>
-      <a href="<?= site_url('admin/whatsapp_requests/pending') ?>" class="btn btn-sm btn-outline-light position-relative me-2" title="WA Requests">
+      <a href="<?= site_url('admin/whatsapp_requests/pending') ?>" class="btn btn-sm btn-outline-light position-relative" title="WA Requests">
         <i class="bi bi-telephone-forward"></i>
         <?php if ($pending_count > 0): ?>
           <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?= (int)$pending_count ?></span>
@@ -107,4 +107,4 @@ $body_class = trim(
 <?php endif; ?>
 </div>
 
-<div class="sk-wrapper d-flex">
+<div class="sk-wrapper">

@@ -265,4 +265,4 @@ if (!function_exists('sk_active')) {
 </nav>
 
 <!-- Main Content Area -->
-<main class="sk-main flex-grow-1 p-4">
+<main class="sk-main p-4">
