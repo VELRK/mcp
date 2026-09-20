@@ -13,8 +13,9 @@
 setTimeout(() => { document.querySelectorAll('.sk-flash-area .alert').forEach(a => a.classList.remove('show')); }, 4000);
 // Sidebar toggle
 document.getElementById('sidebarToggle')?.addEventListener('click', () => {
-  document.getElementById('sk-sidebar').classList.toggle('collapsed');
-  document.querySelector('.sk-main').classList.toggle('expanded');
+  document.getElementById('sk-sidebar')?.classList.toggle('collapsed');
+  document.querySelector('.sk-main')?.classList.toggle('expanded');
+  document.querySelector('.sk-wrapper')?.classList.toggle('sk-sidebar-collapsed');
 });
 // Init DataTables
 if (window.$ && $.fn && $.fn.dataTable) {
