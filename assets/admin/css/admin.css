@@ -175,7 +175,7 @@ body.sk-has-panel-banner .sk-sidebar {
   font-size:12px;
 }
 .sk-side-stat:hover{color:#fff}
-.sk-side-stat-label{color:rgba(255,255,255,.72);font-weight:600}
+.sk-side-stat-label{color:rgba(255,255,255,.72);font-weight:600;white-space:normal;line-height:1.2}
 .sk-side-stat strong{font-size:16px;line-height:1}
 .sk-mcp-pill{
   display:inline-flex;
@@ -202,8 +202,11 @@ body.sk-has-panel-banner .sk-sidebar {
   font-size: 13.5px;
   transition: all 0.15s;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: flex;
   align-items: center;
+  max-width: 100%;
 }
 .sk-nav-link:hover, .sk-nav-link.active {
   color: #fff;
