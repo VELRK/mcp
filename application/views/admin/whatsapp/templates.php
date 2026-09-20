@@ -66,8 +66,8 @@
           <td class="text-nowrap">
             <a class="btn btn-sm btn-outline-dark" href="<?= site_url('shopkart/whatsapp/templates/edit/'.$t['id']) ?>">Edit</a>
             <a class="btn btn-sm btn-outline-primary" href="<?= site_url('shopkart/whatsapp/campaigns/add?template_id='.$t['id']) ?>">Campaign</a>
-            <a class="btn btn-sm btn-outline-success" href="<?= site_url('shopkart/whatsapp/templates/push/'.$t['id']) ?>">Push to Meta</a>
-            <a class="btn btn-sm btn-outline-danger" href="<?= site_url('shopkart/whatsapp/templates/delete/'.$t['id']) ?>" onclick="return confirm('Delete this template?')">Delete</a>
+            <a class="btn btn-sm btn-outline-success" href="<?= site_url('shopkart/whatsapp/templates/push/'.$t['id']) ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>">Push to Meta</a>
+            <a class="btn btn-sm btn-outline-danger" href="<?= site_url('shopkart/whatsapp/templates/delete/'.$t['id']) ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>" onclick="return confirm('Delete this template?')">Delete</a>
           </td>
         </tr>
         <?php endforeach; ?>

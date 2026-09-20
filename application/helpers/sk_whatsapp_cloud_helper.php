@@ -297,10 +297,16 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
 
 function sk_wa_cloud_is_ready(?array $settings = null, ?int $vendorId = null): bool {
     $cfg = sk_wa_cloud_config($settings, $vendorId);
-    // Messaging needs token + phone; both come from Meta OAuth / vendor account / webhook metadata.
-    return !empty($cfg['enabled'])
-        && $cfg['access_token'] !== ''
-        && $cfg['phone_number_id'] !== '';
+    // Messaging needs token + phone. Global "enabled" OR a resolved vendor account is enough.
+    $hasCreds = $cfg['access_token'] !== '' && $cfg['phone_number_id'] !== '';
+    if (!$hasCreds) {
+        return false;
+    }
+    if (!empty($cfg['enabled'])) {
+        return true;
+    }
+    // Vendor-scoped accounts from Embedded Signup / webhook do not rely on the global toggle alone.
+    return $vendorId !== null && (int)$vendorId > 0 && (int)($cfg['vendor_id'] ?? 0) === (int)$vendorId;
 }
 
 function sk_wa_cloud_normalize_phone(string $phone): string {
