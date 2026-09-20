@@ -168,8 +168,20 @@ class Vendors extends Sk_Base {
         $vendor = $this->Sk_Vendor_model->get_by_id((int)$id);
         if (!$vendor) show_404();
 
+        $this->load->model('Sk_Vendor_whatsapp_account_model');
+        $this->load->helper('sk_whatsapp_cloud');
+        sk_wa_cloud_ensure_schema();
+        $this->Sk_Vendor_whatsapp_account_model->ensure_schema();
+
+        $wa_accounts = $this->Sk_Vendor_whatsapp_account_model->get_for_vendor((int)$id);
+        $settings = $this->Sk_Admin_model->get_settings();
+        $cfg = sk_wa_cloud_config($settings);
+
         $data['title']  = $vendor['business_name'] . ' - Vendor';
         $data['vendor'] = $vendor;
+        $data['wa_accounts'] = $wa_accounts;
+        $data['cfg'] = $cfg;
+        $data['webhook_uri'] = sk_wa_meta_webhook_uri();
         $this->render('vendors/view', $data);
     }
 

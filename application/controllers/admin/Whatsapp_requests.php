@@ -132,6 +132,7 @@ class Whatsapp_requests extends Sk_Base {
             $requestId = (int)$this->session->userdata('wa_provision_request_id');
         }
         $accountId = (int)$this->input->post('account_id');
+        $vendorIdPost = (int)$this->input->post('vendor_id');
 
         $req = null;
         $vendorId = 0;
@@ -152,8 +153,19 @@ class Whatsapp_requests extends Sk_Base {
                 'vendor_id'  => $vendorId,
                 'account_id' => $accountId,
             ];
+        } elseif ($vendorIdPost > 0) {
+            // Direct connect from vendor profile (no pending request).
+            $vendor = $this->Sk_Vendor_model->get_by_id($vendorIdPost, false);
+            if (!$vendor) {
+                return $this->json(['ok' => false, 'error' => 'Vendor not found.'], 400);
+            }
+            $vendorId = $vendorIdPost;
+            $req = [
+                'id'        => 0,
+                'vendor_id' => $vendorId,
+            ];
         } else {
-            return $this->json(['ok' => false, 'error' => 'Select a pending request or inactive number first.'], 400);
+            return $this->json(['ok' => false, 'error' => 'Select a pending request, inactive number, or vendor first.'], 400);
         }
 
         $code = trim((string)$this->input->post('code', FALSE));
