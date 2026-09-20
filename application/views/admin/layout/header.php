@@ -11,7 +11,7 @@
   <!-- DataTables -->
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
   <!-- Custom Admin CSS -->
-  <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin.css') ?>">
+  <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin.css') ?>?v=20260920">
   <!-- Chart.js — must be in <head> so inline chart init scripts in views can use it -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Quill rich-text editor -->

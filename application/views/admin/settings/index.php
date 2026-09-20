@@ -30,7 +30,7 @@
   </div>
 
   <!-- Nav Tabs -->
-  <ul class="nav nav-tabs mb-3" id="settingsTabs">
+  <ul class="nav nav-tabs mb-3 flex-wrap" id="settingsTabs">
     <li class="nav-item"><button type="button" class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-general">General</button></li>
     <?php if (empty($vendor_logged_in)): ?>
     <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-whatsapp"><i class="bi bi-whatsapp me-1"></i>Order WhatsApp</button></li>
@@ -683,18 +683,39 @@
 </form>
 
 <script>
-(function () {
+window.addEventListener('load', function () {
   var tabInput = document.getElementById('settingsTabInput');
   var params = new URLSearchParams(window.location.search);
   var preferredTab = params.get('tab') || <?php echo json_encode($active_tab ?? 'general'); ?>;
-  var tab = preferredTab;
-  if (tab) {
-    var btn = document.querySelector('[data-bs-target="#tab-' + tab + '"]');
-    if (btn && window.bootstrap) {
-      bootstrap.Tab.getOrCreateInstance(btn).show();
+  var tab = preferredTab || 'general';
+
+  function activateSettingsTab(name) {
+    var targetSel = '#tab-' + name;
+    var btn = document.querySelector('#settingsTabs [data-bs-target="' + targetSel + '"]');
+    var pane = document.querySelector(targetSel);
+    if (!pane) return;
+
+    document.querySelectorAll('#settingsTabs .nav-link').forEach(function (el) {
+      el.classList.remove('active');
+      el.setAttribute('aria-selected', 'false');
+    });
+    document.querySelectorAll('#settingsTabs ~ .tab-content > .tab-pane, .tab-content > .tab-pane').forEach(function (el) {
+      el.classList.remove('show', 'active');
+    });
+
+    if (btn) {
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      if (window.bootstrap && bootstrap.Tab) {
+        bootstrap.Tab.getOrCreateInstance(btn).show();
+      }
     }
-    if (tabInput) tabInput.value = tab;
+    pane.classList.add('show', 'active');
+    if (tabInput) tabInput.value = name;
   }
+
+  activateSettingsTab(tab);
+
   document.querySelectorAll('#settingsTabs [data-bs-toggle="tab"]').forEach(function (el) {
     el.addEventListener('shown.bs.tab', function (e) {
       if (!tabInput) return;
@@ -773,5 +794,5 @@
       });
     });
   }
-})();
+});
 </script>
