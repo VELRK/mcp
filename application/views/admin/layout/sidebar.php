@@ -5,7 +5,7 @@ if (!function_exists('sk_active')) {
 }
 ?>
 <!-- Sidebar -->
-<nav id="sk-sidebar" class="sk-sidebar bg-dark text-white">
+<aside id="sk-sidebar" class="sk-sidebar bg-dark text-white">
   <div class="sk-sidebar-inner pt-3 pb-5">
 
     <?php
@@ -262,7 +262,7 @@ if (!function_exists('sk_active')) {
 
     </ul>
   </div>
-</nav>
+</aside>
 
 <!-- Main Content Area -->
 <main class="sk-main p-4">

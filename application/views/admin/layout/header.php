@@ -11,7 +11,7 @@
   <!-- DataTables -->
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
   <!-- Custom Admin CSS -->
-  <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin.css') ?>?v=20260920c">
+  <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin.css') ?>?v=20260920d">
   <!-- Chart.js — must be in <head> so inline chart init scripts in views can use it -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Quill rich-text editor -->
@@ -21,16 +21,67 @@
     .ql-container{ border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
     .ql-editor   { min-height:180px; font-size:14px; line-height:1.6; }
     .ql-editor-lg .ql-editor { min-height:260px; }
-    /* Picker widths */
     .ql-font .ql-picker-label,
     .ql-font .ql-picker-item { width:110px; }
     .ql-size .ql-picker-label,
     .ql-size .ql-picker-item { width:80px; }
-    /* Show selected font/size label in the picker button */
     .ql-font .ql-picker-label::before { content: attr(data-value, 'Font'); }
     .ql-size .ql-picker-label::before { content: attr(data-value, 'Size'); }
-    /* Images */
     .ql-editor img { max-width:100%; height:auto; border-radius:4px; }
+
+    /* Critical admin shell — last in head, beats cached/conflicting rules */
+    html, body { margin:0 !important; padding:0 !important; width:100% !important; max-width:100% !important; overflow-x:hidden !important; background:#f4f6f9 !important; }
+    .sk-topbar { height:56px !important; min-height:56px !important; }
+    .sk-wrapper { display:block !important; margin:56px 0 0 0 !important; padding:0 !important; width:100% !important; max-width:100% !important; background:#f4f6f9 !important; }
+    body.sk-has-panel-banner .sk-wrapper { margin-top:0 !important; }
+    #sk-sidebar, aside.sk-sidebar {
+      position:fixed !important;
+      left:0 !important;
+      top:56px !important;
+      bottom:0 !important;
+      right:auto !important;
+      width:240px !important;
+      max-width:240px !important;
+      min-width:0 !important;
+      margin:0 !important;
+      padding:0 !important;
+      height:auto !important;
+      overflow-x:hidden !important;
+      overflow-y:auto !important;
+      z-index:1030 !important;
+      background:#212529 !important;
+      transform:none !important;
+    }
+    body.sk-has-panel-banner #sk-sidebar,
+    body.sk-has-panel-banner aside.sk-sidebar { top:96px !important; }
+    #sk-sidebar.collapsed, aside.sk-sidebar.collapsed {
+      width:0 !important;
+      max-width:0 !important;
+      overflow:hidden !important;
+    }
+    main.sk-main, .sk-main {
+      display:block !important;
+      margin:0 0 0 240px !important;
+      padding:1.5rem !important;
+      width:calc(100% - 240px) !important;
+      max-width:calc(100% - 240px) !important;
+      min-width:0 !important;
+      box-sizing:border-box !important;
+      background:#f4f6f9 !important;
+      position:relative !important;
+      left:auto !important;
+      right:auto !important;
+      float:none !important;
+      transform:none !important;
+    }
+    main.sk-main.expanded, .sk-main.expanded {
+      margin-left:0 !important;
+      width:100% !important;
+      max-width:100% !important;
+    }
+    @media (max-width:768px) {
+      main.sk-main, .sk-main { margin-left:0 !important; width:100% !important; max-width:100% !important; }
+    }
   </style>
 </head>
 <?php
