@@ -149,7 +149,7 @@ class Whatsapp extends Sk_Base {
         }
         $cfg = sk_wa_cloud_config($settings, $vid > 0 ? $vid : null);
         $data['title'] = 'WhatsApp Templates';
-        $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates();
+        $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates($vid > 0 ? $vid : null);
         $data['ready'] = sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null);
         $data['cfg'] = $cfg;
         $data['vendor_id'] = $vid;
@@ -157,18 +157,21 @@ class Whatsapp extends Sk_Base {
     }
 
     public function template_form($id = 0) {
-        $row = $id ? $this->Sk_Whatsapp_cloud_model->get_template((int)$id) : null;
+        $vid = $this->_resolve_ops_vendor_id();
+        $row = $id ? $this->Sk_Whatsapp_cloud_model->get_template((int)$id, $vid > 0 ? $vid : null) : null;
         if ($id && !$row) {
             show_404();
         }
         $data['title'] = $row ? 'Edit template' : 'New template';
         $data['row'] = $row;
+        $data['vendor_id'] = $vid;
         $data['customer_modules'] = sk_wa_cloud_customer_modules();
         $this->render('whatsapp/template_form', $data);
     }
 
     public function template_save($id = 0) {
         $id = (int)$id;
+        $vid = $this->_resolve_ops_vendor_id();
         $name = strtolower(trim((string)$this->input->post('name', TRUE)));
         $name = preg_replace('/[^a-z0-9_]+/', '_', $name);
         $kind = $this->input->post('kind', TRUE);
@@ -177,7 +180,7 @@ class Whatsapp extends Sk_Base {
         }
         if ($name === '') {
             $this->session->set_flashdata('error', 'Template name is required (letters, numbers, underscore).');
-            redirect($id ? 'admin/whatsapp/templates/edit/' . $id : 'admin/whatsapp/templates/add');
+            redirect(($id ? 'shopkart/whatsapp/templates/edit/' . $id : 'shopkart/whatsapp/templates/add') . ($vid > 0 ? '?vendor_id=' . $vid : ''));
             return;
         }
         $payload = [
@@ -194,18 +197,20 @@ class Whatsapp extends Sk_Base {
                 JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             ),
         ];
-        $existing = $id ? $this->Sk_Whatsapp_cloud_model->get_template($id) : null;
+        if ($vid > 0) {
+            $payload['vendor_id'] = $vid;
+        }
+        $existing = $id ? $this->Sk_Whatsapp_cloud_model->get_template($id, $vid > 0 ? $vid : null) : null;
         if ($kind !== 'text') {
             $file = $this->_store_upload($kind);
             if (empty($file['error']) && !empty($file['url'])) {
                 $payload['media_url'] = $file['url'];
             } elseif (!$existing || empty($existing['media_url'])) {
                 $this->session->set_flashdata('error', $file['error'] ?? 'Upload an image or video for this template.');
-                redirect($id ? 'admin/whatsapp/templates/edit/' . $id : 'admin/whatsapp/templates/add');
+                redirect(($id ? 'shopkart/whatsapp/templates/edit/' . $id : 'shopkart/whatsapp/templates/add') . ($vid > 0 ? '?vendor_id=' . $vid : ''));
                 return;
             }
         }
-        $vid = $this->_resolve_ops_vendor_id();
         $savedId = $this->Sk_Whatsapp_cloud_model->save_template($payload, $id);
         $push = (string)$this->input->post('push_meta') === '1';
         if ($push) {
@@ -218,11 +223,11 @@ class Whatsapp extends Sk_Base {
     }
 
     public function template_delete($id = 0) {
-        $row = $this->Sk_Whatsapp_cloud_model->get_template((int)$id);
+        $vid = $this->_resolve_ops_vendor_id();
+        $row = $this->Sk_Whatsapp_cloud_model->get_template((int)$id, $vid > 0 ? $vid : null);
         if (!$row) {
             show_404();
         }
-        $vid = $this->_resolve_ops_vendor_id();
         $settings = $this->Sk_Admin_model->get_settings();
         if ($vid > 0) {
             $settings['vendor_id'] = $vid;
@@ -234,7 +239,7 @@ class Whatsapp extends Sk_Base {
             $this->load->library('Whatsapp_cloud', $settings);
             $this->whatsapp_cloud->delete_template($row['name']);
         }
-        $this->Sk_Whatsapp_cloud_model->delete_template((int)$id);
+        $this->Sk_Whatsapp_cloud_model->delete_template((int)$id, $vid > 0 ? $vid : null);
         $this->session->set_flashdata('success', 'Template deleted.');
         $this->_templates_redirect($vid);
     }
@@ -246,7 +251,7 @@ class Whatsapp extends Sk_Base {
             $settings['vendor_id'] = $vid;
         }
         if (!sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null)) {
-            $this->session->set_flashdata('error', 'Connect Meta Cloud API for this number first.');
+            $this->session->set_flashdata('error', sk_wa_cloud_not_ready_reason($settings, $vid > 0 ? $vid : null));
             $this->_templates_redirect($vid);
             return;
         }
@@ -262,7 +267,7 @@ class Whatsapp extends Sk_Base {
         }
         $n = 0;
         foreach ((array)($res['data']['data'] ?? []) as $remote) {
-            if (is_array($remote) && $this->Sk_Whatsapp_cloud_model->upsert_meta_template($remote)) {
+            if (is_array($remote) && $this->Sk_Whatsapp_cloud_model->upsert_meta_template($remote, $vid > 0 ? $vid : null)) {
                 $n++;
             }
         }
@@ -278,23 +283,29 @@ class Whatsapp extends Sk_Base {
     }
 
     public function campaign_form() {
+        $vid = $this->_resolve_ops_vendor_id();
         $settings = $this->Sk_Admin_model->get_settings();
+        if ($vid > 0) {
+            $settings['vendor_id'] = $vid;
+        }
         $search = trim((string)$this->input->get('q', TRUE));
         $data['title'] = 'New WhatsApp campaign';
-        $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates();
+        $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates($vid > 0 ? $vid : null);
         $data['customers'] = $this->Sk_Whatsapp_cloud_model->list_customers_with_phone($search, 250);
         $data['customer_count'] = $this->Sk_Whatsapp_cloud_model->count_customers_with_phone();
         $data['search'] = $search;
-        $data['ready'] = sk_wa_cloud_is_ready($settings);
+        $data['ready'] = sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null);
+        $data['vendor_id'] = $vid;
         $data['selected_template_id'] = (int)$this->input->get('template_id');
         $this->render('whatsapp/campaign_form', $data);
     }
 
     public function campaign_save() {
+        $vid = $this->_resolve_ops_vendor_id();
         $name = trim((string)$this->input->post('name', TRUE));
         $templateId = (int)$this->input->post('template_id');
         $audience = (string)$this->input->post('audience', TRUE);
-        $tpl = $this->Sk_Whatsapp_cloud_model->get_template($templateId);
+        $tpl = $this->Sk_Whatsapp_cloud_model->get_template($templateId, $vid > 0 ? $vid : null);
         if ($name === '' || !$tpl) {
             $this->session->set_flashdata('error', 'Campaign name and an approved template are required.');
             redirect('admin/whatsapp/campaigns/add');
@@ -477,7 +488,7 @@ class Whatsapp extends Sk_Base {
     }
 
     private function _push_template_to_meta(int $id, ?int $vendorId = null): array {
-        $row = $this->Sk_Whatsapp_cloud_model->get_template($id);
+        $row = $this->Sk_Whatsapp_cloud_model->get_template($id, $vid > 0 ? $vid : null);
         if (!$row) {
             return ['ok' => false, 'text' => 'Template not found.'];
         }
@@ -487,7 +498,7 @@ class Whatsapp extends Sk_Base {
             $settings['vendor_id'] = $vid;
         }
         if (!sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null)) {
-            return ['ok' => false, 'text' => 'Connect Meta Cloud API for this number first.'];
+            return ['ok' => false, 'text' => sk_wa_cloud_not_ready_reason($settings, $vid > 0 ? $vid : null)];
         }
         $cfg = sk_wa_cloud_config($settings, $vid > 0 ? $vid : null);
         if (trim((string)($cfg['waba_id'] ?? '')) === '') {

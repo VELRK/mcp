@@ -9,12 +9,19 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
         sk_wa_cloud_ensure_schema();
     }
 
-    public function list_templates(): array {
+    public function list_templates(?int $vendorId = null): array {
+        if ($vendorId !== null && $vendorId > 0 && $this->db->field_exists('vendor_id', 'wa_cloud_templates')) {
+            $this->db->where('vendor_id', (int)$vendorId);
+        }
         return $this->db->order_by('updated_at', 'DESC')->get('wa_cloud_templates')->result_array();
     }
 
-    public function get_template(int $id): ?array {
-        $row = $this->db->where('id', $id)->get('wa_cloud_templates')->row_array();
+    public function get_template(int $id, ?int $vendorId = null): ?array {
+        $this->db->where('id', $id);
+        if ($vendorId !== null && $vendorId > 0 && $this->db->field_exists('vendor_id', 'wa_cloud_templates')) {
+            $this->db->where('vendor_id', (int)$vendorId);
+        }
+        $row = $this->db->get('wa_cloud_templates')->row_array();
         return $row ?: null;
     }
 
@@ -26,16 +33,23 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
             return $id;
         }
         $data['created_at'] = $now;
+        if (!isset($data['vendor_id'])) {
+            $data['vendor_id'] = 0;
+        }
         $this->db->insert('wa_cloud_templates', $data);
         return (int)$this->db->insert_id();
     }
 
-    public function delete_template(int $id): bool {
-        $this->db->where('id', $id)->delete('wa_cloud_templates');
+    public function delete_template(int $id, ?int $vendorId = null): bool {
+        $this->db->where('id', $id);
+        if ($vendorId !== null && $vendorId > 0 && $this->db->field_exists('vendor_id', 'wa_cloud_templates')) {
+            $this->db->where('vendor_id', (int)$vendorId);
+        }
+        $this->db->delete('wa_cloud_templates');
         return $this->db->affected_rows() > 0;
     }
 
-    public function upsert_meta_template(array $remote): int {
+    public function upsert_meta_template(array $remote, ?int $vendorId = null): int {
         $name = trim((string)($remote['name'] ?? ''));
         $lang = trim((string)($remote['language'] ?? 'en'));
         if ($name === '') {
@@ -62,6 +76,10 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
                 $footer = (string)($c['text'] ?? '');
             }
         }
+        $vid = $vendorId !== null ? (int)$vendorId : 0;
+        if ($this->db->field_exists('vendor_id', 'wa_cloud_templates') && $vid > 0) {
+            $this->db->where('vendor_id', $vid);
+        }
         $existing = $this->db->where('name', $name)->where('language', $lang)->get('wa_cloud_templates')->row_array();
         $payload = [
             'name'         => $name,
@@ -75,6 +93,9 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
             'status'       => (string)($remote['status'] ?? 'PENDING'),
             'meta_payload' => json_encode($remote, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ];
+        if ($this->db->field_exists('vendor_id', 'wa_cloud_templates')) {
+            $payload['vendor_id'] = $vid;
+        }
         return $this->save_template($payload, $existing ? (int)$existing['id'] : 0);
     }
 

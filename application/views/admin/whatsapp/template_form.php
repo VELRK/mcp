@@ -11,11 +11,14 @@ foreach ($modules as $key => $mod) {
 <link rel="stylesheet" href="<?= base_url('assets/admin/css/whatsapp-cloud.css') ?>">
 <div class="sk-page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
   <h5 class="sk-page-title mb-0"><?= $row ? 'Edit template' : 'New template' ?></h5>
-  <a class="btn btn-sm btn-outline-success" href="<?= site_url('shopkart/whatsapp/campaigns') ?>">Campaigns</a>
+  <a class="btn btn-sm btn-outline-secondary" href="<?= site_url('shopkart/whatsapp/templates') ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>">Back</a>
 </div>
 
 <form class="card sk-table-card shadow-sm" method="post" enctype="multipart/form-data"
-      action="<?= site_url($id ? 'admin/whatsapp/templates/save/'.$id : 'admin/whatsapp/templates/save') ?>">
+      action="<?= site_url($id ? 'shopkart/whatsapp/templates/save/'.$id : 'shopkart/whatsapp/templates/save') ?>">
+  <?php if (!empty($vendor_id)): ?>
+  <input type="hidden" name="vendor_id" value="<?= (int)$vendor_id ?>">
+  <?php endif; ?>
   <input type="hidden" name="variable_map" id="variableMap" value="<?= htmlspecialchars(json_encode($savedMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">
   <div class="card-body">
     <div class="row g-3">

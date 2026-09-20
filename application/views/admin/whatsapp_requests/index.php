@@ -3,24 +3,26 @@ $accounts = $accounts ?? [];
 $requests = $requests ?? [];
 $cfg = $cfg ?? [];
 $vendorId = (int)($vendor_id ?? 0);
-$appId = (string)($cfg['app_id'] ?? '');
-$configId = (string)($cfg['config_id'] ?? '1661379532355089');
-$hasSecret = !empty($cfg['app_secret']);
 $active = array_values(array_filter($accounts, static function ($a) {
     return ($a['status'] ?? '') === 'active';
 }));
 $inactive = array_values(array_filter($accounts, static function ($a) {
     return ($a['status'] ?? '') !== 'active';
 }));
+$pendingReqs = array_values(array_filter($requests, static function ($r) {
+    return ($r['status'] ?? '') === 'pending';
+}));
 ?>
 <div class="sk-page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
   <div>
     <h5 class="sk-page-title mb-1"><i class="bi bi-whatsapp text-success me-2"></i>Connect WhatsApp</h5>
-    <div class="small text-muted">Add multiple WhatsApp Business numbers. Each Embed Login saves Phone ID + WABA for your store.</div>
+    <div class="small text-muted">
+      Request a WhatsApp number → marketplace admin connects it with Embed Login → then create templates for your store.
+    </div>
   </div>
   <div class="d-flex flex-wrap gap-2">
-    <a href="<?= site_url('admin/whatsapp/templates') ?>" class="btn btn-sm btn-outline-success">Templates</a>
-    <a href="<?= site_url('admin/whatsapp') ?>" class="btn btn-sm btn-outline-secondary">Inbox</a>
+    <a href="<?= site_url('shopkart/whatsapp/templates?vendor_id='.$vendorId) ?>" class="btn btn-sm btn-outline-success">Templates</a>
+    <a href="<?= site_url('shopkart/whatsapp') ?>" class="btn btn-sm btn-outline-secondary">Inbox</a>
   </div>
 </div>
 
@@ -31,38 +33,83 @@ $inactive = array_values(array_filter($accounts, static function ($a) {
   <div class="alert alert-success"><?= htmlspecialchars($this->session->flashdata('success')) ?></div>
 <?php endif; ?>
 
-<?php if ($appId === '' || !$hasSecret): ?>
-  <div class="alert alert-warning">
-    WhatsApp connect is not configured yet (Meta App ID / Secret). Contact the marketplace admin.
+<div class="card sk-table-card shadow-sm mb-3">
+  <div class="card-header bg-white border-0 py-3 fw-semibold">Request a WhatsApp number</div>
+  <div class="card-body">
+    <p class="small text-muted mb-3">
+      Submit the display phone you want connected. The <strong>master admin</strong> will run Facebook Embed Login
+      for your store and save Phone Number ID, WABA, and token under vendor #<?= (int)$vendorId ?>.
+    </p>
+    <form method="post" action="<?= site_url('admin/whatsapp_requests/submit') ?>" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label small">Display phone</label>
+        <input name="display_phone" class="form-control form-control-sm" placeholder="e.g. +60 12 345 6789" required>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label small">Note for admin</label>
+        <input name="note" class="form-control form-control-sm" placeholder="Business name / why you need this number">
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-primary btn-sm w-100" type="submit">
+          <i class="bi bi-send me-1"></i> Submit to admin
+        </button>
+      </div>
+    </form>
   </div>
+</div>
+
+<?php if (!empty($requests)): ?>
+<div class="card sk-table-card shadow-sm mb-3">
+  <div class="card-header bg-white border-0 py-3 fw-semibold">
+    Your requests
+    <?php if (count($pendingReqs)): ?>
+      <span class="badge bg-warning text-dark"><?= count($pendingReqs) ?> pending</span>
+    <?php endif; ?>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Phone</th>
+            <th>Note</th>
+            <th>Status</th>
+            <th>Submitted</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($requests as $r): ?>
+            <tr>
+              <td class="font-monospace small"><?= htmlspecialchars($r['display_phone'] ?: $r['phone_number_id'] ?: '—') ?></td>
+              <td class="small"><?= htmlspecialchars($r['note'] ?? '') ?></td>
+              <td>
+                <?php
+                  $st = (string)($r['status'] ?? '');
+                  $cls = $st === 'approved' ? 'bg-success' : ($st === 'rejected' ? 'bg-danger' : 'bg-warning text-dark');
+                ?>
+                <span class="badge <?= $cls ?>"><?= htmlspecialchars($st ?: 'pending') ?></span>
+              </td>
+              <td class="small text-muted"><?= htmlspecialchars($r['created_at'] ?? '') ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 <?php endif; ?>
 
 <div class="card sk-table-card shadow-sm mb-3">
-  <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2">
-    <div>
-      <div class="fw-semibold mb-1">Add another WhatsApp number</div>
-      <div class="small text-muted mb-0">
-        Opens Facebook Embedded Signup. You can connect several numbers — each gets its own Phone ID / WABA in your store.
-      </div>
-    </div>
-    <button type="button" class="btn btn-primary wa-vendor-add-btn"
-            data-account-id="0"
-            <?= ($appId === '' || !$hasSecret) ? 'disabled' : '' ?>>
-      <i class="bi bi-facebook me-1"></i> Embed Login — Add number
-    </button>
-  </div>
-  <div class="px-3 pb-3 small text-muted" id="waVendorConnectStatus"></div>
-</div>
-
-<div class="card sk-table-card shadow-sm mb-3">
   <div class="card-header bg-white border-0 py-3 fw-semibold">
-    Your connected numbers
+    Connected numbers
     <span class="badge bg-success"><?= count($active) ?> active</span>
     <?php if (count($inactive)): ?><span class="badge bg-secondary"><?= count($inactive) ?> inactive</span><?php endif; ?>
   </div>
   <div class="card-body p-0">
     <?php if (empty($accounts)): ?>
-      <div class="text-muted text-center py-4">No numbers yet. Click <strong>Embed Login — Add number</strong> above.</div>
+      <div class="text-muted text-center py-4 px-3">
+        No numbers yet. Submit a request above — after the admin completes Embed Login, your Phone ID and token appear here and you can create templates.
+      </div>
     <?php else: ?>
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -96,7 +143,7 @@ $inactive = array_values(array_filter($accounts, static function ($a) {
                 </td>
                 <td class="text-end text-nowrap">
                   <?php if (!$isInactive): ?>
-                    <a href="<?= site_url('admin/whatsapp/templates') ?>" class="btn btn-sm btn-success">Templates</a>
+                    <a href="<?= site_url('shopkart/whatsapp/templates?vendor_id='.$vendorId) ?>" class="btn btn-sm btn-success">Templates</a>
                     <?php if (empty($a['is_default'])): ?>
                       <form method="post" action="<?= site_url('admin/whatsapp_requests/vendor_set_default') ?>" class="d-inline">
                         <input type="hidden" name="wa_account_id" value="<?= (int)$a['id'] ?>">
@@ -109,11 +156,7 @@ $inactive = array_values(array_filter($accounts, static function ($a) {
                       <button type="submit" class="btn btn-sm btn-outline-secondary" onclick="return confirm('Mark this number inactive?');">Inactive</button>
                     </form>
                   <?php else: ?>
-                    <button type="button" class="btn btn-sm btn-primary wa-vendor-add-btn"
-                            data-account-id="<?= (int)$a['id'] ?>"
-                            <?= ($appId === '' || !$hasSecret) ? 'disabled' : '' ?>>
-                      Reconnect
-                    </button>
+                    <span class="small text-muted">Ask admin to reconnect via Embed Login</span>
                     <form method="post" action="<?= site_url('admin/whatsapp_requests/vendor_set_status') ?>" class="d-inline">
                       <input type="hidden" name="wa_account_id" value="<?= (int)$a['id'] ?>">
                       <input type="hidden" name="status" value="active">
@@ -129,118 +172,3 @@ $inactive = array_values(array_filter($accounts, static function ($a) {
     <?php endif; ?>
   </div>
 </div>
-
-<details class="mb-3">
-  <summary class="small text-muted" style="cursor:pointer">Need admin help? Submit a request instead</summary>
-  <div class="card mt-2">
-    <div class="card-body">
-      <form method="post" action="<?= site_url('admin/whatsapp_requests/submit') ?>">
-        <div class="row g-2">
-          <div class="col-md-4">
-            <label class="form-label small">Display Phone</label>
-            <input name="display_phone" class="form-control form-control-sm" placeholder="e.g. +60 …" required>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">Note</label>
-            <input name="note" class="form-control form-control-sm" placeholder="Ask admin to connect this number">
-          </div>
-          <div class="col-md-4 d-flex align-items-end">
-            <button class="btn btn-outline-primary btn-sm">Submit request</button>
-          </div>
-        </div>
-      </form>
-      <?php if (!empty($requests)): ?>
-        <hr>
-        <div class="small fw-semibold mb-2">Your requests</div>
-        <ul class="list-group list-group-flush">
-          <?php foreach ($requests as $r): ?>
-            <li class="list-group-item px-0 d-flex justify-content-between">
-              <span><?= htmlspecialchars($r['display_phone'] ?: $r['phone_number_id'] ?: '—') ?></span>
-              <span class="badge bg-light text-dark border"><?= htmlspecialchars($r['status']) ?></span>
-            </li>
-          <?php endforeach; ?>
-        </ul>
-      <?php endif; ?>
-    </div>
-  </div>
-</details>
-
-<?php if ($appId !== ''): ?>
-<div id="fb-root"></div>
-<script>
-window.skVWaSignup = {};
-window.skVWaAccountId = 0;
-window.addEventListener('message', function (event) {
-  if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return;
-  try {
-    var payload = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-    if (payload && payload.type === 'WA_EMBEDDED_SIGNUP') {
-      window.skVWaSignup = payload.data || {};
-    }
-  } catch (e) {}
-});
-function skVWaStatus(msg) {
-  var el = document.getElementById('waVendorConnectStatus');
-  if (el) el.textContent = msg || '';
-}
-function skVWaPostCode(code) {
-  skVWaStatus('Exchanging token and saving Phone ID / WABA…');
-  var body = new URLSearchParams();
-  body.set('code', code);
-  body.set('account_id', String(window.skVWaAccountId || 0));
-  body.set('signup', JSON.stringify(Object.assign({}, window.skVWaSignup || {}, {
-    vendor_id: <?= (int)$vendorId ?>
-  })));
-  fetch(<?= json_encode(site_url('admin/whatsapp_requests/vendor_exchange')) ?>, {
-    method: 'POST',
-    headers: { 'Accept': 'application/json' },
-    body: body,
-    credentials: 'same-origin'
-  }).then(function (r) { return r.json(); }).then(function (res) {
-    if (res && res.ok) {
-      skVWaStatus(res.message || 'Saved.');
-      window.location.reload();
-      return;
-    }
-    skVWaStatus((res && res.error) ? res.error : 'Connect failed.');
-  }).catch(function () {
-    skVWaStatus('Network error during token exchange.');
-  });
-}
-function skVWaOnLogin(response) {
-  var auth = response && response.authResponse ? response.authResponse : {};
-  if (auth.code) {
-    skVWaPostCode(auth.code);
-    return;
-  }
-  skVWaStatus('Facebook did not return an authorization code.');
-}
-function skVWaLaunch(btn) {
-  window.skVWaAccountId = parseInt(btn.getAttribute('data-account-id') || '0', 10) || 0;
-  if (!window.FB) {
-    skVWaStatus('Facebook SDK still loading… try again.');
-    return;
-  }
-  skVWaStatus(window.skVWaAccountId ? 'Reconnecting…' : 'Opening Embed Login to add a number…');
-  FB.login(skVWaOnLogin, {
-    config_id: <?= json_encode($configId) ?>,
-    response_type: 'code',
-    override_default_response_type: true,
-    extras: { setup: {}, featureType: '', sessionInfoVersion: '3' }
-  });
-}
-window.fbAsyncInit = function () {
-  if (!window.FB) return;
-  FB.init({
-    appId: <?= json_encode($appId) ?>,
-    cookie: true,
-    xfbml: false,
-    version: <?= json_encode((string)($cfg['api_version'] ?? 'v21.0')) ?>
-  });
-  document.querySelectorAll('.wa-vendor-add-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () { skVWaLaunch(btn); });
-  });
-};
-</script>
-<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
-<?php endif; ?>

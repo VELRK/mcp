@@ -23,6 +23,7 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
     if (!$CI->db->table_exists('wa_cloud_templates')) {
         $CI->db->query("CREATE TABLE `wa_cloud_templates` (
             `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `vendor_id` INT UNSIGNED NOT NULL DEFAULT 0,
             `name` VARCHAR(512) NOT NULL,
             `language` VARCHAR(16) NOT NULL DEFAULT 'en',
             `category` VARCHAR(32) NOT NULL DEFAULT 'UTILITY',
@@ -39,12 +40,25 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
             `created_at` DATETIME NOT NULL,
             `updated_at` DATETIME NOT NULL,
             PRIMARY KEY (`id`),
-            UNIQUE KEY `uniq_name_lang` (`name`(191), `language`)
+            KEY `idx_wa_tpl_vendor` (`vendor_id`),
+            UNIQUE KEY `uniq_vendor_name_lang` (`vendor_id`, `name`(140), `language`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
     if ($CI->db->table_exists('wa_cloud_templates') && !$CI->db->field_exists('variable_map', 'wa_cloud_templates')) {
         $CI->db->query("ALTER TABLE `wa_cloud_templates` ADD COLUMN `variable_map` TEXT NULL AFTER `meta_payload`");
+    }
+    if ($CI->db->table_exists('wa_cloud_templates') && !$CI->db->field_exists('vendor_id', 'wa_cloud_templates')) {
+        $CI->db->query("ALTER TABLE `wa_cloud_templates` ADD COLUMN `vendor_id` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `id`, ADD KEY `idx_wa_tpl_vendor` (`vendor_id`)");
+        // Prefer per-vendor uniqueness; drop legacy name+lang unique if present.
+        $idx = $CI->db->query("SHOW INDEX FROM `wa_cloud_templates` WHERE Key_name = 'uniq_name_lang'")->result_array();
+        if (!empty($idx)) {
+            $CI->db->query("ALTER TABLE `wa_cloud_templates` DROP INDEX `uniq_name_lang`");
+        }
+        $idx2 = $CI->db->query("SHOW INDEX FROM `wa_cloud_templates` WHERE Key_name = 'uniq_vendor_name_lang'")->result_array();
+        if (empty($idx2)) {
+            $CI->db->query("ALTER TABLE `wa_cloud_templates` ADD UNIQUE KEY `uniq_vendor_name_lang` (`vendor_id`, `name`(140), `language`)");
+        }
     }
 
     if (!$CI->db->table_exists('wa_cloud_campaigns')) {
@@ -266,14 +280,55 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
     }
 
     // Prefer vendor / webhook-resolved account; global settings only as fallback after Meta OAuth.
-    $phoneNumberId = trim((string)($account['phone_number_id'] ?? $settings['wa_cloud_phone_number_id'] ?? getenv('WA_CLOUD_PHONE_NUMBER_ID') ?: ''));
+    // Use nonempty() so empty-string vendor fields do not block global token/phone/WABA.
+    $phoneNumberId = trim((string)(
+        (isset($account['phone_number_id']) && trim((string)$account['phone_number_id']) !== ''
+            ? $account['phone_number_id']
+            : null)
+        ?? $settings['wa_cloud_phone_number_id']
+        ?? getenv('WA_CLOUD_PHONE_NUMBER_ID')
+        ?: ''
+    ));
     if ($phoneHint !== '') {
         $phoneNumberId = $phoneHint;
     }
-    $wabaId = trim((string)($account['waba_id'] ?? $settings['wa_cloud_waba_id'] ?? getenv('WA_CLOUD_WABA_ID') ?: ''));
-    $accessToken = trim((string)($account['access_token'] ?? $settings['wa_cloud_access_token'] ?? getenv('WA_CLOUD_ACCESS_TOKEN') ?: ''));
-    $displayPhone = trim((string)($account['display_phone'] ?? $settings['wa_cloud_display_phone'] ?? getenv('WA_CLOUD_DISPLAY_PHONE') ?: ''));
-    $businessId = trim((string)($account['business_id'] ?? $settings['wa_cloud_business_id'] ?? getenv('WA_CLOUD_BUSINESS_ID') ?: ''));
+    $wabaId = trim((string)(
+        (isset($account['waba_id']) && trim((string)$account['waba_id']) !== ''
+            ? $account['waba_id']
+            : null)
+        ?? $settings['wa_cloud_waba_id']
+        ?? getenv('WA_CLOUD_WABA_ID')
+        ?: ''
+    ));
+    $accessToken = trim((string)(
+        (isset($account['access_token']) && trim((string)$account['access_token']) !== ''
+            ? $account['access_token']
+            : null)
+        ?? $settings['wa_cloud_access_token']
+        ?? getenv('WA_CLOUD_ACCESS_TOKEN')
+        ?: ''
+    ));
+    $displayPhone = trim((string)(
+        (isset($account['display_phone']) && trim((string)$account['display_phone']) !== ''
+            ? $account['display_phone']
+            : null)
+        ?? $settings['wa_cloud_display_phone']
+        ?? getenv('WA_CLOUD_DISPLAY_PHONE')
+        ?: ''
+    ));
+    $businessId = trim((string)(
+        (isset($account['business_id']) && trim((string)$account['business_id']) !== ''
+            ? $account['business_id']
+            : null)
+        ?? $settings['wa_cloud_business_id']
+        ?? getenv('WA_CLOUD_BUSINESS_ID')
+        ?: ''
+    ));
+
+    // Auto-enable when we have usable credentials (Embedded Signup / vendor account).
+    if (!$enabled && $accessToken !== '' && $phoneNumberId !== '') {
+        $enabled = true;
+    }
 
     return [
         'enabled'         => $enabled,
@@ -292,21 +347,38 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
         'api_version'     => $version,
         'graph_base'      => 'https://graph.facebook.com/' . $version,
         'vendor_id'       => $vendorId,
+        'has_vendor_account' => is_array($account) && !empty($account['id']),
     ];
 }
 
 function sk_wa_cloud_is_ready(?array $settings = null, ?int $vendorId = null): bool {
     $cfg = sk_wa_cloud_config($settings, $vendorId);
-    // Messaging needs token + phone. Global "enabled" OR a resolved vendor account is enough.
-    $hasCreds = $cfg['access_token'] !== '' && $cfg['phone_number_id'] !== '';
-    if (!$hasCreds) {
-        return false;
+    // Token + phone are enough; enabled is auto-set when credentials exist.
+    return $cfg['access_token'] !== '' && $cfg['phone_number_id'] !== '';
+}
+
+/**
+ * Human-readable reason when Cloud API is not ready for a vendor/ops scope.
+ */
+function sk_wa_cloud_not_ready_reason(?array $settings = null, ?int $vendorId = null): string {
+    $cfg = sk_wa_cloud_config($settings, $vendorId);
+    $vid = (int)($vendorId ?? $cfg['vendor_id'] ?? 0);
+    if ($vid < 1) {
+        return 'Pick a WhatsApp number first (open Templates from WA Numbers / Embed Login with ?vendor_id=).';
     }
-    if (!empty($cfg['enabled'])) {
-        return true;
+    if (empty($cfg['has_vendor_account'])) {
+        return 'No active WhatsApp number for vendor #' . $vid . '. Run Embed Login on that vendor.';
     }
-    // Vendor-scoped accounts from Embedded Signup / webhook do not rely on the global toggle alone.
-    return $vendorId !== null && (int)$vendorId > 0 && (int)($cfg['vendor_id'] ?? 0) === (int)$vendorId;
+    if ($cfg['access_token'] === '') {
+        return 'Access token missing for vendor #' . $vid . '. Run Embed Login again to store the Meta token.';
+    }
+    if ($cfg['phone_number_id'] === '') {
+        return 'Phone Number ID missing for vendor #' . $vid . '. Complete Embedded Signup, then try again.';
+    }
+    if ($cfg['waba_id'] === '') {
+        return 'WABA ID missing for vendor #' . $vid . '. Run Embed Login again.';
+    }
+    return 'Connect Meta Cloud API for this number first.';
 }
 
 function sk_wa_cloud_normalize_phone(string $phone): string {
@@ -792,21 +864,28 @@ function sk_wa_meta_save_connection(array $tokenData, array $assets, array $sign
         'wa_cloud_fb_user_id'      => (string) ($assets['fb_user_id'] ?? ''),
         'wa_cloud_business_id'     => (string) ($assets['business_id'] ?? $signup['business_id'] ?? ''),
         'wa_cloud_display_phone'   => $displayPhone,
+        'vendor_id'                => $vendorId,
     );
 
-    $CI->Sk_Admin_model->save_settings($save);
+    // Vendor Embed Login: store only on vendor_whatsapp_accounts (do not overwrite platform tokens).
     if ($vendorId > 0) {
         $CI->Sk_Vendor_whatsapp_account_model->save_for_vendor($vendorId, [
             'phone_number_id' => $phoneId,
-            'waba_id' => $wabaId,
-            'display_phone' => $displayPhone,
-            'business_id' => (string) ($assets['business_id'] ?? $signup['business_id'] ?? ''),
-            'access_token' => $access,
-            'refresh_token' => $refresh,
-            'token_expires' => $expiresAt,
-            'is_default' => 1,
+            'waba_id'         => $wabaId,
+            'display_phone'   => $displayPhone,
+            'business_id'     => (string) ($assets['business_id'] ?? $signup['business_id'] ?? ''),
+            'access_token'    => $access,
+            'refresh_token'   => $refresh,
+            'token_expires'   => $expiresAt,
+            'status'          => 'active',
+            'is_default'      => 1,
         ]);
+        // Keep Cloud API feature flag on; leave global phone/token alone.
+        $CI->Sk_Admin_model->save_settings(['wa_cloud_enabled' => ($access !== '') ? '1' : '0']);
+        return $save;
     }
 
+    // Platform / Meta connect page (no vendor): persist global Cloud credentials.
+    $CI->Sk_Admin_model->save_settings($save);
     return $save;
 }

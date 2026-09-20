@@ -133,17 +133,31 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
             ->get($this->table)
             ->row_array();
 
+        $accessToken = trim((string)($data['access_token'] ?? ''));
+        $refreshToken = trim((string)($data['refresh_token'] ?? ''));
+        // Never wipe stored tokens when caller omits them (e.g. manual phone/WABA save).
+        if ($existing) {
+            if ($accessToken === '' && !empty($existing['access_token'])) {
+                $accessToken = (string)$existing['access_token'];
+            }
+            if ($refreshToken === '' && !empty($existing['refresh_token'])) {
+                $refreshToken = (string)$existing['refresh_token'];
+            }
+        }
+
         $row = [
             'vendor_id' => $vendor_id,
             'phone_number_id' => $phoneNumberId,
-            'waba_id' => $wabaId,
-            'display_phone' => trim((string)($data['display_phone'] ?? '')),
-            'business_id' => trim((string)($data['business_id'] ?? '')),
-            'access_token' => trim((string)($data['access_token'] ?? '')),
-            'refresh_token' => trim((string)($data['refresh_token'] ?? '')),
-            'token_expires' => trim((string)($data['token_expires'] ?? '')),
+            'waba_id' => $wabaId !== '' ? $wabaId : ($existing['waba_id'] ?? ''),
+            'display_phone' => trim((string)($data['display_phone'] ?? ($existing['display_phone'] ?? ''))),
+            'business_id' => trim((string)($data['business_id'] ?? ($existing['business_id'] ?? ''))),
+            'access_token' => $accessToken,
+            'refresh_token' => $refreshToken,
+            'token_expires' => trim((string)($data['token_expires'] ?? ($existing['token_expires'] ?? ''))),
             'status' => trim((string)($data['status'] ?? 'active')) ?: 'active',
-            'is_default' => !empty($data['is_default']) ? 1 : 0,
+            'is_default' => array_key_exists('is_default', $data)
+                ? (!empty($data['is_default']) ? 1 : 0)
+                : (int)($existing['is_default'] ?? 0),
             'updated_at' => $now,
         ];
 
