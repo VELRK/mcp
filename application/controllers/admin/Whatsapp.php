@@ -142,9 +142,20 @@ class Whatsapp extends Sk_Base {
     }
 
     public function templates() {
+        $vid = (int)$this->input->get('vendor_id');
+        if ($vid > 0 && $this->is_super_admin()) {
+            $this->session->set_userdata('wa_ops_vendor_id', $vid);
+        }
+        $settings = $this->Sk_Admin_model->get_settings();
+        if ($vid > 0) {
+            $settings['vendor_id'] = $vid;
+        }
+        $cfg = sk_wa_cloud_config($settings, $vid > 0 ? $vid : null);
         $data['title'] = 'WhatsApp Templates';
         $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates();
-        $data['ready'] = sk_wa_cloud_is_ready($this->Sk_Admin_model->get_settings());
+        $data['ready'] = sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null);
+        $data['cfg'] = $cfg;
+        $data['vendor_id'] = $vid;
         $this->render('whatsapp/templates', $data);
     }
 
@@ -224,10 +235,20 @@ class Whatsapp extends Sk_Base {
     }
 
     public function template_sync() {
+        $vid = (int)$this->input->get('vendor_id');
+        if ($vid < 1) {
+            $vid = (int)$this->session->userdata('wa_ops_vendor_id');
+        }
+        if ($vid > 0 && $this->is_super_admin()) {
+            $this->session->set_userdata('wa_ops_vendor_id', $vid);
+        }
         $settings = $this->Sk_Admin_model->get_settings();
-        if (!sk_wa_cloud_is_ready($settings)) {
-            $this->session->set_flashdata('error', 'Connect Meta Cloud API first.');
-            redirect('admin/whatsapp/templates');
+        if ($vid > 0) {
+            $settings['vendor_id'] = $vid;
+        }
+        if (!sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null)) {
+            $this->session->set_flashdata('error', 'Connect Meta Cloud API for this number first.');
+            redirect('admin/whatsapp/templates' . ($vid > 0 ? '?vendor_id=' . $vid : ''));
             return;
         }
         $this->load->library('Whatsapp_cloud', $settings);
@@ -244,7 +265,7 @@ class Whatsapp extends Sk_Base {
             }
         }
         $this->session->set_flashdata('success', 'Synced ' . $n . ' template(s) from Meta.');
-        redirect('admin/whatsapp/templates');
+        redirect('admin/whatsapp/templates' . ($vid > 0 ? '?vendor_id=' . $vid : ''));
     }
 
     public function campaigns() {

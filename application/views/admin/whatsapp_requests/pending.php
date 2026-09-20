@@ -1,26 +1,34 @@
 <?php
 $requests = $requests ?? [];
+$pending_count = (int)($pending_count ?? count($requests));
+$active_accounts = $active_accounts ?? [];
+$inactive_accounts = $inactive_accounts ?? [];
 $cfg = $cfg ?? [];
-$appId = htmlspecialchars((string)($cfg['app_id'] ?? ''), ENT_QUOTES, 'UTF-8');
-$configId = (string)($cfg['config_id'] ?? '');
-$oauth = htmlspecialchars((string)($oauth_url ?? '#'), ENT_QUOTES, 'UTF-8');
+$appId = (string)($cfg['app_id'] ?? '');
+$configId = (string)($cfg['config_id'] ?? '1661379532355089');
+$hasSecret = !empty($cfg['app_secret']);
 $selected = (int)($selected_request_id ?? 0);
-$selectedVendor = '';
-foreach ($requests as $r) {
-    if ((int)$r['id'] === $selected) {
-        $selectedVendor = $r['vendor_name'] ?? ('Vendor #' . (int)$r['vendor_id']);
-        break;
-    }
-}
 ?>
 <div class="sk-page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
   <div>
-    <h5 class="sk-page-title mb-1"><i class="bi bi-whatsapp me-2 text-success"></i>WhatsApp Provision Requests</h5>
-    <div class="small text-muted">Pending vendor requests · connect with WhatsApp embedded login</div>
+    <h5 class="sk-page-title mb-1">
+      <i class="bi bi-whatsapp me-2 text-success"></i>WhatsApp Numbers
+      <?php if ($pending_count > 0): ?>
+        <span class="badge bg-danger align-middle"><?= $pending_count ?> pending</span>
+      <?php endif; ?>
+    </h5>
+    <div class="small text-muted">
+      Embed Login → token exchange → store Phone ID / WABA → create templates for that number.
+    </div>
   </div>
-  <a href="<?= site_url('admin/meta') ?>" class="btn btn-sm btn-outline-primary">
-    <i class="bi bi-facebook me-1"></i> Meta connect page
-  </a>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="<?= site_url('admin/whatsapp/templates') ?>" class="btn btn-sm btn-outline-success">
+      <i class="bi bi-file-earmark-text me-1"></i> Templates
+    </a>
+    <a href="<?= site_url('admin/meta') ?>" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-facebook me-1"></i> Meta app
+    </a>
+  </div>
 </div>
 
 <?php if ($this->session->flashdata('error')): ?>
@@ -30,130 +38,209 @@ foreach ($requests as $r) {
   <div class="alert alert-success"><?= htmlspecialchars($this->session->flashdata('success')) ?></div>
 <?php endif; ?>
 
-<div class="card sk-table-card shadow-sm mb-3" id="wa-embed-login">
-  <div class="card-body">
-    <h6 class="mb-2"><i class="bi bi-facebook me-1 text-primary"></i>WhatsApp embedded login</h6>
-    <?php if ($appId === ''): ?>
-      <div class="alert alert-warning mb-0">
-        Save <strong>App ID</strong>, <strong>App Secret</strong>, and preferably <strong>Config ID</strong> in
-        <a href="<?= site_url('admin/settings?tab=wacloud') ?>">Settings → WhatsApp Cloud</a>, then reload this page.
-      </div>
-    <?php else: ?>
-      <p class="small text-muted mb-2">
-        1) Click <strong>Connect</strong> on a pending request below (selects the vendor).<br>
-        2) Use <strong>Continue with Facebook</strong> / WhatsApp Embedded Signup.<br>
-        3) We save the phone &amp; WABA to that vendor and mark the request approved.
-      </p>
-      <div class="alert alert-light border py-2 small mb-3" id="waSelectedBox">
-        <?php if ($selected > 0): ?>
-          Connecting request <strong>#<?= $selected ?></strong>
-          <?php if ($selectedVendor !== ''): ?> for <strong><?= htmlspecialchars($selectedVendor) ?></strong><?php endif; ?>
-        <?php else: ?>
-          <span class="text-warning">No request selected yet — click Connect on a row first.</span>
-        <?php endif; ?>
-      </div>
-      <div id="fb-root"></div>
-      <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-        <button type="button" class="btn btn-primary btn-lg" id="waEmbedLoginBtn">
-          <i class="bi bi-facebook me-1"></i> Continue with Facebook / WhatsApp
-        </button>
-        <a class="btn btn-outline-primary" href="<?= $oauth ?>" id="waOauthFallback">
-          <i class="bi bi-box-arrow-up-right me-1"></i> Open Facebook OAuth
-        </a>
-        <div class="fb-login-button d-none"
-             data-width="280"
-             data-size="large"
-             data-button-type="continue_with"
-             data-layout="rounded"
-             data-auto-logout-link="false"
-             data-use-continue-as="true"
-             data-scope="whatsapp_business_management,whatsapp_business_messaging,business_management"
-             onlogin="skWaProvisionOnLogin"></div>
-      </div>
-      <div id="waLoginStatus" class="small text-muted"></div>
-    <?php endif; ?>
+<?php if ($appId === '' || !$hasSecret): ?>
+  <div class="alert alert-warning">
+    Save <strong>App ID</strong> and <strong>App Secret</strong> on
+    <a href="<?= site_url('admin/meta') ?>">Facebook / WhatsApp login</a> before using Embed Login.
   </div>
-</div>
+<?php endif; ?>
 
-<div class="card sk-table-card shadow-sm">
-  <div class="card-header bg-white border-0 py-3 fw-semibold">Pending requests</div>
+<div class="card sk-table-card shadow-sm mb-3">
+  <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">Pending requests <span class="badge bg-danger"><?= $pending_count ?></span></span>
+    <span class="small text-muted" id="waLoginStatus"></span>
+  </div>
   <div class="card-body p-0">
     <?php if (empty($requests)): ?>
       <div class="text-muted text-center py-4">No pending requests.</div>
     <?php else: ?>
-      <table class="table table-hover align-middle mb-0">
-        <thead>
-          <tr><th>ID</th><th>Vendor</th><th>Phone</th><th>Note</th><th>Created</th><th></th></tr>
-        </thead>
-        <tbody>
-          <?php foreach ($requests as $r): ?>
-            <tr class="<?= (int)$r['id'] === $selected ? 'table-warning' : '' ?>" id="req-row-<?= (int)$r['id'] ?>">
-              <td><?= (int)$r['id'] ?></td>
-              <td>
-                <a href="<?= site_url('admin/vendors/view/'.(int)$r['vendor_id']) ?>" class="fw-semibold"><?= htmlspecialchars($r['vendor_name'] ?? ('Vendor #'.(int)$r['vendor_id'])) ?></a>
-                <?php if (!empty($r['vendor_email'])): ?><div class="small text-muted"><?= htmlspecialchars($r['vendor_email']) ?></div><?php endif; ?>
-              </td>
-              <td><?= htmlspecialchars($r['display_phone'] ?: $r['phone_number_id'] ?: '—') ?></td>
-              <td><?= htmlspecialchars($r['note'] ?? '') ?></td>
-              <td class="small text-muted"><?= htmlspecialchars($r['created_at']) ?></td>
-              <td class="text-end text-nowrap">
-                <a href="<?= site_url('admin/whatsapp_requests/pending?request_id='.(int)$r['id']) ?>#wa-embed-login"
-                   class="btn btn-sm btn-success wa-select-connect"
-                   data-request-id="<?= (int)$r['id'] ?>"
-                   data-vendor-name="<?= htmlspecialchars($r['vendor_name'] ?? '', ENT_QUOTES) ?>">
-                  <i class="bi bi-link-45deg me-1"></i> Connect
-                </a>
-                <form method="post" action="<?= site_url('admin/whatsapp_requests/reject/'.$r['id']) ?>" class="d-inline">
-                  <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Reject this request?');">Reject</button>
-                </form>
-              </td>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Vendor</th>
+              <th>Requested phone</th>
+              <th>Note</th>
+              <th>Created</th>
+              <th class="text-end">Action</th>
             </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            <?php foreach ($requests as $r): ?>
+              <tr id="req-row-<?= (int)$r['id'] ?>" class="<?= (int)$r['id'] === $selected ? 'table-warning' : '' ?>">
+                <td>#<?= (int)$r['id'] ?></td>
+                <td>
+                  <a href="<?= site_url('admin/vendors/view/'.(int)$r['vendor_id']) ?>" class="fw-semibold">
+                    <?= htmlspecialchars($r['vendor_name'] ?? ('Vendor #'.(int)$r['vendor_id'])) ?>
+                  </a>
+                  <?php if (!empty($r['vendor_email'])): ?>
+                    <div class="small text-muted"><?= htmlspecialchars($r['vendor_email']) ?></div>
+                  <?php endif; ?>
+                </td>
+                <td class="font-monospace small"><?= htmlspecialchars($r['display_phone'] ?: $r['phone_number_id'] ?: '—') ?></td>
+                <td class="small"><?= htmlspecialchars($r['note'] ?? '') ?></td>
+                <td class="small text-muted"><?= htmlspecialchars($r['created_at'] ?? '') ?></td>
+                <td class="text-end text-nowrap">
+                  <button type="button"
+                          class="btn btn-sm btn-primary wa-embed-btn"
+                          data-request-id="<?= (int)$r['id'] ?>"
+                          data-account-id="0"
+                          data-vendor-id="<?= (int)$r['vendor_id'] ?>"
+                          data-vendor-name="<?= htmlspecialchars($r['vendor_name'] ?? '', ENT_QUOTES) ?>"
+                          <?= ($appId === '' || !$hasSecret) ? 'disabled' : '' ?>>
+                    <i class="bi bi-facebook me-1"></i> Embed Login
+                  </button>
+                  <form method="post" action="<?= site_url('admin/whatsapp_requests/reject/'.$r['id']) ?>" class="d-inline">
+                    <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Reject this request?');">Reject</button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
     <?php endif; ?>
   </div>
 </div>
 
+<div class="card sk-table-card shadow-sm mb-3">
+  <div class="card-header bg-white border-0 py-3 fw-semibold">
+    Active numbers <span class="badge bg-success"><?= count($active_accounts) ?></span>
+  </div>
+  <div class="card-body p-0">
+    <?php if (empty($active_accounts)): ?>
+      <div class="text-muted text-center py-4">No connected WhatsApp numbers yet.</div>
+    <?php else: ?>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th>Display</th>
+              <th>Phone Number ID</th>
+              <th>WABA ID</th>
+              <th>Updated</th>
+              <th class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($active_accounts as $a): ?>
+              <tr>
+                <td>
+                  <a href="<?= site_url('admin/vendors/view/'.(int)$a['vendor_id']) ?>" class="fw-semibold">
+                    <?= htmlspecialchars($a['vendor_name'] ?? ('Vendor #'.(int)$a['vendor_id'])) ?>
+                  </a>
+                </td>
+                <td><?= htmlspecialchars($a['display_phone'] ?: '—') ?></td>
+                <td class="font-monospace small"><?= htmlspecialchars($a['phone_number_id'] ?? '') ?></td>
+                <td class="font-monospace small"><?= htmlspecialchars($a['waba_id'] ?: '—') ?></td>
+                <td class="small text-muted"><?= htmlspecialchars($a['updated_at'] ?? '') ?></td>
+                <td class="text-end text-nowrap">
+                  <a class="btn btn-sm btn-success"
+                     href="<?= site_url('admin/whatsapp/templates?vendor_id='.(int)$a['vendor_id']) ?>">
+                    <i class="bi bi-file-earmark-plus me-1"></i> Templates
+                  </a>
+                  <form method="post" action="<?= site_url('admin/whatsapp_requests/set_account_status/'.(int)$a['id']) ?>" class="d-inline">
+                    <input type="hidden" name="status" value="inactive">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" onclick="return confirm('Mark this number inactive?');">Inactive</button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
+  </div>
+</div>
+
+<div class="card sk-table-card shadow-sm mb-3">
+  <div class="card-header bg-white border-0 py-3 fw-semibold">
+    Inactive numbers <span class="badge bg-secondary"><?= count($inactive_accounts) ?></span>
+  </div>
+  <div class="card-body p-0">
+    <?php if (empty($inactive_accounts)): ?>
+      <div class="text-muted text-center py-4">No inactive numbers.</div>
+    <?php else: ?>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th>Display</th>
+              <th>Phone Number ID</th>
+              <th>WABA ID</th>
+              <th class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($inactive_accounts as $a): ?>
+              <tr>
+                <td><?= htmlspecialchars($a['vendor_name'] ?? ('Vendor #'.(int)$a['vendor_id'])) ?></td>
+                <td><?= htmlspecialchars($a['display_phone'] ?: '—') ?></td>
+                <td class="font-monospace small"><?= htmlspecialchars($a['phone_number_id'] ?? '') ?></td>
+                <td class="font-monospace small"><?= htmlspecialchars($a['waba_id'] ?: '—') ?></td>
+                <td class="text-end text-nowrap">
+                  <button type="button"
+                          class="btn btn-sm btn-primary wa-embed-btn"
+                          data-request-id="0"
+                          data-account-id="<?= (int)$a['id'] ?>"
+                          data-vendor-id="<?= (int)$a['vendor_id'] ?>"
+                          data-vendor-name="<?= htmlspecialchars($a['vendor_name'] ?? '', ENT_QUOTES) ?>"
+                          <?= ($appId === '' || !$hasSecret) ? 'disabled' : '' ?>>
+                    <i class="bi bi-facebook me-1"></i> Reconnect Embed Login
+                  </button>
+                  <form method="post" action="<?= site_url('admin/whatsapp_requests/set_account_status/'.(int)$a['id']) ?>" class="d-inline">
+                    <input type="hidden" name="status" value="active">
+                    <button type="submit" class="btn btn-sm btn-outline-success">Mark active</button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
+  </div>
+</div>
+
+<pre class="small bg-light border rounded p-2 mb-0" id="waSessionLog" style="min-height:3rem;white-space:pre-wrap">Session / exchange log…</pre>
+
 <?php if ($appId !== ''): ?>
+<div id="fb-root"></div>
 <script>
-window.skWaProvisionSignup = {};
-window.skWaProvisionRequestId = <?= (int)$selected ?>;
+window.skWaCtx = { requestId: <?= (int)$selected ?>, accountId: 0, vendorId: 0 };
+window.skWaSignup = {};
 
 window.addEventListener('message', function (event) {
   if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return;
   try {
     var payload = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
     if (payload && payload.type === 'WA_EMBEDDED_SIGNUP') {
-      window.skWaProvisionSignup = payload.data || {};
+      window.skWaSignup = payload.data || {};
+      var log = document.getElementById('waSessionLog');
+      if (log) log.textContent = JSON.stringify(payload, null, 2);
     }
   } catch (e) {}
 });
 
-function skWaSetSelected(id, name) {
-  window.skWaProvisionRequestId = parseInt(id, 10) || 0;
-  var box = document.getElementById('waSelectedBox');
-  if (box) {
-    box.innerHTML = window.skWaProvisionRequestId
-      ? ('Connecting request <strong>#' + window.skWaProvisionRequestId + '</strong>' + (name ? ' for <strong>' + name + '</strong>' : ''))
-      : '<span class="text-warning">No request selected yet — click Connect on a row first.</span>';
-  }
-  document.querySelectorAll('tr[id^="req-row-"]').forEach(function (tr) {
-    tr.classList.toggle('table-warning', tr.id === 'req-row-' + window.skWaProvisionRequestId);
-  });
+function skWaStatus(msg) {
+  var el = document.getElementById('waLoginStatus');
+  if (el) el.textContent = msg || '';
 }
 
-function skWaProvisionPostCode(code) {
-  var box = document.getElementById('waLoginStatus');
-  if (!window.skWaProvisionRequestId) {
-    if (box) box.textContent = 'Select a pending request (Connect) before logging in.';
+function skWaPostCode(code) {
+  if (!window.skWaCtx.requestId && !window.skWaCtx.accountId) {
+    skWaStatus('Click Embed Login on a pending or inactive row first.');
     return;
   }
-  if (box) box.textContent = 'Talking to Meta Graph API…';
+  skWaStatus('Exchanging code → saving Phone ID / WABA…');
   var body = new URLSearchParams();
   body.set('code', code);
-  body.set('request_id', String(window.skWaProvisionRequestId));
-  body.set('signup', JSON.stringify(window.skWaProvisionSignup || {}));
+  body.set('request_id', String(window.skWaCtx.requestId || 0));
+  body.set('account_id', String(window.skWaCtx.accountId || 0));
+  body.set('signup', JSON.stringify(window.skWaSignup || {}));
   fetch(<?= json_encode(site_url('admin/whatsapp_requests/exchange')) ?>, {
     method: 'POST',
     headers: { 'Accept': 'application/json' },
@@ -161,71 +248,65 @@ function skWaProvisionPostCode(code) {
     credentials: 'same-origin'
   }).then(function (r) { return r.json(); }).then(function (res) {
     if (res && res.ok) {
-      if (box) box.textContent = res.message || 'Saved.';
-      window.location = <?= json_encode(site_url('admin/whatsapp_requests/pending')) ?>;
+      skWaStatus(res.message || 'Saved.');
+      var url = (res.saved && res.saved.templates_url)
+        ? res.saved.templates_url
+        : <?= json_encode(site_url('admin/whatsapp_requests/pending')) ?>;
+      window.location = url;
       return;
     }
-    if (box) box.textContent = (res && res.error) ? res.error : 'WhatsApp login failed.';
+    skWaStatus((res && res.error) ? res.error : 'Embed login failed.');
   }).catch(function () {
-    if (box) box.textContent = 'Network error while saving WhatsApp login.';
+    skWaStatus('Network error during token exchange.');
   });
 }
 
-function skWaProvisionOnLogin(response) {
+function skWaOnLogin(response) {
   var auth = response && response.authResponse ? response.authResponse : {};
   if (auth.code) {
-    skWaProvisionPostCode(auth.code);
+    skWaPostCode(auth.code);
     return;
   }
-  var box = document.getElementById('waLoginStatus');
-  if (box) box.textContent = 'Facebook login did not return a code. Try again or use Open Facebook OAuth.';
+  skWaStatus('Facebook did not return an authorization code.');
 }
 
-function skWaLaunchEmbedLogin() {
-  var box = document.getElementById('waLoginStatus');
-  if (!window.skWaProvisionRequestId) {
-    if (box) box.textContent = 'Select a pending request (Connect) first.';
-    return;
-  }
-  if (!window.FB) {
-    if (box) box.textContent = 'Facebook SDK still loading…';
-    return;
-  }
-  var opts = {
-    scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management',
-    return_scopes: true,
-    response_type: 'code',
-    override_default_response_type: true
+function skWaLaunchEmbed(btn) {
+  window.skWaCtx = {
+    requestId: parseInt(btn.getAttribute('data-request-id') || '0', 10) || 0,
+    accountId: parseInt(btn.getAttribute('data-account-id') || '0', 10) || 0,
+    vendorId: parseInt(btn.getAttribute('data-vendor-id') || '0', 10) || 0
   };
-  var configId = <?= json_encode($configId) ?>;
-  if (configId) {
-    opts.config_id = configId;
-    opts.extras = {
-      setup: {},
-      featureType: 'whatsapp_business_app_onboarding',
-      sessionInfoVersion: '3'
-    };
+  var name = btn.getAttribute('data-vendor-name') || '';
+  skWaStatus('Opening Embed Login for ' + (name || ('vendor #' + window.skWaCtx.vendorId)) + '…');
+
+  if (!window.FB) {
+    skWaStatus('Facebook SDK still loading… try again.');
+    return;
   }
-  if (box) box.textContent = 'Opening Facebook / WhatsApp login…';
-  FB.login(skWaProvisionOnLogin, opts);
+  FB.login(skWaOnLogin, {
+    config_id: <?= json_encode($configId) ?>,
+    response_type: 'code',
+    override_default_response_type: true,
+    extras: {
+      setup: {},
+      featureType: '',
+      sessionInfoVersion: '3'
+    }
+  });
 }
 
 window.fbAsyncInit = function () {
   if (!window.FB) return;
   FB.init({
-    appId: <?= json_encode((string)($cfg['app_id'] ?? '')) ?>,
+    appId: <?= json_encode($appId) ?>,
     cookie: true,
-    xfbml: true,
+    xfbml: false,
     version: <?= json_encode((string)($cfg['api_version'] ?? 'v21.0')) ?>
   });
-};
-
-document.getElementById('waEmbedLoginBtn') && document.getElementById('waEmbedLoginBtn').addEventListener('click', skWaLaunchEmbedLogin);
-document.querySelectorAll('.wa-select-connect').forEach(function (a) {
-  a.addEventListener('click', function () {
-    skWaSetSelected(a.getAttribute('data-request-id'), a.getAttribute('data-vendor-name') || '');
+  document.querySelectorAll('.wa-embed-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { skWaLaunchEmbed(btn); });
   });
-});
+};
 </script>
 <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
 <?php endif; ?>

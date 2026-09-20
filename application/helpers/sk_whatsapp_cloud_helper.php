@@ -228,6 +228,9 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
         $vendorId = (int)($CI->session->userdata('sk_vendor_id') ?? 0);
     }
     if ($vendorId < 1 && isset($CI->session) && method_exists($CI->session, 'userdata')) {
+        $vendorId = (int)($CI->session->userdata('wa_ops_vendor_id') ?? 0);
+    }
+    if ($vendorId < 1 && isset($CI->session) && method_exists($CI->session, 'userdata')) {
         $adminId = (int)($CI->session->userdata('sk_admin_id') ?? 0);
         if ($adminId > 0 && $CI->db->field_exists('vendor_id', 'admins')) {
             $admin = $CI->db->select('vendor_id')->where('id', $adminId)->get('admins')->row_array();

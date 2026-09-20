@@ -1,10 +1,20 @@
 <div class="sk-page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-  <h5 class="sk-page-title mb-0"><i class="bi bi-file-earmark-text me-2 text-success"></i>WhatsApp Templates</h5>
-  <div class="d-flex gap-2">
+  <div>
+    <h5 class="sk-page-title mb-0"><i class="bi bi-file-earmark-text me-2 text-success"></i>WhatsApp Templates</h5>
+    <?php if (!empty($cfg['phone_number_id']) || !empty($vendor_id)): ?>
+      <div class="small text-muted">
+        <?php if (!empty($vendor_id)): ?>Vendor #<?= (int)$vendor_id ?> · <?php endif; ?>
+        Phone ID: <code><?= htmlspecialchars((string)($cfg['phone_number_id'] ?? '—')) ?></code>
+        · WABA: <code><?= htmlspecialchars((string)($cfg['waba_id'] ?? '—')) ?></code>
+      </div>
+    <?php endif; ?>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="<?= site_url('admin/whatsapp_requests/pending') ?>" class="btn btn-sm btn-outline-secondary">WA Numbers</a>
     <a href="<?= site_url('shopkart/whatsapp') ?>" class="btn btn-sm btn-outline-secondary">Inbox</a>
     <a href="<?= site_url('shopkart/whatsapp/campaigns') ?>" class="btn btn-sm btn-outline-success">Campaigns</a>
-    <a href="<?= site_url('shopkart/whatsapp/templates/sync') ?>" class="btn btn-sm btn-outline-success">Sync from Meta</a>
-    <a href="<?= site_url('shopkart/whatsapp/templates/add') ?>" class="btn btn-sm btn-success">New template</a>
+    <a href="<?= site_url('shopkart/whatsapp/templates/sync') ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>" class="btn btn-sm btn-outline-success">Sync from Meta</a>
+    <a href="<?= site_url('shopkart/whatsapp/templates/add') ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>" class="btn btn-sm btn-success">New template</a>
   </div>
 </div>
 

@@ -58,6 +58,21 @@ class Sk_Wa_Provision_request_model extends CI_Model {
         return $this->db->where('status','pending')->order_by('created_at','ASC')->get($this->table)->result_array();
     }
 
+    public function count_pending(): int {
+        $this->ensure_schema();
+        return (int)$this->db->where('status', 'pending')->count_all_results($this->table);
+    }
+
+    /** Recent non-pending (approved / rejected) for admin history. */
+    public function get_recent(int $limit = 30): array {
+        $this->ensure_schema();
+        return $this->db->where_in('status', ['approved', 'rejected', 'inactive'])
+            ->order_by('updated_at', 'DESC')
+            ->limit(max(1, $limit))
+            ->get($this->table)
+            ->result_array();
+    }
+
     public function get_by_id(int $id): ?array {
         $this->ensure_schema();
         return $this->db->where('id', $id)->get($this->table)->row_array() ?: null;

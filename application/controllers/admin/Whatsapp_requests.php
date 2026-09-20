@@ -61,7 +61,7 @@ class Whatsapp_requests extends Sk_Base {
         redirect('admin/whatsapp_requests');
     }
 
-    // Admin: list pending requests + WhatsApp embedded login
+    // Admin: pending requests + inactive numbers + per-row Embedded Login
     public function pending() {
         if (!$this->is_super_admin()) {
             show_error('Admin only', 403);
@@ -75,6 +75,15 @@ class Whatsapp_requests extends Sk_Base {
             $r['vendor_email'] = $vendor['email'] ?? '';
         }
         unset($r);
+
+        $accounts = $this->Sk_Vendor_whatsapp_account_model->list_all(null, 200);
+        foreach ($accounts as &$a) {
+            $vendor = $this->Sk_Vendor_model->get_by_id((int)$a['vendor_id'], false);
+            $a['vendor_name'] = $vendor
+                ? (trim((string)($vendor['business_name'] ?? $vendor['owner_name'] ?? '')) ?: 'Vendor #' . (int)$a['vendor_id'])
+                : 'Vendor #' . (int)$a['vendor_id'];
+        }
+        unset($a);
 
         $settings = $this->Sk_Admin_model->get_settings();
         $cfg = sk_wa_cloud_config($settings);
@@ -91,6 +100,14 @@ class Whatsapp_requests extends Sk_Base {
 
         $data['title'] = 'WhatsApp Provision Requests';
         $data['requests'] = $rows;
+        $data['pending_count'] = count($rows);
+        $data['accounts'] = $accounts;
+        $data['inactive_accounts'] = array_values(array_filter($accounts, static function ($a) {
+            return ($a['status'] ?? '') === 'inactive';
+        }));
+        $data['active_accounts'] = array_values(array_filter($accounts, static function ($a) {
+            return ($a['status'] ?? '') === 'active';
+        }));
         $data['settings'] = $settings;
         $data['cfg'] = $cfg;
         $data['redirect_uri'] = sk_wa_meta_redirect_uri();
@@ -101,8 +118,9 @@ class Whatsapp_requests extends Sk_Base {
     }
 
     /**
-     * Facebook / WA Embedded Signup code exchange for a pending provision request.
-     * POST code, signup JSON, request_id
+     * Facebook / WA Embedded Signup code exchange for a pending provision request
+     * or reconnect of an inactive vendor WhatsApp account.
+     * POST: code, signup JSON, request_id and/or account_id
      */
     public function exchange() {
         if (!$this->is_super_admin()) {
@@ -113,20 +131,64 @@ class Whatsapp_requests extends Sk_Base {
         if ($requestId < 1) {
             $requestId = (int)$this->session->userdata('wa_provision_request_id');
         }
-        $req = $requestId > 0 ? $this->Sk_Wa_Provision_request_model->get_by_id($requestId) : null;
-        if (!$req || ($req['status'] ?? '') !== 'pending') {
-            return $this->json(['ok' => false, 'error' => 'Select a pending request first (click Connect).'], 400);
+        $accountId = (int)$this->input->post('account_id');
+
+        $req = null;
+        $vendorId = 0;
+        if ($requestId > 0) {
+            $req = $this->Sk_Wa_Provision_request_model->get_by_id($requestId);
+            if (!$req || ($req['status'] ?? '') !== 'pending') {
+                return $this->json(['ok' => false, 'error' => 'Pending request not found. Click Embed Login on a pending row.'], 400);
+            }
+            $vendorId = (int)$req['vendor_id'];
+        } elseif ($accountId > 0) {
+            $acc = $this->Sk_Vendor_whatsapp_account_model->get_by_id($accountId);
+            if (!$acc) {
+                return $this->json(['ok' => false, 'error' => 'WhatsApp account not found.'], 400);
+            }
+            $vendorId = (int)$acc['vendor_id'];
+            $req = [
+                'id'         => 0,
+                'vendor_id'  => $vendorId,
+                'account_id' => $accountId,
+            ];
+        } else {
+            return $this->json(['ok' => false, 'error' => 'Select a pending request or inactive number first.'], 400);
         }
 
         $code = trim((string)$this->input->post('code', FALSE));
         $signup = $this->_signup_from_request();
-        $signup['vendor_id'] = (int)$req['vendor_id'];
+        $signup['vendor_id'] = $vendorId;
 
         $result = $this->_finish_vendor_login($code, $signup, $req);
         if (!empty($result['ok'])) {
             $this->session->unset_userdata('wa_provision_request_id');
+            if ($vendorId > 0) {
+                $this->session->set_userdata('wa_ops_vendor_id', $vendorId);
+            }
         }
         return $this->json($result, !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function set_account_status($id = 0) {
+        if (!$this->is_super_admin()) {
+            show_error('Admin only', 403);
+        }
+        $id = (int)$id;
+        $status = trim((string)$this->input->post('status', TRUE));
+        if (!in_array($status, ['active', 'inactive'], true)) {
+            $this->session->set_flashdata('error', 'Invalid status.');
+            redirect('admin/whatsapp_requests/pending');
+            return;
+        }
+        $acc = $this->Sk_Vendor_whatsapp_account_model->get_by_id($id);
+        if (!$acc) {
+            show_404();
+        }
+        $this->Sk_Vendor_whatsapp_account_model->set_status($id, $status);
+        $this->activity_log->log_admin('wa_accounts', 'status_'.$status, $id, $acc, ['status' => $status]);
+        $this->session->set_flashdata('success', 'Account marked ' . $status . '.');
+        redirect('admin/whatsapp_requests/pending');
     }
 
     // Admin approve: connect and save account (manual fallback)
@@ -204,7 +266,7 @@ class Whatsapp_requests extends Sk_Base {
             $query['override_default_response_type'] = 'true';
             $query['extras'] = json_encode([
                 'setup'              => new stdClass(),
-                'featureType'        => 'whatsapp_business_app_onboarding',
+                'featureType'        => '',
                 'sessionInfoVersion' => '3',
             ]);
         }
@@ -229,7 +291,8 @@ class Whatsapp_requests extends Sk_Base {
             return ['ok' => false, 'error' => 'Facebook did not return an auth code.'];
         }
 
-        $exchanged = sk_wa_meta_exchange_code($code, sk_wa_meta_redirect_uri(), $settings);
+        // XCRM / Embedded Signup popup: omit redirect_uri
+        $exchanged = sk_wa_meta_exchange_code($code, '', $settings);
         if (!$exchanged['ok']) {
             return ['ok' => false, 'error' => 'Token exchange failed: ' . $exchanged['error']];
         }
@@ -251,31 +314,54 @@ class Whatsapp_requests extends Sk_Base {
         }
 
         $phone = $saved['wa_cloud_phone_number_id'] ?? '';
+        $waba = $saved['wa_cloud_waba_id'] ?? '';
         if ($phone === '') {
             return ['ok' => false, 'error' => 'Login succeeded but no WhatsApp phone number ID was returned. Complete Embedded Signup fully, then try again.'];
         }
 
-        $this->Sk_Wa_Provision_request_model->update_status(
-            (int)$req['id'],
-            'approved',
-            (int)($this->admin['id'] ?? 0),
-            'Connected via WhatsApp embedded login. Phone ID: ' . $phone
-        );
-        $this->activity_log->log_admin('wa_requests', 'approve_embed', (int)$req['id'], $req, [
+        // Ensure vendor account row is active with token/phone/waba (save_connection already upserts).
+        $this->Sk_Vendor_whatsapp_account_model->save_for_vendor((int)$req['vendor_id'], [
             'phone_number_id' => $phone,
-            'waba_id'         => $saved['wa_cloud_waba_id'] ?? '',
+            'waba_id'         => $waba,
+            'display_phone'   => $saved['wa_cloud_display_phone'] ?? '',
+            'business_id'     => $saved['wa_cloud_business_id'] ?? '',
+            'access_token'    => $token,
+            'refresh_token'   => $saved['wa_cloud_refresh_token'] ?? $token,
+            'token_expires'   => $saved['wa_cloud_token_expires'] ?? '',
+            'status'          => 'active',
+            'is_default'      => 1,
         ]);
+
+        if (!empty($req['id'])) {
+            $this->Sk_Wa_Provision_request_model->update_status(
+                (int)$req['id'],
+                'approved',
+                (int)($this->admin['id'] ?? 0),
+                'Connected via WhatsApp embedded login. Phone ID: ' . $phone . ' WABA: ' . $waba
+            );
+            $this->activity_log->log_admin('wa_requests', 'approve_embed', (int)$req['id'], $req, [
+                'phone_number_id' => $phone,
+                'waba_id'         => $waba,
+            ]);
+        } else {
+            $this->activity_log->log_admin('wa_accounts', 'reconnect_embed', (int)($req['account_id'] ?? 0), $req, [
+                'phone_number_id' => $phone,
+                'waba_id'         => $waba,
+                'vendor_id'       => (int)$req['vendor_id'],
+            ]);
+        }
 
         return [
             'ok'      => true,
             'error'   => '',
-            'message' => 'WhatsApp connected for vendor. Phone ID: ' . $phone,
+            'message' => 'WhatsApp connected. Phone ID: ' . $phone . ' · WABA: ' . ($waba ?: '—'),
             'saved'   => [
                 'phone_number_id' => $phone,
-                'waba_id'         => $saved['wa_cloud_waba_id'] ?? '',
+                'waba_id'         => $waba,
                 'display_phone'   => $saved['wa_cloud_display_phone'] ?? '',
                 'vendor_id'       => (int)$req['vendor_id'],
-                'request_id'      => (int)$req['id'],
+                'request_id'      => (int)($req['id'] ?? 0),
+                'templates_url'   => site_url('admin/whatsapp/templates?vendor_id=' . (int)$req['vendor_id']),
             ],
         ];
     }

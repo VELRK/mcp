@@ -54,6 +54,33 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
             ->result_array();
     }
 
+    /** All vendor WhatsApp numbers for admin (active + inactive). */
+    public function list_all(?string $status = null, int $limit = 200): array {
+        $this->ensure_schema();
+        if ($status !== null && $status !== '') {
+            $this->db->where('status', $status);
+        }
+        return $this->db->order_by('updated_at', 'DESC')
+            ->limit(max(1, $limit))
+            ->get($this->table)
+            ->result_array();
+    }
+
+    public function get_by_id(int $id): ?array {
+        $this->ensure_schema();
+        return $this->db->where('id', (int)$id)->get($this->table)->row_array() ?: null;
+    }
+
+    public function set_status(int $account_id, string $status): bool {
+        $this->ensure_schema();
+        $status = in_array($status, ['active', 'inactive'], true) ? $status : 'inactive';
+        $this->db->where('id', (int)$account_id)->update($this->table, [
+            'status'     => $status,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+        return $this->db->affected_rows() >= 0;
+    }
+
     public function get_by_phone(string $phoneNumberId): ?array {
         $phoneNumberId = trim($phoneNumberId);
         if ($phoneNumberId === '') {
