@@ -83,6 +83,87 @@ class Sk_Product extends Sk_Base_Api {
         $this->_list_preset(['special_product' => 1], 'newest');
     }
 
+    /** GET /shopkart-api/products/offers — Active product offers from sale_price or hot_sale. */
+    public function offers() {
+        $limit  = min((int)($this->input->get('limit') ?? 12), 100);
+        $page   = max(1, (int)($this->input->get('page') ?? 1));
+        $offset = ($page - 1) * $limit;
+
+        $cacheKey = 'products_offers_' . md5(json_encode([$limit, $page]));
+        $cached = $this->get_cache($cacheKey, 60);
+        if ($cached !== null) {
+            return $this->success($cached);
+        }
+
+        $filters = ['status' => 'active', 'hot_sale' => 1, 'sort' => 'newest'];
+        $result = $this->Sk_Product_model->get_all($filters, $limit, $offset);
+        if (empty($result['data'])) {
+            $saleFilters = ['status' => 'active', 'sort' => 'newest'];
+            $saleResult = $this->Sk_Product_model->get_all($saleFilters, $limit, $offset);
+            $result['data'] = array_values(array_filter($saleResult['data'], function ($p) {
+                return !empty($p['sale_active']) || !empty($p['sale_price']);
+            }));
+            $result['total'] = count($result['data']);
+        }
+
+        $data = [
+            'products'    => $result['data'],
+            'total'       => $result['total'],
+            'page'        => $page,
+            'limit'       => $limit,
+            'total_pages' => $limit > 0 ? (int)ceil($result['total'] / $limit) : 0,
+            'type'        => 'product_offer',
+        ];
+        $this->set_cache($cacheKey, $data);
+        $this->success($data);
+    }
+
+    /** GET /shopkart-api/products/combo-offers — Combined bundles built from active product offers. */
+    public function combo_offers() {
+        $limit  = min((int)($this->input->get('limit') ?? 6), 50);
+        $page   = max(1, (int)($this->input->get('page') ?? 1));
+        $offset = ($page - 1) * $limit;
+
+        $cacheKey = 'products_combo_offers_' . md5(json_encode([$limit, $page]));
+        $cached = $this->get_cache($cacheKey, 60);
+        if ($cached !== null) {
+            return $this->success($cached);
+        }
+
+        $filters = ['status' => 'active', 'sort' => 'newest'];
+        $result = $this->Sk_Product_model->get_all($filters, max($limit * 3, $limit), $offset);
+        $items = array_values(array_filter($result['data'], static function ($p) {
+            return !empty($p['sale_active']) || !empty($p['sale_price']) || !empty($p['hot_sale']) || !empty($p['special_product']);
+        }));
+
+        $combo = [];
+        foreach (array_slice($items, 0, max(1, $limit)) as $idx => $product) {
+            $combo[] = [
+                'id' => 'combo-' . ($product['id'] ?? $idx),
+                'name' => ($product['name'] ?? 'Combo Offer') . ' Offer',
+                'description' => 'Bundle savings from selected offer products.',
+                'products' => [
+                    ['product_id' => (int)($product['id'] ?? 0), 'name' => $product['name'] ?? 'Product', 'price' => (float)($product['effective_price'] ?? $product['price'] ?? 0)]
+                ],
+                'offer_price' => (float)($product['effective_price'] ?? $product['price'] ?? 0),
+                'original_price' => (float)($product['price'] ?? 0),
+                'discount' => (float)(($product['price'] ?? 0) - ($product['effective_price'] ?? $product['price'] ?? 0)),
+                'type' => 'combo',
+            ];
+        }
+
+        $data = [
+            'offers'      => $combo,
+            'total'       => count($combo),
+            'page'        => $page,
+            'limit'       => $limit,
+            'total_pages' => $limit > 0 ? (int)ceil(count($combo) / $limit) : 0,
+            'type'        => 'combo_offer',
+        ];
+        $this->set_cache($cacheKey, $data);
+        $this->success($data);
+    }
+
     /** GET /shopkart-api/products/new-arrivals — New Arrival (featured). */
     public function new_arrivals() {
         $this->_list_preset(['featured' => 1], 'newest');

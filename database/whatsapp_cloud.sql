@@ -101,5 +101,5 @@ INSERT IGNORE INTO `settings` (`key`, `value`) VALUES
 ('wa_cloud_phone_number_id', ''),
 ('wa_cloud_waba_id', ''),
 ('wa_cloud_app_secret', ''),
-('wa_cloud_verify_token', '2deal-wa-verify'),
+('wa_cloud_verify_token', 'Velmurugn0071@!!!'),
 ('wa_cloud_api_version', 'v21.0');

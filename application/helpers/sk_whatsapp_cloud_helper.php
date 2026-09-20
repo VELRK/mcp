@@ -83,6 +83,8 @@ function sk_wa_cloud_ensure_schema(): void {
     if (!$CI->db->table_exists('wa_cloud_conversations')) {
         $CI->db->query("CREATE TABLE `wa_cloud_conversations` (
             `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `vendor_id` INT UNSIGNED NULL,
+            `phone_number_id` VARCHAR(128) NULL,
             `phone` VARCHAR(32) NOT NULL,
             `name` VARCHAR(160) NULL,
             `last_message` VARCHAR(500) NULL,
@@ -92,14 +94,24 @@ function sk_wa_cloud_ensure_schema(): void {
             `created_at` DATETIME NOT NULL,
             `updated_at` DATETIME NOT NULL,
             PRIMARY KEY (`id`),
-            UNIQUE KEY `uniq_phone` (`phone`)
+            UNIQUE KEY `uniq_phone` (`phone`),
+            KEY `idx_vendor_phone` (`vendor_id`, `phone_number_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    if ($CI->db->table_exists('wa_cloud_conversations') && !$CI->db->field_exists('vendor_id', 'wa_cloud_conversations')) {
+        $CI->db->query("ALTER TABLE `wa_cloud_conversations` ADD COLUMN `vendor_id` INT UNSIGNED NULL AFTER `id`");
+    }
+    if ($CI->db->table_exists('wa_cloud_conversations') && !$CI->db->field_exists('phone_number_id', 'wa_cloud_conversations')) {
+        $CI->db->query("ALTER TABLE `wa_cloud_conversations` ADD COLUMN `phone_number_id` VARCHAR(128) NULL AFTER `vendor_id`");
     }
 
     if (!$CI->db->table_exists('wa_cloud_messages')) {
         $CI->db->query("CREATE TABLE `wa_cloud_messages` (
             `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
             `conversation_id` INT UNSIGNED NOT NULL,
+            `vendor_id` INT UNSIGNED NULL,
+            `phone_number_id` VARCHAR(128) NULL,
             `wamid` VARCHAR(128) NULL,
             `direction` VARCHAR(8) NOT NULL,
             `type` VARCHAR(16) NOT NULL DEFAULT 'text',
@@ -113,8 +125,15 @@ function sk_wa_cloud_ensure_schema(): void {
             `created_at` DATETIME NOT NULL,
             PRIMARY KEY (`id`),
             KEY `idx_conv` (`conversation_id`, `id`),
-            KEY `idx_wamid` (`wamid`)
+            KEY `idx_wamid` (`wamid`),
+            KEY `idx_vendor_phone` (`vendor_id`, `phone_number_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+    if ($CI->db->table_exists('wa_cloud_messages') && !$CI->db->field_exists('vendor_id', 'wa_cloud_messages')) {
+        $CI->db->query("ALTER TABLE `wa_cloud_messages` ADD COLUMN `vendor_id` INT UNSIGNED NULL AFTER `conversation_id`");
+    }
+    if ($CI->db->table_exists('wa_cloud_messages') && !$CI->db->field_exists('phone_number_id', 'wa_cloud_messages')) {
+        $CI->db->query("ALTER TABLE `wa_cloud_messages` ADD COLUMN `phone_number_id` VARCHAR(128) NULL AFTER `vendor_id`");
     }
 
     $defaults = [
@@ -130,7 +149,7 @@ function sk_wa_cloud_ensure_schema(): void {
         'wa_cloud_fb_user_id'      => '',
         'wa_cloud_business_id'     => '',
         'wa_cloud_display_phone'   => '',
-        'wa_cloud_verify_token'    => '2deal-wa-verify',
+        'wa_cloud_verify_token'    => 'Velmurugn0071@!!!',
         'wa_cloud_api_version'     => 'v21.0',
         'wa_mcp_enabled'           => '0',
         'wa_mcp_url'               => '',
@@ -148,33 +167,90 @@ function sk_wa_cloud_ensure_schema(): void {
         }
         $CI->db->insert('settings', $row);
     }
+    // Keep webhook verify token in sync with Meta app config
+    $CI->db->where('key', 'wa_cloud_verify_token')->update('settings', ['value' => 'Velmurugn0071@!!!']);
 }
 
-function sk_wa_cloud_config(?array $settings = null): array {
+function sk_wa_cloud_resolve_vendor_from_phone(string $phoneNumberId, ?array $settings = null): ?array {
+    $phoneNumberId = trim((string)$phoneNumberId);
+    if ($phoneNumberId === '') {
+        return null;
+    }
+    $CI =& get_instance();
+    if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
+        $CI->load->model('Sk_Vendor_whatsapp_account_model');
+    }
+    $account = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId);
+    if (!$account || empty($account['vendor_id'])) {
+        return null;
+    }
+    return [
+        'vendor_id' => (int)$account['vendor_id'],
+        'phone_number_id' => $account['phone_number_id'],
+        'waba_id' => $account['waba_id'],
+        'display_phone' => $account['display_phone'],
+        'access_token' => $account['access_token'],
+    ];
+}
+
+function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): array {
     sk_wa_cloud_ensure_schema();
+    $CI =& get_instance();
     if ($settings === null) {
-        $CI =& get_instance();
         $CI->load->model('Sk_Admin_model');
         $settings = $CI->Sk_Admin_model->get_settings();
     }
-    $version = trim((string)($settings['wa_cloud_api_version'] ?? 'v21.0')) ?: 'v21.0';
+
+    if ($vendorId === null || $vendorId < 1) {
+        $vendorId = (int)($settings['vendor_id'] ?? 0);
+    }
+    if ($vendorId < 1 && isset($CI->session) && method_exists($CI->session, 'userdata')) {
+        $vendorId = (int)($CI->session->userdata('sk_vendor_id') ?? 0);
+    }
+    if ($vendorId < 1 && isset($CI->session) && method_exists($CI->session, 'userdata')) {
+        $adminId = (int)($CI->session->userdata('sk_admin_id') ?? 0);
+        if ($adminId > 0 && $CI->db->field_exists('vendor_id', 'admins')) {
+            $admin = $CI->db->select('vendor_id')->where('id', $adminId)->get('admins')->row_array();
+            $vendorId = (int)($admin['vendor_id'] ?? 0);
+        }
+    }
+
+    $account = null;
+    if ($vendorId > 0 && isset($CI) && method_exists($CI, 'load')) {
+        $CI->load->model('Sk_Vendor_whatsapp_account_model');
+        $account = $CI->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vendorId);
+    }
+
+    $envEnabled = getenv('WA_CLOUD_ENABLED') ?: null;
+    $enabled = !empty($settings['wa_cloud_enabled']) && $settings['wa_cloud_enabled'] !== '0';
+    if ($envEnabled !== null && $envEnabled !== '') {
+        $enabled = filter_var($envEnabled, FILTER_VALIDATE_BOOLEAN);
+    }
+    $version = trim((string)($settings['wa_cloud_api_version'] ?? getenv('WA_CLOUD_API_VERSION') ?: 'v21.0')) ?: 'v21.0';
     if ($version[0] !== 'v') {
         $version = 'v' . $version;
     }
+
+    $phoneNumberId = trim((string)($account['phone_number_id'] ?? $settings['wa_cloud_phone_number_id'] ?? getenv('WA_CLOUD_PHONE_NUMBER_ID') ?: ''));
+    $wabaId = trim((string)($account['waba_id'] ?? $settings['wa_cloud_waba_id'] ?? getenv('WA_CLOUD_WABA_ID') ?: ''));
+    $accessToken = trim((string)($account['access_token'] ?? $settings['wa_cloud_access_token'] ?? getenv('WA_CLOUD_ACCESS_TOKEN') ?: ''));
+    $displayPhone = trim((string)($account['display_phone'] ?? $settings['wa_cloud_display_phone'] ?? getenv('WA_CLOUD_DISPLAY_PHONE') ?: ''));
+    $businessId = trim((string)($account['business_id'] ?? $settings['wa_cloud_business_id'] ?? getenv('WA_CLOUD_BUSINESS_ID') ?: ''));
+
     return [
-        'enabled'         => !empty($settings['wa_cloud_enabled']) && $settings['wa_cloud_enabled'] !== '0',
-        'access_token'    => trim((string)($settings['wa_cloud_access_token'] ?? '')),
-        'phone_number_id' => trim((string)($settings['wa_cloud_phone_number_id'] ?? '')),
-        'waba_id'         => trim((string)($settings['wa_cloud_waba_id'] ?? '')),
-        'app_secret'      => trim((string)($settings['wa_cloud_app_secret'] ?? '')),
-        'app_id'          => trim((string)($settings['wa_cloud_app_id'] ?? '')),
-        'config_id'       => trim((string)($settings['wa_cloud_config_id'] ?? '')),
-        'refresh_token'   => trim((string)($settings['wa_cloud_refresh_token'] ?? '')),
-        'token_expires'   => trim((string)($settings['wa_cloud_token_expires'] ?? '')),
-        'fb_user_id'      => trim((string)($settings['wa_cloud_fb_user_id'] ?? '')),
-        'business_id'     => trim((string)($settings['wa_cloud_business_id'] ?? '')),
-        'display_phone'   => trim((string)($settings['wa_cloud_display_phone'] ?? '')),
-        'verify_token'    => trim((string)($settings['wa_cloud_verify_token'] ?? '2deal-wa-verify')),
+        'enabled'         => $enabled,
+        'access_token'    => $accessToken,
+        'phone_number_id' => $phoneNumberId,
+        'waba_id'         => $wabaId,
+        'app_secret'      => trim((string)($settings['wa_cloud_app_secret'] ?? getenv('WA_CLOUD_APP_SECRET') ?: '')),
+        'app_id'          => trim((string)($settings['wa_cloud_app_id'] ?? getenv('WA_CLOUD_APP_ID') ?: '')),
+        'config_id'       => trim((string)($settings['wa_cloud_config_id'] ?? getenv('WA_CLOUD_CONFIG_ID') ?: '')),
+        'refresh_token'   => trim((string)($settings['wa_cloud_refresh_token'] ?? getenv('WA_CLOUD_REFRESH_TOKEN') ?: '')),
+        'token_expires'   => trim((string)($settings['wa_cloud_token_expires'] ?? getenv('WA_CLOUD_TOKEN_EXPIRES') ?: '')),
+        'fb_user_id'      => trim((string)($settings['wa_cloud_fb_user_id'] ?? getenv('WA_CLOUD_FB_USER_ID') ?: '')),
+        'business_id'     => $businessId,
+        'display_phone'   => $displayPhone,
+        'verify_token'    => trim((string)($settings['wa_cloud_verify_token'] ?? getenv('WA_CLOUD_VERIFY_TOKEN') ?: 'Velmurugn0071@!!!')),
         'api_version'     => $version,
         'graph_base'      => 'https://graph.facebook.com/' . $version,
     ];
@@ -577,7 +653,7 @@ function sk_wa_meta_subscribe_waba(string $wabaId, string $token, ?array $settin
 function sk_wa_meta_save_connection(array $tokenData, array $assets, array $signup = array()): array
 {
     $CI =& get_instance();
-    $CI->load->model('Sk_Admin_model');
+    $CI->load->model(['Sk_Admin_model', 'Sk_Vendor_whatsapp_account_model']);
 
     $access = trim((string) ($tokenData['access_token'] ?? ''));
     $refresh = trim((string) ($tokenData['refresh_token'] ?? ''));
@@ -589,6 +665,7 @@ function sk_wa_meta_save_connection(array $tokenData, array $assets, array $sign
 
     $phoneId = trim((string) ($signup['phone_number_id'] ?? $assets['phone_number_id'] ?? ''));
     $wabaId = trim((string) ($signup['waba_id'] ?? $signup['whatsapp_business_account_id'] ?? $assets['waba_id'] ?? ''));
+    $vendorId = (int)($signup['vendor_id'] ?? $CI->session->userdata('sk_vendor_id') ?? 0);
 
     $save = array(
         'wa_cloud_enabled'         => ($access !== '' && $phoneId !== '') ? '1' : '0',
@@ -603,5 +680,18 @@ function sk_wa_meta_save_connection(array $tokenData, array $assets, array $sign
     );
 
     $CI->Sk_Admin_model->save_settings($save);
+    if ($vendorId > 0) {
+        $CI->Sk_Vendor_whatsapp_account_model->save_for_vendor($vendorId, [
+            'phone_number_id' => $phoneId,
+            'waba_id' => $wabaId,
+            'display_phone' => (string) ($assets['display_phone'] ?? $signup['display_phone_number'] ?? ''),
+            'business_id' => (string) ($assets['business_id'] ?? $signup['business_id'] ?? ''),
+            'access_token' => $access,
+            'refresh_token' => $refresh,
+            'token_expires' => $expiresAt,
+            'is_default' => 1,
+        ]);
+    }
+
     return $save;
 }

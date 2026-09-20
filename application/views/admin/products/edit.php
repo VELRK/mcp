@@ -100,6 +100,69 @@ $saleEndLocal = !empty($p['sale_end_at']) ? date('Y-m-d\TH:i', strtotime($p['sal
             <label class="form-label">Tags</label>
             <input type="text" name="tags" class="form-control" value="<?= htmlspecialchars($p['tags'] ?? '') ?>">
           </div>
+          <!-- Product Payment Link & Razorpay Generator -->
+          <div class="mt-3 p-3 rounded-3 bg-light border">
+            <div class="mb-2">
+              <label class="form-label fw-bold mb-0">
+                <i class="bi bi-credit-card-2-front text-primary me-1"></i> Payment Link <span class="text-danger">*</span>
+              </label>
+            </div>
+
+            <!-- Active link banner (shown when created or populated) -->
+            <div id="paymentLinkBanner" class="alert alert-success d-flex align-items-center justify-content-between p-3 mb-2 rounded-3 border-success-subtle" style="<?= empty($p['payment_link']) ? 'display:none;' : '' ?>">
+              <div class="d-flex align-items-center gap-2 text-truncate me-2">
+                <i class="bi bi-check-circle-fill text-success fs-4 flex-shrink-0"></i>
+                <div class="overflow-hidden">
+                  <div class="fw-semibold small text-success">Active Payment Link</div>
+                  <a href="<?= htmlspecialchars($p['payment_link'] ?? '#') ?>" target="_blank" rel="noopener noreferrer" id="paymentLinkAnchor" class="small text-decoration-underline text-break fw-medium">
+                    <span id="paymentLinkText"><?= htmlspecialchars($p['payment_link'] ?? '') ?></span> <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                  </a>
+                </div>
+              </div>
+              <div class="d-flex gap-2 flex-shrink-0">
+                <a href="<?= htmlspecialchars($p['payment_link'] ?? '#') ?>" target="_blank" id="paymentLinkOpenBtn" class="btn btn-sm btn-success">
+                  <i class="bi bi-box-arrow-up-right me-1"></i>Pay / Open
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopyLink" onclick="copyPaymentLink(this)">
+                  <i class="bi bi-clipboard"></i> Copy
+                </button>
+              </div>
+            </div>
+
+            <div id="paymentLinkFieldWrap" class="input-group" style="display:none;">
+              <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+              <input type="url" name="payment_link" id="payment_link_input" class="form-control" placeholder="https://rzp.io/rzp/... or https://buy.stripe.com/..." required value="<?= htmlspecialchars($p['payment_link'] ?? '') ?>">
+              <button class="btn btn-outline-secondary" type="button" onclick="copyPaymentLink(this)" title="Copy Payment Link">
+                <i class="bi bi-clipboard"></i>
+              </button>
+            </div>
+
+            <!-- Razorpay Link Generator Box -->
+            <div id="rzpGenPanel" class="p-3 bg-white rounded-3 border mt-3 shadow-sm">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="fw-semibold small text-primary">
+                  <i class="bi bi-cpu me-1"></i> Razorpay Payment Link Generator
+                </span>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small">Direct API</span>
+              </div>
+              <div class="row g-2 align-items-end">
+                <div class="col-md-7">
+                  <label class="form-label small mb-1 fw-semibold">Amount to Charge (<?= sk_currency_symbol($settings ?? []) ?>) <span class="text-danger">*</span></label>
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text"><?= sk_currency_symbol($settings ?? []) ?></span>
+                    <input type="number" step="0.01" min="1" id="rzp_amount_input" class="form-control" placeholder="e.g. 1499.00" value="<?= htmlspecialchars((string)($p['sale_price'] ?: ($p['price'] ?: ''))) ?>">
+                  </div>
+                </div>
+                <div class="col-md-5">
+                  <button type="button" class="btn btn-sm btn-primary w-100" id="btnCreateRzp" onclick="createRazorpayPaymentLink()">
+                    <i class="bi bi-plus-circle me-1"></i> <span id="btnCreateRzpText"><?= empty($p['payment_link']) ? 'Create Link' : 'Update Link' ?></span>
+                  </button>
+                </div>
+              </div>
+              <input type="hidden" id="rzp_title_input" value="<?= htmlspecialchars($p['name'] ?? '') ?>">
+              <div id="rzpGenAlert" class="mt-2 small" style="display:none;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -449,6 +512,139 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       });
   });
+
+  var linkInp = document.getElementById('payment_link_input');
+  if (linkInp && linkInp.value) {
+    showPaymentLinkBanner(linkInp.value);
+    showPaymentLinkField(true);
+  } else {
+    showPaymentLinkField(false);
+  }
+
+  var nameInp = document.querySelector('input[name="name"]');
+  var titleInp = document.getElementById('rzp_title_input');
+  if (titleInp && nameInp) {
+    titleInp.value = nameInp.value.trim();
+  }
+
+  var priceInp = document.querySelector('input[name="price"]');
+  var amountInp = document.getElementById('rzp_amount_input');
+  if (priceInp && amountInp && (!amountInp.value || parseFloat(amountInp.value) <= 0)) {
+    amountInp.value = priceInp.value;
+  }
 });
+
+function toggleRzpPanel() {
+  var p = document.getElementById('rzpGenPanel');
+  if (p) {
+    p.style.display = (p.style.display === 'none') ? '' : 'none';
+  }
+}
+
+function copyPaymentLink(btn) {
+  var inp = document.getElementById('payment_link_input');
+  if (!inp || !inp.value) {
+    alert('No payment link to copy.');
+    return;
+  }
+  navigator.clipboard.writeText(inp.value).then(function() {
+    if (btn) {
+      var orig = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-check"></i> Copied';
+      setTimeout(function() { btn.innerHTML = orig; }, 2000);
+    }
+  });
+}
+
+function showPaymentLinkField(show) {
+  var wrap = document.getElementById('paymentLinkFieldWrap');
+  if (!wrap) return;
+  wrap.style.display = show ? '' : 'none';
+}
+
+function showPaymentLinkBanner(url) {
+  var banner = document.getElementById('paymentLinkBanner');
+  var anchor = document.getElementById('paymentLinkAnchor');
+  var text = document.getElementById('paymentLinkText');
+  var openBtn = document.getElementById('paymentLinkOpenBtn');
+
+  if (anchor) anchor.href = url;
+  if (text) text.textContent = url;
+  if (openBtn) openBtn.href = url;
+  if (banner) banner.style.display = '';
+  showPaymentLinkField(true);
+}
+
+function createRazorpayPaymentLink() {
+  var amountInp = document.getElementById('rzp_amount_input');
+  var titleInp = document.getElementById('rzp_title_input');
+  var nameInp = document.querySelector('input[name="name"]');
+  var alertBox = document.getElementById('rzpGenAlert');
+  var btn = document.getElementById('btnCreateRzp');
+  var btnText = document.getElementById('btnCreateRzpText');
+
+  var amount = amountInp ? parseFloat(amountInp.value) : 0;
+  if (!amount || amount <= 0) {
+    var priceInp = document.querySelector('input[name="price"]') || document.querySelector('input[name^="variants"][name$="[price]"]');
+    if (priceInp && parseFloat(priceInp.value) > 0) {
+      amount = parseFloat(priceInp.value);
+      if (amountInp) amountInp.value = amount;
+    }
+  }
+
+  if (!amount || amount <= 0) {
+    alertBox.className = 'alert alert-danger p-2 mt-2 mb-0';
+    alertBox.textContent = 'Please enter a valid amount greater than 0.';
+    alertBox.style.display = '';
+    return;
+  }
+
+  var title = (titleInp && titleInp.value.trim()) ? titleInp.value.trim() : (nameInp ? nameInp.value.trim() : 'Product Payment');
+  var productId = '<?= (int)($p['id'] ?? 0) ?>';
+
+  alertBox.style.display = 'none';
+  btn.disabled = true;
+  var origText = btnText.innerHTML;
+  btnText.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Creating...';
+
+  var fd = new FormData();
+  fd.append('amount', amount);
+  fd.append('product_name', title);
+  fd.append('product_id', productId);
+
+  fetch('<?= site_url('admin/products/create_razorpay_payment_link') ?>', {
+    method: 'POST',
+    body: fd
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    btnText.innerHTML = origText;
+
+    if (data.success && data.payment_link) {
+      var linkInput = document.getElementById('payment_link_input');
+      if (linkInput) linkInput.value = data.payment_link;
+      showPaymentLinkBanner(data.payment_link);
+
+      var noAlert = document.getElementById('noPaymentLinkAlert');
+      if (noAlert) noAlert.style.display = 'none';
+
+      alertBox.className = 'alert alert-success p-2 mt-2 mb-0';
+      alertBox.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Razorpay payment link created for ' + (data.currency || '₹') + ' ' + Number(data.amount).toFixed(2) + '! Form is updated. Remember to click Update Product to save.';
+      alertBox.style.display = '';
+    } else {
+      alertBox.className = 'alert alert-danger p-2 mt-2 mb-0';
+      alertBox.textContent = data.message || 'Could not generate Razorpay payment link.';
+      alertBox.style.display = '';
+    }
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    btnText.innerHTML = origText;
+    alertBox.className = 'alert alert-danger p-2 mt-2 mb-0';
+    alertBox.textContent = 'Network or server error while calling Razorpay API.';
+    alertBox.style.display = '';
+  });
+}
 </script>
 

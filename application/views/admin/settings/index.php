@@ -247,7 +247,7 @@
             <div class="col-md-3">
               <label class="form-label">Verify token</label>
               <input type="text" name="wa_cloud_verify_token" class="form-control"
-                     value="<?= htmlspecialchars($settings['wa_cloud_verify_token'] ?? '2deal-wa-verify') ?>">
+                     value="<?= htmlspecialchars($settings['wa_cloud_verify_token'] ?? 'Velmurugn0071@!!!') ?>">
             </div>
             <div class="col-md-3">
               <label class="form-label">Graph API version</label>

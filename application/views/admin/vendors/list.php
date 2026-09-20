@@ -27,6 +27,49 @@ $status_badges = [
   </div>
 </div>
 
+<?php
+$total_whatsapp_messages = 0;
+$active_shops = 0;
+$last_wa_count = 0;
+foreach ($vendors as $v) {
+  $count = (int)($v['whatsapp_ai_count'] ?? 0);
+  $total_whatsapp_messages += $count;
+  if ($count > 0) {
+    $active_shops++;
+  }
+  if ($count > $last_wa_count) {
+    $last_wa_count = $count;
+  }
+}
+?>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card sk-stat-card shadow-sm h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="sk-stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-whatsapp"></i></div>
+        <div><div class="fs-4 fw-bold"><?= number_format($total_whatsapp_messages) ?></div><div class="text-muted small">WhatsApp AI messages</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card sk-stat-card shadow-sm h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="sk-stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-shop-window"></i></div>
+        <div><div class="fs-4 fw-bold"><?= number_format($active_shops) ?></div><div class="text-muted small">active shops</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card sk-stat-card shadow-sm h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="sk-stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-graph-up-arrow"></i></div>
+        <div><div class="fs-4 fw-bold"><?= number_format($last_wa_count) ?></div><div class="text-muted small">highest shop count</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="card sk-table-card shadow-sm mb-3">
   <div class="card-body py-3">
     <form method="get" class="row g-2 align-items-end">
@@ -55,12 +98,13 @@ $status_badges = [
 
 <div class="card sk-table-card shadow-sm">
   <div class="card-body p-0">
-    <table class="table table-hover align-middle mb-0 sk-datatable">
+    <table class="table table-hover align-middle mb-0">
       <thead>
         <tr>
           <th>Vendor</th>
           <th>Contact</th>
           <th>Commission</th>
+          <th>WhatsApp</th>
           <th>Status</th>
           <th>Joined</th>
           <th></th>
@@ -68,7 +112,7 @@ $status_badges = [
       </thead>
       <tbody>
         <?php if (empty($vendors)): ?>
-        <tr><td colspan="6" class="text-center text-muted py-4">No vendors found.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">No vendors found.</td></tr>
         <?php endif; ?>
         <?php foreach ($vendors as $v): ?>
         <tr>
@@ -81,6 +125,15 @@ $status_badges = [
             <small class="text-muted"><?= htmlspecialchars($v['email']) ?></small>
           </td>
           <td><?= number_format((float)$v['commission_rate'], 2) ?>%</td>
+          <td>
+            <?php $wa_count = (int)($v['whatsapp_ai_count'] ?? 0); ?>
+            <?php if ($wa_count > 0): ?>
+              <div class="fw-semibold text-success"><?= number_format($wa_count) ?></div>
+              <small class="text-muted"><?php $ts = $v['last_whatsapp_at'] ?? null; echo $ts ? date('d M Y', strtotime($ts)) : 'No recent activity'; ?></small>
+            <?php else: ?>
+              <span class="text-muted small">0</span>
+            <?php endif; ?>
+          </td>
           <td>
             <span class="badge <?= $status_badges[$v['status']] ?? 'bg-secondary' ?>">
               <?= ucfirst($v['status']) ?>

@@ -17,6 +17,9 @@ document.getElementById('sidebarToggle')?.addEventListener('click', () => {
   document.querySelector('.sk-main').classList.toggle('expanded');
 });
 // Init DataTables
+if (window.$ && $.fn && $.fn.dataTable) {
+  $.fn.dataTable.ext.errMode = 'console';
+}
 document.querySelectorAll('.sk-datatable').forEach(t => {
   if (!$.fn.DataTable.isDataTable(t)) $(t).DataTable({ pageLength: 15, order: [] });
 });

@@ -123,27 +123,38 @@ class Sk_Admin_model extends CI_Model {
             || strpos($a, '123 main street') !== false;
     }
 
-    /** Persist Indian Rupee from settings when empty or leftover RM/MYR. */
+    /** Default only when truly empty; never overwrite a deliberately chosen shop currency. */
     private function _ensure_currency_symbol(array &$settings): void {
         static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
         $sym = trim((string)($settings['currency_symbol'] ?? ''));
         $code = strtoupper(trim((string)($settings['currency_code'] ?? '')));
         $patch = [];
 
-        if ($sym === '' || strcasecmp($sym, 'RM') === 0 || strcasecmp($sym, 'MYR') === 0) {
-            $patch['currency_symbol'] = '₹';
-            $settings['currency_symbol'] = '₹';
+        if ($code === 'RM') {
+            $code = 'MYR';
+            $patch['currency_code'] = 'MYR';
+            $settings['currency_code'] = 'MYR';
         }
-        if ($code === '' || $code === 'MYR' || $code === 'RM') {
+
+        if ($code === '') {
             $patch['currency_code'] = 'INR';
             $settings['currency_code'] = 'INR';
         }
-        if ($patch && !$done) {
-            $done = true;
-            $this->save_settings($patch);
-            return;
+
+        if ($sym === '') {
+            $resolved = function_exists('sk_currency_symbol') ? sk_currency_symbol($settings) : '₹';
+            $patch['currency_symbol'] = $resolved;
+            $settings['currency_symbol'] = $resolved;
         }
-        $done = true;
+
+        if (!empty($patch)) {
+            $this->save_settings($patch);
+        }
     }
 
     /**

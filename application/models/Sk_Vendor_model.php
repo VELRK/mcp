@@ -10,7 +10,7 @@ class Sk_Vendor_model extends CI_Model {
         $total = $this->db->count_all_results();
 
         $this->_build_list_query($filters);
-        $rows = $this->db->select('v.*, vs.store_name, vs.logo')
+        $rows = $this->db->select('v.*, vs.store_name, vs.logo, COALESCE(wa_ai_stats.whatsapp_ai_count, 0) AS whatsapp_ai_count, wa_ai_stats.last_whatsapp_at')
                           ->order_by('v.created_at', 'DESC')
                           ->limit($limit, $offset)
                           ->get()
@@ -19,11 +19,38 @@ class Sk_Vendor_model extends CI_Model {
         return ['rows' => $rows, 'total' => $total];
     }
 
+    public function get_master_shop_summary(): array {
+        $this->db->select('v.id, v.business_name, v.owner_name, v.email, v.phone, v.status, v.created_at, vs.store_name, vs.contact_phone, vs.contact_email, COALESCE(wa_ai_stats.whatsapp_ai_count, 0) AS whatsapp_ai_count, wa_ai_stats.last_whatsapp_at')
+                 ->from('vendors v')
+                 ->join('vendor_stores vs', 'vs.vendor_id = v.id', 'left')
+                 ->where('v.deleted_at IS NULL', null, false);
+
+        $this->_apply_whatsapp_summary_join();
+
+        return $this->db->order_by('v.created_at', 'DESC')->get()->result_array();
+    }
+
     protected function _build_list_query(array $filters): void {
         $this->db->from('vendors v')
                  ->join('vendor_stores vs', 'vs.vendor_id = v.id', 'left');
+        $this->_apply_whatsapp_summary_join();
         $this->_apply_filters($filters);
         $this->db->where('v.deleted_at IS NULL', null, false);
+    }
+
+    protected function _apply_whatsapp_summary_join(): void {
+        if (!$this->db->table_exists('saas_ai_requests')) {
+            return;
+        }
+
+        $subquery = "(
+            SELECT vendor_id, COUNT(*) AS whatsapp_ai_count, MAX(created_at) AS last_whatsapp_at
+            FROM saas_ai_requests
+            WHERE request_type = 'whatsapp_ai' OR source = 'whatsapp'
+            GROUP BY vendor_id
+        )";
+
+        $this->db->join($subquery . ' wa_ai_stats', 'wa_ai_stats.vendor_id = v.id', 'left');
     }
 
     protected function _apply_filters(array $filters): void {
@@ -55,11 +82,22 @@ class Sk_Vendor_model extends CI_Model {
         return $vendor;
     }
 
-    public function get_by_email(string $email): ?array {
+    public function get_by_email($email): ?array {
+        $email = is_scalar($email) ? trim((string) $email) : '';
+        if ($email === '') {
+            return null;
+        }
         return $this->db->where('email', $email)->where('deleted_at IS NULL', null, false)->get($this->table)->row_array() ?: null;
     }
 
-    public function verify_password(string $plain, string $hash): bool {
+    public function verify_password($plain, $hash): bool {
+        $plain = is_scalar($plain) ? (string) $plain : '';
+        $hash  = is_scalar($hash) ? (string) $hash : '';
+
+        if ($hash === '' || !is_string($hash)) {
+            return false;
+        }
+
         return password_verify($plain, $hash);
     }
 

@@ -16,6 +16,94 @@ class Settings extends Sk_Base {
         $this->render('settings/index', $data);
     }
 
+    public function run_sql() {
+        if (strtoupper((string)$this->input->server('REQUEST_METHOD')) !== 'POST') {
+            redirect('admin/settings?tab=sql');
+            return;
+        }
+
+        $this->load->database();
+
+        $settings = $this->Sk_Admin_model->get_settings();
+        $data = [
+            'title' => 'Settings - 2DEAL Admin',
+            'settings' => $settings,
+            'sql_query' => '',
+            'sql_result' => null,
+            'sql_error' => null,
+            'active_tab' => 'sql',
+        ];
+
+        $query = trim((string)($this->input->post('sql_query', FALSE) ?? ''));
+        if ($query === '') {
+            if ($this->input->is_ajax_request()) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'error' => 'Enter a read-only MySQL query to run.']);
+                return;
+            }
+            $this->session->set_flashdata('error', 'Enter a read-only MySQL query to run.');
+            redirect('admin/settings?tab=sql');
+            return;
+        }
+
+        $normalized = rtrim($query, ";\r\n\t ");
+        $data['sql_query'] = $query;
+        if (
+            $normalized === ''
+            || strpos($normalized, ';') !== false
+            || !preg_match('/^\s*(?:SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i', $normalized)
+        ) {
+            $message = 'Only read-only MySQL queries are allowed: SELECT, SHOW, DESCRIBE/DESC, and EXPLAIN. No multi-statements or updates.';
+            if ($this->input->is_ajax_request()) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'error' => $message]);
+                return;
+            }
+            $data['sql_error'] = $message;
+            $this->render('settings/index', $data);
+            return;
+        }
+
+        $query = $normalized;
+
+        try {
+            $result = $this->db->query($query);
+            if ($result === false) {
+                throw new RuntimeException($this->db->error()['message'] ?? 'MySQL query failed.');
+            }
+            if (method_exists($result, 'result_array')) {
+                $rows = $result->result_array();
+            } elseif (method_exists($result, 'row_array')) {
+                $rows = [$result->row_array()];
+            } else {
+                $rows = $result;
+            }
+            $columns = [];
+            if (is_array($rows) && !empty($rows)) {
+                $columns = array_keys((array) reset($rows));
+            }
+            $payload = ['success' => true, 'query' => $query, 'rows' => $rows, 'columns' => $columns];
+            if ($this->input->is_ajax_request()) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode($payload);
+                return;
+            }
+            $data['sql_result'] = $rows;
+            $this->session->set_flashdata('success', 'Query ran successfully.');
+        } catch (Throwable $e) {
+            $message = $e->getMessage();
+            if ($this->input->is_ajax_request()) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'error' => $message]);
+                return;
+            }
+            $data['sql_error'] = $message;
+            $this->session->set_flashdata('error', 'SQL query failed: ' . $message);
+        }
+
+        $this->render('settings/index', $data);
+    }
+
     public function update() {
         if (strtoupper((string)$this->input->server('REQUEST_METHOD')) !== 'POST') {
             redirect('admin/settings');
@@ -37,6 +125,7 @@ class Settings extends Sk_Base {
             'wa_cloud_app_id', 'wa_cloud_config_id',
             'wa_cloud_app_secret', 'wa_cloud_verify_token', 'wa_cloud_api_version',
             'wa_mcp_url', 'wa_mcp_token', 'wa_mcp_timeout',
+            'saas_billing_token', 'saas_default_vendor_id', 'saas_cron_key',
             'company_legal_name', 'gstin', 'pan_no', 'state_code', 'invoice_prefix', 'invoice_footer',
             'isms_username', 'isms_password', 'isms_api_key', 'isms_sender_id', 'isms_message',
             'isms_country_code', 'isms_otp_interval', 'isms_test_otp', 'isms_test_phone',
@@ -45,7 +134,7 @@ class Settings extends Sk_Base {
             'isms_password', 'isms_api_key', 'smtp_pass', 'razorpay_key_secret',
             'razorpay_webhook_secret',
             'askeva_api_token', 'wa_cloud_access_token', 'wa_cloud_app_secret',
-            'wa_mcp_token',
+            'wa_mcp_token', 'saas_billing_token', 'saas_cron_key',
         ];
         $preserve_if_empty = $raw_fields;
 

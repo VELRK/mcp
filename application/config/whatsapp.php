@@ -13,12 +13,20 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 | Template names below must match Meta/Syncr exactly.
 */
 
-$config['whatsapp']['provider'] = 'syncr';
-$config['whatsapp']['api_key']  = 'f20a70ac7131c40762b928155d4ebc1c6115d88041e0f9611c085d8e8f6c22200be15ba0a45f2dd2404a242a2e4b237b9634dbac8e517b8e8b97177e99946481';
-$config['whatsapp']['api_url']  = 'https://waadmin.syncr.in/v1/message/send-message';
-$config['whatsapp']['from_number'] = '';
-$config['whatsapp']['development_mode'] = false;
-$config['whatsapp']['template_lang'] = 'en';
+$envProvider = getenv('WHATSAPP_PROVIDER') ?: getenv('SYNCR_PROVIDER') ?: 'syncr';
+$envApiKey = getenv('WHATSAPP_API_KEY') ?: getenv('SYNCR_API_KEY') ?: '';
+$envApiUrl = getenv('WHATSAPP_API_URL') ?: getenv('SYNCR_API_URL') ?: 'https://waadmin.syncr.in/v1/message/send-message';
+$envFromNumber = getenv('WHATSAPP_FROM_NUMBER') ?: '';
+$envDevMode = getenv('WHATSAPP_DEVELOPMENT_MODE') ?: getenv('SYNCR_DEVELOPMENT_MODE') ?: '0';
+$envLang = getenv('WHATSAPP_TEMPLATE_LANG') ?: 'en';
+$envTestPhone = getenv('WHATSAPP_TEST_FORCE_PHONE') ?: '';
+
+$config['whatsapp']['provider'] = $envProvider;
+$config['whatsapp']['api_key']  = $envApiKey;
+$config['whatsapp']['api_url']  = $envApiUrl;
+$config['whatsapp']['from_number'] = $envFromNumber;
+$config['whatsapp']['development_mode'] = filter_var($envDevMode, FILTER_VALIDATE_BOOLEAN);
+$config['whatsapp']['template_lang'] = $envLang;
 
 /*
 | Parameter style for template body vars:
@@ -54,4 +62,4 @@ $config['whatsapp']['fallback_template'] = '';
 | TESTING: force every WhatsApp send to this number (digits only, country code included).
 | Set empty string '' to send to the real customer phone again.
 */
-$config['whatsapp']['test_force_phone'] = '';
+$config['whatsapp']['test_force_phone'] = $envTestPhone;

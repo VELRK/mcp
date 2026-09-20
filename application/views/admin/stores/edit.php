@@ -115,6 +115,29 @@ $delivery = $store['delivery_settings'] ?? [];
 
   <div class="col-lg-4">
     <div class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">WhatsApp Business Account</div>
+      <div class="card-body">
+        <?php $wa_account = $this->Sk_Vendor_whatsapp_account_model->resolve_for_vendor((int)$vendor['id']); ?>
+        <div class="mb-3">
+          <label class="form-label">Phone Number ID</label>
+          <input type="text" name="wa_phone_number_id" class="form-control font-monospace" value="<?= htmlspecialchars($wa_account['phone_number_id'] ?? '') ?>" placeholder="WhatsApp phone number id">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">WABA ID</label>
+          <input type="text" name="wa_waba_id" class="form-control font-monospace" value="<?= htmlspecialchars($wa_account['waba_id'] ?? '') ?>" placeholder="WhatsApp Business Account id">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Display Phone</label>
+          <input type="text" name="wa_display_phone" class="form-control" value="<?= htmlspecialchars($wa_account['display_phone'] ?? '') ?>" placeholder="+1 234 567 8900">
+        </div>
+        <div class="mb-0">
+          <label class="form-label">Business ID</label>
+          <input type="text" name="wa_business_id" class="form-control font-monospace" value="<?= htmlspecialchars($wa_account['business_id'] ?? '') ?>" placeholder="Facebook business id">
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
       <div class="card-header fw-semibold">SEO</div>
       <div class="card-body">
         <div class="mb-3"><label class="form-label">Meta Title</label><input type="text" name="meta_title" class="form-control" value="<?= htmlspecialchars($store['meta_title'] ?? '') ?>"></div>

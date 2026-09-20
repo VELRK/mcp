@@ -75,6 +75,11 @@ $colspan = $show_vendor_col ? 9 : 8;
     </button>
   </td>
   <td>
+    <?php if (!empty($p['payment_link'])): ?>
+      <a href="<?= htmlspecialchars($p['payment_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-success me-1" title="Open Payment Link">
+        <i class="bi bi-credit-card"></i>
+      </a>
+    <?php endif; ?>
     <a href="<?= site_url('shopkart/products/edit/'.$p['id']) ?>" class="btn btn-sm btn-outline-primary me-1">
       <i class="bi bi-pencil"></i>
     </a>

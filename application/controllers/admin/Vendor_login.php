@@ -5,6 +5,7 @@ class Vendor_login extends CI_Controller {
 
     public function __construct() {
         parent::__construct();
+        $this->load->database();
         $this->load->model('Sk_Vendor_model');
         $this->load->library('session');
         $this->load->helper(['url', 'form']);
@@ -22,8 +23,13 @@ class Vendor_login extends CI_Controller {
     }
 
     public function submit() {
-        $email    = $this->input->post('email', TRUE);
-        $password = $this->input->post('password', TRUE);
+        $email    = strtolower(trim((string) ($this->input->post('email', TRUE) ?? '')));
+        $password = (string) ($this->input->post('password', TRUE) ?? '');
+
+        if ($email === '' || $password === '') {
+            $this->session->set_flashdata('error', 'Enter both email and password.');
+            redirect('admin/vendor/login');
+        }
 
         $vendor = $this->Sk_Vendor_model->get_by_email($email);
 
@@ -32,8 +38,8 @@ class Vendor_login extends CI_Controller {
             redirect('admin/vendor/login');
         }
 
-        if ($vendor['status'] !== 'approved') {
-            $this->session->set_flashdata('error', 'Your vendor account is not approved yet. Status: ' . $vendor['status']);
+        if (($vendor['status'] ?? '') !== 'approved') {
+            $this->session->set_flashdata('error', 'Your vendor account is not approved yet. Status: ' . ($vendor['status'] ?? 'unknown'));
             redirect('admin/vendor/login');
         }
 
@@ -42,7 +48,7 @@ class Vendor_login extends CI_Controller {
             redirect('admin/vendor/login');
         }
 
-        if (!$this->Sk_Vendor_model->verify_password($password, $vendor['password'])) {
+        if (!$this->Sk_Vendor_model->verify_password($password, (string) $vendor['password'])) {
             $this->session->set_flashdata('error', 'Invalid email or password.');
             redirect('admin/vendor/login');
         }

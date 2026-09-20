@@ -11,6 +11,7 @@ class Sk_Settings extends Sk_Base_Api {
 
         $rows = $this->db->where_in('key', [
             'newsletter_popup_enabled', 'site_name', 'currency_symbol', 'currency_code',
+            'default_country', 'default_phone_country',
             'top_bar_enabled', 'top_bar_text', 'whatsapp_enabled', 'whatsapp_number',
             'tax_rate', 'shipping_charge', 'free_shipping_above',
             'meta_title', 'meta_desc', 'meta_keywords', 'seo_og_image',
@@ -30,6 +31,8 @@ class Sk_Settings extends Sk_Base_Api {
         $map['tax_rate']            = isset($map['tax_rate']) ? (float)$map['tax_rate'] : 0;
         $map['shipping_charge']     = isset($map['shipping_charge']) ? (float)$map['shipping_charge'] : 50;
         $map['free_shipping_above'] = isset($map['free_shipping_above']) ? (float)$map['free_shipping_above'] : 999;
+        $map['default_country']     = trim((string)($map['default_country'] ?? 'Malaysia')) ?: 'Malaysia';
+        $map['default_phone_country'] = trim((string)($map['default_phone_country'] ?? '60')) ?: '60';
         $map['currency_symbol']     = sk_currency_symbol($map);
         $map['currency_code']       = sk_currency_code($map);
 

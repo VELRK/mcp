@@ -65,10 +65,37 @@ class Meta extends Sk_Base {
 
         $code = trim((string) $this->input->get('code', FALSE));
         $signup = $this->_signup_from_request();
+        $provisionId = (int) $this->session->userdata('wa_provision_request_id');
+        if ($provisionId > 0) {
+            $this->load->model('Sk_Wa_Provision_request_model');
+            $req = $this->Sk_Wa_Provision_request_model->get_by_id($provisionId);
+            if ($req && ($req['status'] ?? '') === 'pending') {
+                $signup['vendor_id'] = (int) $req['vendor_id'];
+            }
+        }
         $result = $this->_finish_login($code, $signup);
         if (!$result['ok']) {
             $this->session->set_flashdata('error', $result['error']);
-            redirect('admin/meta');
+            redirect($provisionId > 0 ? 'admin/whatsapp_requests/pending' : 'admin/meta');
+            return;
+        }
+
+        if ($provisionId > 0) {
+            $this->load->model('Sk_Wa_Provision_request_model');
+            $req = $this->Sk_Wa_Provision_request_model->get_by_id($provisionId);
+            if ($req && ($req['status'] ?? '') === 'pending') {
+                $phone = $result['saved']['phone_number_id'] ?? '';
+                $this->Sk_Wa_Provision_request_model->update_status(
+                    $provisionId,
+                    'approved',
+                    (int)($this->admin['id'] ?? 0),
+                    'Connected via Facebook OAuth. Phone ID: ' . $phone
+                );
+            }
+            $this->session->unset_userdata('wa_provision_request_id');
+            $this->session->unset_userdata('wa_meta_oauth_state');
+            $this->session->set_flashdata('success', $result['message']);
+            redirect('admin/whatsapp_requests/pending');
             return;
         }
 

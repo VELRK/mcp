@@ -12,10 +12,17 @@ function sk_wa_mcp_config(?array $settings = null): array {
         $CI->load->model('Sk_Admin_model');
         $settings = $CI->Sk_Admin_model->get_settings();
     }
+    $envUrl = getenv('WA_MCP_URL') ?: getenv('MCP_URL') ?: '';
+    $envToken = getenv('WA_MCP_TOKEN') ?: getenv('MCP_TOKEN') ?: '';
+    $envEnabled = getenv('WA_MCP_ENABLED') ?: getenv('MCP_ENABLED') ?: null;
+    $enabled = !empty($settings['wa_mcp_enabled']) && $settings['wa_mcp_enabled'] !== '0';
+    if ($envEnabled !== null && $envEnabled !== '') {
+        $enabled = filter_var($envEnabled, FILTER_VALIDATE_BOOLEAN);
+    }
     return [
-        'enabled' => !empty($settings['wa_mcp_enabled']) && $settings['wa_mcp_enabled'] !== '0',
-        'url'     => rtrim(trim((string)($settings['wa_mcp_url'] ?? '')), '/'),
-        'token'   => trim((string)($settings['wa_mcp_token'] ?? '')),
+        'enabled' => $enabled,
+        'url'     => rtrim(trim((string)($settings['wa_mcp_url'] ?? $envUrl)), '/'),
+        'token'   => trim((string)($settings['wa_mcp_token'] ?? $envToken)),
         'timeout' => max(5, (int)($settings['wa_mcp_timeout'] ?? 12)),
     ];
 }

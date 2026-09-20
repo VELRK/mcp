@@ -94,27 +94,46 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
         return $row ?: null;
     }
 
-    public function find_or_create_conversation(string $phone, string $name = ''): array {
+    public function find_or_create_conversation(string $phone, string $name = '', ?int $vendorId = null, ?string $phoneNumberId = null): array {
         $phone = sk_wa_cloud_normalize_phone($phone);
         $row = $this->db->where('phone', $phone)->get('wa_cloud_conversations')->row_array();
         $now = date('Y-m-d H:i:s');
+        $update = [];
+        if ($vendorId !== null && $vendorId > 0) {
+            $update['vendor_id'] = (int)$vendorId;
+        }
+        if ($phoneNumberId !== null && trim((string)$phoneNumberId) !== '') {
+            $update['phone_number_id'] = trim((string)$phoneNumberId);
+        }
         if ($row) {
             if ($name !== '' && trim((string)($row['name'] ?? '')) === '') {
-                $this->db->where('id', $row['id'])->update('wa_cloud_conversations', [
-                    'name'       => $name,
-                    'updated_at' => $now,
-                ]);
+                $update['name'] = $name;
+            }
+            if ($update) {
+                $update['updated_at'] = $now;
+                $this->db->where('id', $row['id'])->update('wa_cloud_conversations', $update);
+                $row = $this->db->where('id', $row['id'])->get('wa_cloud_conversations')->row_array() ?: $row;
+            }
+            if ($name !== '' && trim((string)($row['name'] ?? '')) === '') {
+                $this->db->where('id', $row['id'])->update('wa_cloud_conversations', ['name' => $name, 'updated_at' => $now]);
                 $row['name'] = $name;
             }
             return $row;
         }
-        $this->db->insert('wa_cloud_conversations', [
+        $insert = [
             'phone'      => $phone,
             'name'       => $name,
             'unread'     => 0,
             'created_at' => $now,
             'updated_at' => $now,
-        ]);
+        ];
+        if ($vendorId !== null && $vendorId > 0) {
+            $insert['vendor_id'] = (int)$vendorId;
+        }
+        if ($phoneNumberId !== null && trim((string)$phoneNumberId) !== '') {
+            $insert['phone_number_id'] = trim((string)$phoneNumberId);
+        }
+        $this->db->insert('wa_cloud_conversations', $insert);
         return $this->db->where('id', (int)$this->db->insert_id())->get('wa_cloud_conversations')->row_array();
     }
 

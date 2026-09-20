@@ -9,7 +9,18 @@ class Whatsapp_cloud {
     public function __construct($settings = []) {
         $CI =& get_instance();
         $CI->load->helper('sk_whatsapp_cloud');
-        $this->cfg = sk_wa_cloud_config(is_array($settings) ? $settings : null);
+        $vendorId = null;
+        if (isset($CI->session) && method_exists($CI->session, 'userdata')) {
+            $vendorId = (int)($CI->session->userdata('sk_vendor_id') ?? 0);
+            if ($vendorId < 1) {
+                $adminId = (int)($CI->session->userdata('sk_admin_id') ?? 0);
+                if ($adminId > 0 && $CI->db->field_exists('vendor_id', 'admins')) {
+                    $admin = $CI->db->select('vendor_id')->where('id', $adminId)->get('admins')->row_array();
+                    $vendorId = (int)($admin['vendor_id'] ?? 0);
+                }
+            }
+        }
+        $this->cfg = sk_wa_cloud_config(is_array($settings) ? $settings : null, $vendorId);
     }
 
     public function is_ready(): bool {

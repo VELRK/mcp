@@ -104,6 +104,7 @@ class Products extends Sk_Base {
     public function store() {
         $this->form_validation->set_rules('name',       'Product Name', 'required|trim');
         $this->form_validation->set_rules('category_id','Category',     'required|integer');
+        $this->form_validation->set_rules('payment_link','Payment Link','required|trim');
 
         if ($this->form_validation->run() === FALSE) {
             $this->session->set_flashdata('error', validation_errors());
@@ -141,6 +142,7 @@ class Products extends Sk_Base {
             'og_image'         => $this->input->post('og_image', TRUE),
             'tags'             => $this->input->post('tags', TRUE),
             'thumbnail'        => $thumbnail,
+            'payment_link'     => $this->input->post('payment_link', TRUE) ?: null,
             // Saree attributes
             'saree_type'       => $this->input->post('saree_type', TRUE) ?: null,
             'fabric'           => $this->input->post('fabric', TRUE) ?: null,
@@ -220,12 +222,12 @@ class Products extends Sk_Base {
         $data['product']       = $this->Sk_Product_model->get_by_id($id);
         $this->assert_product_vendor_access($data['product']);
         // attach_variants swaps thumbnail to the default pack photo — Main Image must show products.thumbnail.
-        $rawRow = $this->db->select('thumbnail, price, sale_price, stock, weight, hot_sale, sale_start_at, sale_end_at')
+        $rawRow = $this->db->select('thumbnail, price, sale_price, stock, weight, hot_sale, sale_start_at, sale_end_at, payment_link')
             ->where('id', (int)$id)->get('products')->row_array() ?: [];
         if (!empty($rawRow['thumbnail'])) {
             $data['product']['thumbnail'] = $rawRow['thumbnail'];
         }
-        foreach (['price', 'sale_price', 'stock', 'weight', 'hot_sale', 'sale_start_at', 'sale_end_at'] as $field) {
+        foreach (['price', 'sale_price', 'stock', 'weight', 'hot_sale', 'sale_start_at', 'sale_end_at', 'payment_link'] as $field) {
             if (array_key_exists($field, $rawRow)) {
                 $data['product'][$field] = $rawRow[$field];
             }
@@ -273,6 +275,13 @@ class Products extends Sk_Base {
         $postedPrice = array_key_exists('price', $_POST) ? $this->input->post('price') : false;
         $postedStock = array_key_exists('stock', $_POST) ? $this->input->post('stock') : false;
 
+        $payment_link = trim((string)$this->input->post('payment_link', TRUE));
+        if ($payment_link === '') {
+            $this->session->set_flashdata('error', 'Payment Link is required.');
+            redirect('admin/products/edit/' . $id);
+            return;
+        }
+
         $data = [
             'name'             => $this->input->post('name', TRUE),
             'category_id'      => $this->input->post('category_id'),
@@ -306,6 +315,7 @@ class Products extends Sk_Base {
             'og_image'         => $this->input->post('og_image', TRUE),
             'tags'             => $this->input->post('tags', TRUE),
             'thumbnail'        => $thumbnail,
+            'payment_link'     => $payment_link ?: null,
             // Saree attributes
             'saree_type'       => $this->input->post('saree_type', TRUE) ?: null,
             'fabric'           => $this->input->post('fabric', TRUE) ?: null,
@@ -752,5 +762,105 @@ class Products extends Sk_Base {
 })();
 </script>
 JS;
+    }
+
+    public function create_razorpay_payment_link() {
+        $amount = (float)($this->input->post('amount') ?? 0);
+        $product_name = trim((string)$this->input->post('product_name', TRUE));
+        $product_id = (int)$this->input->post('product_id');
+
+        if ($amount <= 0) {
+            $this->json(['success' => false, 'message' => 'Please provide a valid payment amount greater than 0.'], 400);
+            return;
+        }
+
+        $settings = $this->Sk_Admin_model->get_settings();
+        $keyId = trim((string)($settings['razorpay_key_id'] ?? ''));
+        $keySecret = trim((string)($settings['razorpay_key_secret'] ?? ''));
+
+        if ($keyId === '' || $keySecret === '') {
+            $this->config->load('ecommerce', true);
+            $cfg = $this->config->item('ecommerce');
+            if (empty($keyId)) {
+                $keyId = trim((string)($cfg['razorpay_key_id'] ?? ''));
+            }
+            if (empty($keySecret)) {
+                $keySecret = trim((string)($cfg['razorpay_key_secret'] ?? ''));
+            }
+        }
+
+        if ($keyId === '' || $keySecret === '') {
+            $this->json([
+                'success' => false,
+                'message' => 'Razorpay API credentials (Key ID and Secret) are missing. Please configure them in Settings.'
+            ], 400);
+            return;
+        }
+
+        $currency = trim((string)($settings['currency'] ?? 'INR'));
+        if ($currency === 'RM' || $currency === 'MYR') {
+            $currency = 'MYR';
+        } elseif (empty($currency) || $currency === '₹') {
+            $currency = 'INR';
+        }
+
+        $amountInPaise = (int)round($amount * 100);
+        $description = !empty($product_name) ? 'Payment for ' . $product_name : 'Product Payment';
+        $description = mb_substr($description, 0, 250);
+
+        $payload = [
+            'amount'          => $amountInPaise,
+            'currency'        => $currency,
+            'accept_partial'  => false,
+            'description'     => $description,
+            'reference_id'    => 'prod_' . ($product_id > 0 ? $product_id : 'new') . '_' . time(),
+            'notify'          => [
+                'sms'      => false,
+                'email'    => false,
+                'whatsapp' => false,
+            ],
+            'reminder_enable' => false,
+            'notes'           => [
+                'product_id'   => (string)$product_id,
+                'product_name' => mb_substr($product_name, 0, 50),
+            ],
+        ];
+
+        $ch = curl_init('https://api.razorpay.com/v1/payment_links');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_USERPWD        => $keyId . ':' . $keySecret,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload),
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT        => 25,
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            $this->json(['success' => false, 'message' => 'Network error connecting to Razorpay: ' . $curlError], 500);
+            return;
+        }
+
+        $res = json_decode((string)$response, true);
+        if ($httpCode >= 200 && $httpCode < 300 && !empty($res['short_url'])) {
+            $this->json([
+                'success'      => true,
+                'payment_link' => $res['short_url'],
+                'plink_id'     => $res['id'] ?? '',
+                'amount'       => $amount,
+                'currency'     => $currency,
+                'message'      => 'Razorpay payment link created successfully!',
+            ]);
+            return;
+        }
+
+        $errMsg = $res['error']['description'] ?? ($res['message'] ?? 'Failed to create Razorpay payment link. HTTP ' . $httpCode);
+        $this->json(['success' => false, 'message' => $errMsg], 400);
     }
 }

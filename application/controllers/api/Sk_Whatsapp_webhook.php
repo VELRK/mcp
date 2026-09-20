@@ -118,17 +118,20 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                     if (!is_array($value)) {
                         continue;
                     }
+                    $phoneNumberId = trim((string)($value['metadata']['phone_number_id'] ?? ''));
+                    $vendorMatch = $phoneNumberId !== '' ? sk_wa_cloud_resolve_vendor_from_phone($phoneNumberId, $settings) : null;
+                    $vendorId = $vendorMatch ? (int)$vendorMatch['vendor_id'] : 0;
                     $this->_store_statuses((array)($value['statuses'] ?? []));
                     $jobs = array_merge(
                         $jobs,
-                        $this->_store_messages((array)($value['messages'] ?? []), (array)($value['contacts'] ?? []))
+                        $this->_store_messages((array)($value['messages'] ?? []), (array)($value['contacts'] ?? []), $vendorId, $phoneNumberId)
                     );
                 }
             }
         }
 
         foreach ($jobs as $job) {
-            $this->_reply_via_mcp($job, $settings);
+            $this->_reply_via_mcp($job, $settings, (int)($job['vendor_id'] ?? 0), (string)($job['phone_number_id'] ?? ''));
         }
 
         http_response_code(200);
@@ -137,8 +140,13 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         exit;
     }
 
-    private function _reply_via_mcp(array $job, array $settings): void {
-        if (!sk_wa_mcp_is_ready($settings) || !sk_wa_cloud_is_ready($settings)) {
+    private function _reply_via_mcp(array $job, array $settings, int $vendorId = 0, string $phoneNumberId = ''): void {
+        $resolvedSettings = $settings;
+        if ($vendorId > 0) {
+            $resolvedSettings['vendor_id'] = $vendorId;
+        }
+        $resolvedCfg = sk_wa_cloud_config($resolvedSettings, $vendorId);
+        if (!sk_wa_mcp_is_ready($resolvedSettings) || !sk_wa_cloud_is_ready($resolvedSettings)) {
             return;
         }
         $conv = $job['conversation'] ?? null;
@@ -151,10 +159,10 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             'phone'            => (string)$conv['phone'],
             'name'             => (string)($conv['name'] ?? ''),
             'conversation_id'  => (int)$conv['id'],
-            'phone_number_id'  => (string)($settings['wa_cloud_phone_number_id'] ?? ''),
+            'phone_number_id'  => $phoneNumberId !== '' ? $phoneNumberId : (string)($resolvedCfg['phone_number_id'] ?? $settings['wa_cloud_phone_number_id'] ?? ''),
             'message'          => $parsed,
         ];
-        $res = sk_wa_mcp_call($req, $settings);
+        $res = sk_wa_mcp_call($req, $resolvedSettings);
         if (empty($res['success']) && empty($res['data'])) {
             log_message('error', 'WhatsApp MCP call failed: ' . ($res['message'] ?? 'unknown'));
             return;
@@ -163,7 +171,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         if (!$specs) {
             return;
         }
-        sk_wa_mcp_send_specs((string)$conv['phone'], $specs, $conv, $settings);
+        sk_wa_mcp_send_specs((string)$conv['phone'], $specs, $conv, $resolvedSettings);
     }
 
     private function _store_statuses(array $statuses): void {
@@ -181,8 +189,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
     }
 
-    /** @return array<int, array{conversation:array,parsed:array}> */
-    private function _store_messages(array $messages, array $contacts): array {
+    /** @return array<int, array{conversation:array,parsed:array,vendor_id:int,phone_number_id:string}> */
+    private function _store_messages(array $messages, array $contacts, int $vendorId = 0, string $phoneNumberId = ''): array {
         $names = [];
         foreach ($contacts as $c) {
             $wa = (string)($c['wa_id'] ?? '');
@@ -210,18 +218,30 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 $mediaUrl = (string)($m['video']['id'] ?? '');
             }
             $storeType = in_array($type, ['text', 'image', 'video'], true) ? $type : 'text';
-            $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation($from, $names[$from] ?? '');
+            $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation(
+                $from,
+                $names[$from] ?? '',
+                $vendorId > 0 ? $vendorId : null,
+                $phoneNumberId !== '' ? $phoneNumberId : null
+            );
             $this->Sk_Whatsapp_cloud_model->add_message((int)$conv['id'], [
-                'wamid'     => $wamid,
-                'direction' => 'in',
-                'type'      => $storeType,
-                'body'      => $body,
-                'media_url' => $mediaUrl ?: null,
-                'media_id'  => $mediaUrl ?: null,
-                'status'    => 'received',
-                'raw_json'  => json_encode($m, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'vendor_id'    => $vendorId > 0 ? $vendorId : null,
+                'phone_number_id' => $phoneNumberId !== '' ? $phoneNumberId : null,
+                'wamid'        => $wamid,
+                'direction'    => 'in',
+                'type'         => $storeType,
+                'body'         => $body,
+                'media_url'    => $mediaUrl ?: null,
+                'media_id'     => $mediaUrl ?: null,
+                'status'       => 'received',
+                'raw_json'     => json_encode($m, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             ]);
-            $jobs[] = ['conversation' => $conv, 'parsed' => $parsed];
+            $jobs[] = [
+                'conversation'    => $conv,
+                'parsed'          => $parsed,
+                'vendor_id'       => $vendorId,
+                'phone_number_id' => $phoneNumberId,
+            ];
         }
         return $jobs;
     }

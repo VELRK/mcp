@@ -26,7 +26,27 @@ if (!function_exists('sk_currency_symbol')) {
     function sk_currency_symbol(?array $settings = null): string {
         $settings = sk_currency_settings($settings);
         $sym = trim((string)($settings['currency_symbol'] ?? ''));
-        return $sym !== '' ? $sym : '₹';
+        if ($sym !== '') {
+            return $sym;
+        }
+
+        $code = strtoupper(trim((string)($settings['currency_code'] ?? '')));
+        $map = [
+            'INR' => '₹',
+            'USD' => '$',
+            'EUR' => '€',
+            'GBP' => '£',
+            'MYR' => 'RM',
+            'SGD' => 'S$',
+            'AUD' => 'A$',
+            'CAD' => 'C$',
+            'AED' => 'د.إ',
+            'IDR' => 'Rp',
+            'PHP' => '₱',
+            'THB' => '฿',
+            'VND' => '₫',
+        ];
+        return $map[$code] ?? '₹';
     }
 }
 
@@ -34,8 +54,11 @@ if (!function_exists('sk_currency_code')) {
     function sk_currency_code(?array $settings = null): string {
         $settings = sk_currency_settings($settings);
         $code = strtoupper(trim((string)($settings['currency_code'] ?? '')));
-        if ($code === '' || $code === 'RM') {
-            return $code === 'RM' ? 'MYR' : 'INR';
+        if ($code === 'RM') {
+            return 'MYR';
+        }
+        if ($code === '') {
+            return 'INR';
         }
         return $code;
     }

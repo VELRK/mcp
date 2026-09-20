@@ -7,7 +7,7 @@ class Stores extends Sk_Base {
 
     public function __construct() {
         parent::__construct();
-        $this->load->model(['Sk_Store_model', 'Sk_Vendor_model']);
+        $this->load->model(['Sk_Store_model', 'Sk_Vendor_model', 'Sk_Vendor_whatsapp_account_model']);
     }
 
     public function edit($vendor_id = null) {
@@ -92,7 +92,22 @@ class Stores extends Sk_Base {
         if ($logo)   $store_data['logo'] = $logo;
         if ($banner) $store_data['banner'] = $banner;
 
+        $wa_phone_number_id = trim((string)$this->input->post('wa_phone_number_id', TRUE));
+        $wa_waba_id = trim((string)$this->input->post('wa_waba_id', TRUE));
+        $wa_display_phone = trim((string)$this->input->post('wa_display_phone', TRUE));
+        $wa_business_id = trim((string)$this->input->post('wa_business_id', TRUE));
+
         $this->Sk_Store_model->update_store($vendor_id, $store_data);
+        if ($wa_phone_number_id !== '' || $wa_waba_id !== '') {
+            $this->Sk_Vendor_whatsapp_account_model->save_for_vendor($vendor_id, [
+                'phone_number_id' => $wa_phone_number_id,
+                'waba_id' => $wa_waba_id,
+                'display_phone' => $wa_display_phone,
+                'business_id' => $wa_business_id,
+                'status' => 'active',
+                'is_default' => 1,
+            ]);
+        }
         $this->activity_log->log_admin('stores', 'update', $vendor_id, $old, $store_data, $vendor_id);
 
         $this->session->set_flashdata('success', 'Store settings saved.');
