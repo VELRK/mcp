@@ -226,6 +226,47 @@
           </div>
 
           <hr class="my-4">
+          <h6 class="mb-1">AI replies (OpenAI or Gemini)</h6>
+          <p class="text-muted small mb-3">
+            Inbound WhatsApp → this server → OpenAI Responses API or Gemini → if stock/product is needed, MCP tools read MySQL → the model writes a short reply → WhatsApp.
+            External MCP URL below is used only when AI is off.
+          </p>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" name="wa_ai_enabled" value="1" id="waAiOn"
+              <?= !empty($settings['wa_ai_enabled']) && $settings['wa_ai_enabled'] !== '0' ? 'checked' : '' ?>>
+            <label class="form-check-label" for="waAiOn">Answer customers with AI + shop tools</label>
+          </div>
+          <div class="row g-3 mb-2">
+            <div class="col-md-4">
+              <label class="form-label">Provider</label>
+              <select name="wa_ai_provider" class="form-select">
+                <option value="openai" <?= (($settings['wa_ai_provider'] ?? 'openai') === 'openai') ? 'selected' : '' ?>>OpenAI</option>
+                <option value="gemini" <?= (($settings['wa_ai_provider'] ?? '') === 'gemini') ? 'selected' : '' ?>>Gemini</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">OpenAI model</label>
+              <input type="text" name="wa_ai_openai_model" class="form-control font-monospace"
+                     value="<?= htmlspecialchars($settings['wa_ai_openai_model'] ?? 'gpt-4.1-mini') ?>">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Gemini model</label>
+              <input type="text" name="wa_ai_gemini_model" class="form-control font-monospace"
+                     value="<?= htmlspecialchars($settings['wa_ai_gemini_model'] ?? 'gemini-2.0-flash') ?>">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">OpenAI API key</label>
+              <input type="password" name="wa_ai_openai_key" class="form-control font-monospace" autocomplete="new-password"
+                     value="" placeholder="<?= !empty($settings['wa_ai_openai_key']) ? '•••• saved (leave blank to keep)' : 'sk-...' ?>">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Gemini API key</label>
+              <input type="password" name="wa_ai_gemini_key" class="form-control font-monospace" autocomplete="new-password"
+                     value="" placeholder="<?= !empty($settings['wa_ai_gemini_key']) ? '•••• saved (leave blank to keep)' : 'AIza...' ?>">
+            </div>
+          </div>
+
+          <hr class="my-4">
           <h6 class="mb-1">MCP bot replies</h6>
           <p class="text-muted small mb-3">
             Incoming WhatsApp messages are posted to your MCP URL. The JSON reply is converted to WhatsApp

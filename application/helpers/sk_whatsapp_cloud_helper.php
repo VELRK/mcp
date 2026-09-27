@@ -177,6 +177,12 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
         'wa_mcp_url'               => '',
         'wa_mcp_token'             => '',
         'wa_mcp_timeout'           => '12',
+        'wa_ai_enabled'            => '0',
+        'wa_ai_provider'           => 'openai',
+        'wa_ai_openai_key'         => '',
+        'wa_ai_openai_model'       => 'gpt-4.1-mini',
+        'wa_ai_gemini_key'         => '',
+        'wa_ai_gemini_model'       => 'gemini-2.0-flash',
     ];
     $hasGroup = $CI->db->field_exists('group', 'settings');
     foreach ($defaults as $key => $value) {

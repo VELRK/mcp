@@ -43,7 +43,7 @@ function sk_mcp_tool_parse_query(?string $query): array {
     $normalized = trim((string)$normalized);
     $lower = mb_strtolower($normalized, 'UTF-8');
 
-    $tokens = preg_split('/[\s\-_/,:;()\[\]{}]+/u', $lower, -1, PREG_SPLIT_NO_EMPTY);
+    $tokens = preg_split('/[\s\-_,:;]+/', $lower, -1, PREG_SPLIT_NO_EMPTY);
     if ($tokens === false || empty($tokens)) {
         $tokens = [$lower];
     }
@@ -120,6 +120,20 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
     $parsed = sk_mcp_tool_parse_query($query);
     $tenantInfo = sk_mcp_tool_resolve_tenant($tenant['tenant'] ?? null);
     $searchBase = trim($parsed['product_name'] !== '' ? $parsed['product_name'] : $parsed['query']);
+    $useful = [];
+    foreach ($parsed['terms'] as $term) {
+        $term = trim((string)$term);
+        if (strlen($term) < 3) {
+            continue;
+        }
+        if (in_array($term, ['the', 'and', 'for', 'are', 'you', 'stock', 'available', 'price', 'product', 'this', 'that', 'with', 'from', 'have', 'has', 'sticks'], true)) {
+            continue;
+        }
+        $useful[] = $term;
+    }
+    if ($useful) {
+        $searchBase = $useful[0];
+    }
     $search = trim($searchBase . ' ' . ($parsed['color'] !== '' ? $parsed['color'] : ''));
     $search = preg_replace('/\s+/', ' ', $search);
 
@@ -146,6 +160,18 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
         $score = 0;
         if ($parsed['product_name'] !== '') {
             $score += stripos($haystack, mb_strtolower($parsed['product_name'], 'UTF-8')) !== false ? 10 : 0;
+        }
+        foreach ($parsed['terms'] as $term) {
+            $term = trim((string)$term);
+            if (strlen($term) < 3) {
+                continue;
+            }
+            if (in_array($term, ['the', 'and', 'for', 'are', 'you', 'stock', 'available', 'price', 'product', 'this', 'that', 'with', 'from', 'have', 'has'], true)) {
+                continue;
+            }
+            if (stripos($haystack, $term) !== false) {
+                $score += 8;
+            }
         }
         if ($parsed['color'] !== '' && stripos($haystack, mb_strtolower($parsed['color'], 'UTF-8')) !== false) {
             $score += 20;
@@ -642,8 +668,18 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
     if ($tool === 'check_stock') {
         $productId = (int)($params['product_id'] ?? 0);
         $variantId = (int)($params['variant_id'] ?? 0);
+        $query = trim((string)($params['query'] ?? $params['text'] ?? $params['name'] ?? ''));
+        if ($productId <= 0 && $query !== '') {
+            $found = sk_mcp_tool_find_products($query, ['tenant' => $tenantId], 3);
+            $matches = $found['results'] ?? [];
+            if (empty($matches)) {
+                return ['success' => false, 'data' => null, 'error' => ['code' => 'PRODUCT_NOT_FOUND', 'message' => 'No matching product to check stock.']];
+            }
+            $best = $matches[0];
+            $productId = (int)($best['id'] ?? 0);
+        }
         if ($productId <= 0) {
-            return ['success' => false, 'data' => null, 'error' => ['code' => 'INVALID_PRODUCT', 'message' => 'product_id is required.']];
+            return ['success' => false, 'data' => null, 'error' => ['code' => 'INVALID_PRODUCT', 'message' => 'product_id or query is required.']];
         }
 
         $CI =& get_instance();
@@ -826,7 +862,19 @@ function sk_ai_process_whatsapp_message(array $payload, array $tenant = []): arr
         return $result;
     }
 
-    $lower = mb_strtolower($text, 'UTF-8');
+    $CI =& get_instance();
+    $CI->load->helper('sk_wa_ai');
+    if (sk_wa_ai_is_ready()) {
+        $chat = sk_wa_ai_chat($text, $tenant, [], null);
+        if (trim((string)($chat['reply'] ?? '')) !== '') {
+            $result['intent'] = $chat['tool'] ?: 'llm';
+            $result['tool'] = $chat['tool'];
+            $result['tool_result'] = $chat['tool_result'];
+            $result['reply'] = $chat['reply'];
+            return $result;
+        }
+    }
+
     $intent = 'general';
     if (preg_match('/(shirt|dress|top|jeans|kurta|saree|product|stock|price|available|order|buy|photo|image)/ui', $text)) {
         $intent = 'product_search';

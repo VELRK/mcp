@@ -7,7 +7,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
     public function __construct() {
         parent::__construct();
-        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp_mcp']);
+        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp_mcp', 'sk_mcp_tool', 'sk_wa_ai']);
         $this->load->model(['Sk_Whatsapp_cloud_model', 'Sk_Admin_model']);
         sk_wa_cloud_ensure_schema();
     }
@@ -149,12 +149,19 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             $resolvedSettings['_wa_phone_number_id'] = $phoneNumberId;
         }
         $vid = $vendorId > 0 ? $vendorId : null;
-        if (!sk_wa_mcp_is_ready($resolvedSettings) || !sk_wa_cloud_is_ready($resolvedSettings, $vid)) {
+        if (!sk_wa_cloud_is_ready($resolvedSettings, $vid)) {
             return;
         }
         $conv = $job['conversation'] ?? null;
         $parsed = $job['parsed'] ?? [];
         if (!$conv || trim((string)($parsed['text'] ?? $parsed['id'] ?? '')) === '') {
+            return;
+        }
+        if (sk_wa_ai_is_ready($resolvedSettings)) {
+            $this->_reply_via_ai($job, $resolvedSettings, $vendorId, (string)$conv['phone']);
+            return;
+        }
+        if (!sk_wa_mcp_is_ready($resolvedSettings)) {
             return;
         }
         $resolvedCfg = sk_wa_cloud_config($resolvedSettings, $vid);
@@ -176,6 +183,43 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
         sk_wa_mcp_send_specs((string)$conv['phone'], $specs, $conv, $resolvedSettings);
+    }
+
+    /**
+     * Customer → model (OpenAI or Gemini) → MCP tool / MySQL → natural reply → WhatsApp.
+     */
+    private function _reply_via_ai(array $job, array $settings, int $vendorId, string $to): void {
+        $conv = $job['conversation'];
+        $parsed = $job['parsed'] ?? [];
+        $text = trim((string)($parsed['text'] ?? ''));
+        if ($text === '') {
+            return;
+        }
+        $history = [];
+        $prior = $this->Sk_Whatsapp_cloud_model->list_messages((int)$conv['id']);
+        $prior = array_slice($prior, 0, -1);
+        foreach (array_slice($prior, -8) as $m) {
+            $body = trim((string)($m['body'] ?? ''));
+            if ($body === '') {
+                continue;
+            }
+            $history[] = [
+                'role'    => (($m['direction'] ?? '') === 'out') ? 'assistant' : 'user',
+                'content' => $body,
+            ];
+        }
+        $tenant = [
+            'tenant_id' => $vendorId > 0 ? $vendorId : 1,
+            'tenant'    => $vendorId > 0 ? (string)$vendorId : '1',
+            'shop_name' => 'Shop',
+        ];
+        $chat = sk_wa_ai_chat($text, $tenant, $history, $settings);
+        $reply = trim((string)($chat['reply'] ?? ''));
+        if ($reply === '') {
+            log_message('error', 'WhatsApp AI returned an empty reply (' . ($chat['provider'] ?? '') . ').');
+            return;
+        }
+        sk_wa_mcp_send_specs($to, [['type' => 'text', 'text' => $reply]], $conv, $settings);
     }
 
     private function _store_statuses(array $statuses): void {

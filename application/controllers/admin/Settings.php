@@ -139,6 +139,7 @@ class Settings extends Sk_Base {
             'askeva_api_url', 'askeva_api_token', 'askeva_order_template', 'askeva_template_lang',
             'wa_cloud_verify_token',
             'wa_mcp_url', 'wa_mcp_token', 'wa_mcp_timeout',
+            'wa_ai_provider', 'wa_ai_openai_key', 'wa_ai_openai_model', 'wa_ai_gemini_key', 'wa_ai_gemini_model',
             'saas_billing_token', 'saas_default_vendor_id', 'saas_cron_key',
             'company_legal_name', 'gstin', 'pan_no', 'state_code', 'invoice_prefix', 'invoice_footer',
             'isms_username', 'isms_password', 'isms_api_key', 'isms_sender_id', 'isms_message',
@@ -149,6 +150,7 @@ class Settings extends Sk_Base {
             'razorpay_webhook_secret',
             'askeva_api_token',
             'wa_mcp_token', 'saas_billing_token', 'saas_cron_key',
+            'wa_ai_openai_key', 'wa_ai_gemini_key',
         ];
         $preserve_if_empty = $raw_fields;
 
@@ -187,6 +189,11 @@ class Settings extends Sk_Base {
         if ($settingsTab === 'wacloud' || $this->input->post('wa_cloud_verify_token') !== null) {
             $data['wa_cloud_enabled'] = $this->input->post('wa_cloud_enabled') ? '1' : '0';
             $data['wa_mcp_enabled'] = $this->input->post('wa_mcp_enabled') ? '1' : '0';
+            $data['wa_ai_enabled'] = $this->input->post('wa_ai_enabled') ? '1' : '0';
+            $postedProvider = strtolower(trim((string)$this->input->post('wa_ai_provider', TRUE)));
+            if (in_array($postedProvider, ['openai', 'gemini'], true)) {
+                $data['wa_ai_provider'] = $postedProvider;
+            }
         }
 
         // Always persist Askeva text fields when present (including empty template).
