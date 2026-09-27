@@ -230,17 +230,34 @@ function skWaStatus(msg) {
   if (el) el.textContent = msg || '';
 }
 
+function skWaSignupReady(signup) {
+  if (!signup) return false;
+  return !!(signup.waba_id || signup.phone_number_id || signup.whatsapp_business_account_id
+    || (signup.waba_ids && signup.waba_ids.length)
+    || (signup.phone_number_ids && signup.phone_number_ids.length));
+}
 function skWaPostCode(code) {
-  if (!window.skWaCtx.requestId && !window.skWaCtx.accountId) {
+  if (!window.skWaCtx.requestId && !window.skWaCtx.accountId && !window.skWaCtx.vendorId) {
     skWaStatus('Click Embed Login on a pending or inactive row first.');
     return;
   }
-  skWaStatus('Exchanging code → saving Phone ID / WABA…');
-  var body = new URLSearchParams();
-  body.set('code', code);
-  body.set('request_id', String(window.skWaCtx.requestId || 0));
-  body.set('account_id', String(window.skWaCtx.accountId || 0));
-  body.set('signup', JSON.stringify(window.skWaSignup || {}));
+  var started = Date.now();
+  function send() {
+    if (!skWaSignupReady(window.skWaSignup) && Date.now() - started < 5000) {
+      skWaStatus('Waiting for WhatsApp phone / WABA from Facebook…');
+      setTimeout(send, 250);
+      return;
+    }
+    skWaStatus('Exchanging code → saving Phone ID / WABA…');
+    var signup = Object.assign({}, window.skWaSignup || {}, {
+      vendor_id: window.skWaCtx.vendorId || 0
+    });
+    var body = new URLSearchParams();
+    body.set('code', code);
+    body.set('request_id', String(window.skWaCtx.requestId || 0));
+    body.set('account_id', String(window.skWaCtx.accountId || 0));
+    body.set('vendor_id', String(window.skWaCtx.vendorId || 0));
+    body.set('signup', JSON.stringify(signup));
   fetch(<?= json_encode(site_url('admin/whatsapp_requests/exchange')) ?>, {
     method: 'POST',
     headers: { 'Accept': 'application/json' },
@@ -256,9 +273,11 @@ function skWaPostCode(code) {
       return;
     }
     skWaStatus((res && res.error) ? res.error : 'Embed login failed.');
-  }).catch(function () {
-    skWaStatus('Network error during token exchange.');
-  });
+    }).catch(function () {
+      skWaStatus('Network error during token exchange.');
+    });
+  }
+  send();
 }
 
 function skWaOnLogin(response) {

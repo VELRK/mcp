@@ -245,8 +245,15 @@ class Meta extends Sk_Base {
             sk_wa_meta_subscribe_waba($saved['wa_cloud_waba_id'], $token, $settings);
         }
 
-        $phone = $saved['wa_cloud_phone_number_id'] !== '' ? $saved['wa_cloud_phone_number_id'] : 'not returned yet';
-        $message = 'Facebook connected. Phone ID: ' . $phone
+        $phone = (string)($saved['wa_cloud_phone_number_id'] ?? '');
+        $vendorId = (int)($signup['vendor_id'] ?? 0);
+        if ($vendorId > 0 && $phone === '') {
+            return array(
+                'ok'    => false,
+                'error' => 'Facebook returned a token but no WhatsApp phone number ID. Finish Embedded Signup, then try Embed Login again.',
+            );
+        }
+        $message = 'Facebook connected. Phone ID: ' . ($phone !== '' ? $phone : 'not returned yet')
             . '. Webhook (Meta WhatsApp → Configuration): ' . sk_wa_meta_webhook_uri();
 
         return array(

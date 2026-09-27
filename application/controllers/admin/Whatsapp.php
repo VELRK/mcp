@@ -162,9 +162,14 @@ class Whatsapp extends Sk_Base {
         if ($id && !$row) {
             show_404();
         }
+        $settings = $this->Sk_Admin_model->get_settings();
+        if ($vid > 0) {
+            $settings['vendor_id'] = $vid;
+        }
         $data['title'] = $row ? 'Edit template' : 'New template';
         $data['row'] = $row;
         $data['vendor_id'] = $vid;
+        $data['ready'] = sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null);
         $data['customer_modules'] = sk_wa_cloud_customer_modules();
         $this->render('whatsapp/template_form', $data);
     }
@@ -215,7 +220,11 @@ class Whatsapp extends Sk_Base {
         $push = (string)$this->input->post('push_meta') === '1';
         if ($push) {
             $msg = $this->_push_template_to_meta($savedId, $vid);
-            $this->session->set_flashdata($msg['ok'] ? 'success' : 'error', $msg['text']);
+            if (!empty($msg['ok'])) {
+                $this->session->set_flashdata('success', $msg['text']);
+            } else {
+                $this->session->set_flashdata('error', 'Template saved as a draft. ' . $msg['text']);
+            }
         } else {
             $this->session->set_flashdata('success', 'Template saved locally.');
         }

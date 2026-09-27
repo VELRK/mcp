@@ -196,17 +196,18 @@ class Whatsapp_requests extends Sk_Base {
         }
 
         $requestId = (int)$this->input->post('request_id');
-        if ($requestId < 1) {
-            $requestId = (int)$this->session->userdata('wa_provision_request_id');
-        }
         $accountId = (int)$this->input->post('account_id');
         $vendorIdPost = (int)$this->input->post('vendor_id');
+        // A posted vendor or account is the target. Do not reuse an older session request.
+        if ($requestId < 1 && $accountId < 1 && $vendorIdPost < 1) {
+            $requestId = (int)$this->session->userdata('wa_provision_request_id');
+        }
 
         $req = null;
         $vendorId = 0;
         if ($requestId > 0) {
             $req = $this->Sk_Wa_Provision_request_model->get_by_id($requestId);
-            if (!$req || ($req['status'] ?? '') !== 'pending') {
+            if (!$req || ($req['status'] ?? '') === 'rejected') {
                 return $this->json(['ok' => false, 'error' => 'Pending request not found. Click Embed Login on a pending row.'], 400);
             }
             $vendorId = (int)$req['vendor_id'];
@@ -400,7 +401,7 @@ class Whatsapp_requests extends Sk_Base {
         }
 
         // Ensure vendor account row is active with token/phone/waba (save_connection already upserts).
-        $this->Sk_Vendor_whatsapp_account_model->save_for_vendor((int)$req['vendor_id'], [
+        $stored = $this->Sk_Vendor_whatsapp_account_model->save_for_vendor((int)$req['vendor_id'], [
             'phone_number_id' => $phone,
             'waba_id'         => $waba,
             'display_phone'   => $saved['wa_cloud_display_phone'] ?? '',
@@ -411,6 +412,13 @@ class Whatsapp_requests extends Sk_Base {
             'status'          => 'active',
             'is_default'      => 1,
         ]);
+        if (empty($stored['ok']) || (int)($stored['id'] ?? 0) < 1) {
+            return [
+                'ok'    => false,
+                'error' => 'Token exchange succeeded but the number was not stored for vendor #' . (int)$req['vendor_id'] . '. '
+                    . ($stored['message'] ?? 'Save failed.'),
+            ];
+        }
 
         if (!empty($req['id'])) {
             $this->Sk_Wa_Provision_request_model->update_status(

@@ -38,9 +38,24 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
         foreach (['vendor_id', 'phone_number_id', 'waba_id', 'status', 'is_default', 'token_expires'] as $col) {
             if (!$this->db->field_exists($col, $this->table)) {
                 $this->db->query("ALTER TABLE `{$this->table}` ADD COLUMN `{$col}` " . (
-                    in_array($col, ['status', 'waba_id', 'display_phone', 'business_id', 'access_token', 'refresh_token', 'token_expires'], true)
-                        ? 'VARCHAR(128) NULL' : (in_array($col, ['is_default'], true) ? 'TINYINT(1) NOT NULL DEFAULT 0' : 'INT UNSIGNED NOT NULL DEFAULT 0')
+                    in_array($col, ['status', 'waba_id', 'display_phone', 'business_id'], true)
+                        ? 'VARCHAR(128) NULL'
+                        : ($col === 'token_expires'
+                            ? 'DATETIME NULL'
+                            : (in_array($col, ['is_default'], true) ? 'TINYINT(1) NOT NULL DEFAULT 0' : 'INT UNSIGNED NOT NULL DEFAULT 0'))
                 ) . "");
+            }
+        }
+        foreach (['access_token', 'refresh_token'] as $col) {
+            if (!$this->db->field_exists($col, $this->table)) {
+                $this->db->query("ALTER TABLE `{$this->table}` ADD COLUMN `{$col}` MEDIUMTEXT NULL");
+                continue;
+            }
+            $meta = $this->db->field_data($this->table);
+            foreach ($meta as $field) {
+                if ($field->name === $col && stripos((string)$field->type, 'text') === false) {
+                    $this->db->query("ALTER TABLE `{$this->table}` MODIFY `{$col}` MEDIUMTEXT NULL");
+                }
             }
         }
     }
@@ -145,6 +160,11 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
             }
         }
 
+        $expires = trim((string)($data['token_expires'] ?? ($existing['token_expires'] ?? '')));
+        if ($expires === '' || $expires === '0000-00-00 00:00:00') {
+            $expires = null;
+        }
+
         $row = [
             'vendor_id' => $vendor_id,
             'phone_number_id' => $phoneNumberId,
@@ -153,7 +173,7 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
             'business_id' => trim((string)($data['business_id'] ?? ($existing['business_id'] ?? ''))),
             'access_token' => $accessToken,
             'refresh_token' => $refreshToken,
-            'token_expires' => trim((string)($data['token_expires'] ?? ($existing['token_expires'] ?? ''))),
+            'token_expires' => $expires,
             'status' => trim((string)($data['status'] ?? 'active')) ?: 'active',
             'is_default' => array_key_exists('is_default', $data)
                 ? (!empty($data['is_default']) ? 1 : 0)
@@ -161,13 +181,36 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
             'updated_at' => $now,
         ];
 
+        $debug = $this->db->db_debug;
+        $this->db->db_debug = false;
+        $err = ['code' => 0, 'message' => ''];
         if ($existing) {
-            $this->db->where('id', (int)$existing['id'])->update($this->table, $row);
+            $ok = $this->db->where('id', (int)$existing['id'])->update($this->table, $row);
             $id = (int)$existing['id'];
         } else {
             $row['created_at'] = $now;
-            $this->db->insert($this->table, $row);
+            $ok = $this->db->insert($this->table, $row);
             $id = (int)$this->db->insert_id();
+            if (!$ok || $id < 1) {
+                $err = $this->db->error();
+                $clash = $this->db->where('phone_number_id', $phoneNumberId)->get($this->table)->row_array();
+                if ($clash) {
+                    $ok = $this->db->where('id', (int)$clash['id'])->update($this->table, $row);
+                    $id = (int)$clash['id'];
+                    $err = $ok ? ['code' => 0, 'message' => ''] : $this->db->error();
+                }
+            }
+        }
+        if (empty($ok)) {
+            $latest = $this->db->error();
+            if (!empty($latest['message'])) {
+                $err = $latest;
+            }
+        }
+        $this->db->db_debug = $debug;
+        if (empty($ok) || $id < 1) {
+            $msg = trim((string)($err['message'] ?? ''));
+            return ['ok' => false, 'message' => 'WhatsApp account was not stored.' . ($msg !== '' ? ' ' . $msg : '')];
         }
 
         if (!empty($row['is_default'])) {

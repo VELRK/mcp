@@ -205,31 +205,46 @@ function skVendorWaStatus(msg) {
   var el = document.getElementById('waVendorLoginStatus');
   if (el) el.textContent = msg || '';
 }
+function skVendorWaSignupReady(signup) {
+  if (!signup) return false;
+  return !!(signup.waba_id || signup.phone_number_id || signup.whatsapp_business_account_id
+    || (signup.waba_ids && signup.waba_ids.length)
+    || (signup.phone_number_ids && signup.phone_number_ids.length));
+}
 function skVendorWaPostCode(code) {
-  skVendorWaStatus('Exchanging token… saving Phone ID / WABA…');
-  var body = new URLSearchParams();
-  body.set('code', code);
-  body.set('request_id', '0');
-  body.set('account_id', String(window.skVendorWaCtx.accountId || 0));
-  body.set('vendor_id', String(window.skVendorWaCtx.vendorId || 0));
-  body.set('signup', JSON.stringify(Object.assign({}, window.skVendorWaSignup || {}, {
-    vendor_id: window.skVendorWaCtx.vendorId
-  })));
-  fetch(<?= json_encode(site_url('admin/whatsapp_requests/exchange')) ?>, {
-    method: 'POST',
-    headers: { 'Accept': 'application/json' },
-    body: body,
-    credentials: 'same-origin'
-  }).then(function (r) { return r.json(); }).then(function (res) {
-    if (res && res.ok) {
-      skVendorWaStatus(res.message || 'Saved.');
-      window.location.reload();
+  var started = Date.now();
+  function send() {
+    if (!skVendorWaSignupReady(window.skVendorWaSignup) && Date.now() - started < 5000) {
+      skVendorWaStatus('Waiting for WhatsApp phone / WABA from Facebook…');
+      setTimeout(send, 250);
       return;
     }
-    skVendorWaStatus((res && res.error) ? res.error : 'Embed login failed.');
-  }).catch(function () {
-    skVendorWaStatus('Network error during token exchange.');
-  });
+    skVendorWaStatus('Exchanging token… saving Phone ID / WABA…');
+    var body = new URLSearchParams();
+    body.set('code', code);
+    body.set('request_id', '0');
+    body.set('account_id', String(window.skVendorWaCtx.accountId || 0));
+    body.set('vendor_id', String(window.skVendorWaCtx.vendorId || 0));
+    body.set('signup', JSON.stringify(Object.assign({}, window.skVendorWaSignup || {}, {
+      vendor_id: window.skVendorWaCtx.vendorId
+    })));
+    fetch(<?= json_encode(site_url('admin/whatsapp_requests/exchange')) ?>, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      body: body,
+      credentials: 'same-origin'
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (res && res.ok) {
+        skVendorWaStatus(res.message || 'Saved.');
+        window.location.reload();
+        return;
+      }
+      skVendorWaStatus((res && res.error) ? res.error : 'Embed login failed.');
+    }).catch(function () {
+      skVendorWaStatus('Network error during token exchange.');
+    });
+  }
+  send();
 }
 function skVendorWaOnLogin(response) {
   var auth = response && response.authResponse ? response.authResponse : {};

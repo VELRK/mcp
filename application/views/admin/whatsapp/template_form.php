@@ -97,8 +97,11 @@ foreach ($modules as $key => $mod) {
     </div>
 
     <div class="form-check mt-3">
-      <input class="form-check-input" type="checkbox" name="push_meta" value="1" id="pushMeta" checked>
+      <input class="form-check-input" type="checkbox" name="push_meta" value="1" id="pushMeta" <?= !empty($ready) ? 'checked' : '' ?>>
       <label class="form-check-label" for="pushMeta">Also submit to Meta for approval</label>
+      <?php if (empty($ready)): ?>
+        <div class="form-text">No active WhatsApp number yet. The template is saved as a draft until Embed Login is done for this vendor.</div>
+      <?php endif; ?>
     </div>
   </div>
   <div class="card-footer d-flex gap-2">
