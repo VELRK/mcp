@@ -270,7 +270,9 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
             }
         }
     }
-    if (!$account && $vendorId > 0 && isset($CI) && method_exists($CI, 'load')) {
+    // $CI->load is a property, not a method. method_exists() skips this and
+    // the page reports "no active number" even when the vendor row exists.
+    if (!$account && $vendorId > 0) {
         $CI->load->model('Sk_Vendor_whatsapp_account_model');
         $account = $CI->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vendorId);
     }
