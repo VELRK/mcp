@@ -125,12 +125,33 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
             }
         }
 
-        return $this->db->where('vendor_id', $vendor_id)
+        $row = $this->db->where('vendor_id', $vendor_id)
             ->where('status', 'active')
             ->order_by('is_default', 'DESC')
             ->order_by('id', 'ASC')
             ->get($this->table)
-            ->row_array() ?: null;
+            ->row_array();
+        if ($row) {
+            return $row;
+        }
+
+        // Same rows the Connect WhatsApp page lists. Use a number that has a Phone ID
+        // even when status was stored in a slightly different form.
+        $rows = $this->get_for_vendor($vendor_id);
+        $fallback = null;
+        foreach ($rows as $candidate) {
+            if (trim((string)($candidate['phone_number_id'] ?? '')) === '') {
+                continue;
+            }
+            $status = strtolower(trim((string)($candidate['status'] ?? '')));
+            if ($status === 'active' || !empty($candidate['is_default'])) {
+                return $candidate;
+            }
+            if ($fallback === null) {
+                $fallback = $candidate;
+            }
+        }
+        return $fallback;
     }
 
     public function save_for_vendor(int $vendor_id, array $data): array {

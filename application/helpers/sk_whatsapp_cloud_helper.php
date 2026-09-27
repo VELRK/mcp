@@ -310,6 +310,9 @@ function sk_wa_cloud_config(?array $settings = null, ?int $vendorId = null): arr
         (isset($account['access_token']) && trim((string)$account['access_token']) !== ''
             ? $account['access_token']
             : null)
+        ?? ((isset($account['refresh_token']) && trim((string)$account['refresh_token']) !== '')
+            ? $account['refresh_token']
+            : null)
         ?? $settings['wa_cloud_access_token']
         ?? getenv('WA_CLOUD_ACCESS_TOKEN')
         ?: ''

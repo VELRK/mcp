@@ -479,12 +479,18 @@ class Whatsapp extends Sk_Base {
      * Vendor scope for WA ops: query → session ops → logged-in vendor.
      */
     private function _resolve_ops_vendor_id(): int {
+        // A logged-in vendor always uses their own numbers. A ?vendor_id= on the URL
+        // must not point templates at a different vendor that has no account.
+        $own = (int)($this->current_vendor_id() ?? 0);
+        if ($own > 0 && !$this->is_super_admin()) {
+            return $own;
+        }
         $vid = (int)$this->input->get_post('vendor_id');
         if ($vid < 1) {
             $vid = (int)$this->session->userdata('wa_ops_vendor_id');
         }
         if ($vid < 1) {
-            $vid = (int)($this->current_vendor_id() ?? 0);
+            $vid = $own;
         }
         if ($vid > 0 && $this->is_super_admin()) {
             $this->session->set_userdata('wa_ops_vendor_id', $vid);
@@ -497,11 +503,11 @@ class Whatsapp extends Sk_Base {
     }
 
     private function _push_template_to_meta(int $id, ?int $vendorId = null): array {
+        $vid = $vendorId !== null ? (int)$vendorId : $this->_resolve_ops_vendor_id();
         $row = $this->Sk_Whatsapp_cloud_model->get_template($id, $vid > 0 ? $vid : null);
         if (!$row) {
             return ['ok' => false, 'text' => 'Template not found.'];
         }
-        $vid = $vendorId !== null ? (int)$vendorId : $this->_resolve_ops_vendor_id();
         $settings = $this->Sk_Admin_model->get_settings();
         if ($vid > 0) {
             $settings['vendor_id'] = $vid;
