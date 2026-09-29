@@ -377,7 +377,13 @@ function sk_wa_cloud_not_ready_reason(?array $settings = null, ?int $vendorId = 
     if ($vid < 1) {
         return 'Pick a WhatsApp number first (open Templates from WA Numbers / Embed Login with ?vendor_id=).';
     }
-    if (empty($cfg['has_vendor_account'])) {
+    if (empty($cfg['
+    
+    
+    
+    
+    
+    '])) {
         return 'No active WhatsApp number for vendor #' . $vid . '. Run Embed Login on that vendor.';
     }
     if ($cfg['access_token'] === '') {
@@ -786,6 +792,40 @@ function sk_wa_meta_subscribe_waba(string $wabaId, string $token, ?array $settin
         return array('ok' => false, 'error' => 'Missing WABA id');
     }
     return sk_wa_meta_graph('POST', $wabaId . '/subscribed_apps', array(), array(), $token, $settings);
+}
+
+/**
+ * Cloud API send fails with (#133010) until the phone is registered.
+ * PENDING + verified numbers still need this register call.
+ */
+function sk_wa_meta_register_phone(string $phoneId, string $token, ?array $settings = null): array
+{
+    $phoneId = trim($phoneId);
+    $token = trim($token);
+    if ($phoneId === '' || $token === '') {
+        return array('ok' => false, 'error' => 'Missing phone or token');
+    }
+    $info = sk_wa_meta_graph('GET', $phoneId, array('fields' => 'status'), null, $token, $settings);
+    $status = strtoupper((string)($info['data']['status'] ?? ''));
+    if ($status === 'CONNECTED') {
+        return array('ok' => true, 'error' => '', 'status' => 'CONNECTED');
+    }
+    $pin = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $res = sk_wa_meta_graph('POST', $phoneId . '/register', array(), array(
+        'messaging_product' => 'whatsapp',
+        'pin'               => $pin,
+    ), $token, $settings);
+    if (empty($res['ok'])) {
+        return array(
+            'ok'     => false,
+            'error'  => (string)($res['error'] ?? 'WhatsApp register failed'),
+            'status' => $status,
+        );
+    }
+    $CI =& get_instance();
+    $CI->load->model('Sk_Admin_model');
+    $CI->Sk_Admin_model->save_settings(array('wa_cloud_pin_' . $phoneId => $pin));
+    return array('ok' => true, 'error' => '', 'status' => 'CONNECTED');
 }
 
 function sk_wa_meta_fetch_phones_for_waba(string $wabaId, string $token, ?array $settings = null): array

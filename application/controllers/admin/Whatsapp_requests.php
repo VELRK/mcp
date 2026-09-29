@@ -420,6 +420,15 @@ class Whatsapp_requests extends Sk_Base {
             ];
         }
 
+        $registered = sk_wa_meta_register_phone($phone, $token, $settings);
+        if (empty($registered['ok'])) {
+            return [
+                'ok'    => false,
+                'error' => 'Number saved, but Meta has not registered it for sending yet. '
+                    . ($registered['error'] ?? 'Register the phone in WhatsApp Manager, then try again.'),
+            ];
+        }
+
         if (!empty($req['id'])) {
             $this->Sk_Wa_Provision_request_model->update_status(
                 (int)$req['id'],

@@ -179,7 +179,7 @@ class Whatsapp_cloud {
         return $this->request('POST', $phoneId . '/messages', $payload);
     }
 
-    private function request(string $method, string $path, ?array $body = null): array {
+    private function request(string $method, string $path, ?array $body = null, bool $retryRegister = true): array {
         if ($this->cfg['access_token'] === '') {
             return ['success' => false, 'message' => 'Meta access token is missing.'];
         }
@@ -207,9 +207,16 @@ class Whatsapp_cloud {
             return ['success' => false, 'message' => $err, 'http' => $code];
         }
         $ok = $code >= 200 && $code < 300 && empty($decoded['error']);
+        $message = $ok ? 'OK' : ($this->error_message($decoded) ?: ('HTTP ' . $code));
+        if ($retryRegister && !$ok && $method !== 'GET' && strpos($message, '133010') !== false && $this->cfg['phone_number_id'] !== '') {
+            $reg = sk_wa_meta_register_phone($this->cfg['phone_number_id'], $this->cfg['access_token']);
+            if (!empty($reg['ok'])) {
+                return $this->request($method, $path, $body, false);
+            }
+        }
         return [
             'success' => $ok,
-            'message' => $ok ? 'OK' : ($this->error_message($decoded) ?: ('HTTP ' . $code)),
+            'message' => $message,
             'data'    => $decoded,
             'http'    => $code,
         ];
