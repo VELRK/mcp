@@ -605,17 +605,36 @@ class Whatsapp extends Sk_Base {
         }
         $this->load->library('Whatsapp_cloud', $settings);
         $components = [];
+        $variableMap = $row['variable_map'] ?? '';
         if ($row['kind'] === 'image' || $row['kind'] === 'video') {
             $fmt = $row['kind'] === 'video' ? 'VIDEO' : 'IMAGE';
-            $header = ['type' => 'HEADER', 'format' => $fmt];
-            if (!empty($row['media_url'])) {
-                $header['example'] = ['header_handle' => [$row['media_url']]];
+            $file = sk_wa_cloud_local_media_path((string)($row['media_url'] ?? ''));
+            if ($file === '') {
+                return ['ok' => false, 'text' => 'Upload a header image or video before sending this template to Meta.'];
+            }
+            $uploaded = sk_wa_cloud_template_header_handle($file, $cfg);
+            if (empty($uploaded['ok'])) {
+                return ['ok' => false, 'text' => $uploaded['error'] ?: 'Header file upload failed.'];
+            }
+            $components[] = [
+                'type'    => 'HEADER',
+                'format'  => $fmt,
+                'example' => ['header_handle' => [$uploaded['handle']]],
+            ];
+        } elseif (trim((string)$row['header_text']) !== '') {
+            $header = ['type' => 'HEADER', 'format' => 'TEXT', 'text' => $row['header_text']];
+            $headerSamples = sk_wa_cloud_example_samples((string)$row['header_text'], $variableMap);
+            if ($headerSamples) {
+                $header['example'] = ['header_text' => $headerSamples];
             }
             $components[] = $header;
-        } elseif (trim((string)$row['header_text']) !== '') {
-            $components[] = ['type' => 'HEADER', 'format' => 'TEXT', 'text' => $row['header_text']];
         }
-        $components[] = ['type' => 'BODY', 'text' => (string)$row['body_text']];
+        $body = ['type' => 'BODY', 'text' => (string)$row['body_text']];
+        $bodySamples = sk_wa_cloud_example_samples((string)$row['body_text'], $variableMap);
+        if ($bodySamples) {
+            $body['example'] = ['body_text' => [$bodySamples]];
+        }
+        $components[] = $body;
         if (trim((string)$row['footer_text']) !== '') {
             $components[] = ['type' => 'FOOTER', 'text' => $row['footer_text']];
         }

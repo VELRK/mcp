@@ -536,6 +536,122 @@ function sk_wa_cloud_decode_variable_map($raw): array {
     return $out;
 }
 
+/** Sample values Meta requires when a template component contains {{n}}. */
+function sk_wa_cloud_example_samples(string $text, $variableMap): array {
+    $indexes = sk_wa_cloud_placeholder_indexes($text);
+    if (!$indexes) {
+        return [];
+    }
+    $map = sk_wa_cloud_decode_variable_map($variableMap);
+    $known = [
+        'name'              => 'Priya Sharma',
+        'first_name'        => 'Priya',
+        'last_name'         => 'Sharma',
+        'email'             => 'priya@shop.test',
+        'phone'             => '9876543210',
+        'company'           => 'Shopkart',
+        'address_line1'     => '12 Anna Salai',
+        'address_line2'     => 'Flat 4',
+        'city'              => 'Chennai',
+        'state'             => 'Tamil Nadu',
+        'pincode'           => '600002',
+        'country'           => 'India',
+        'full_address'      => '12 Anna Salai, Chennai 600002',
+        'last_order_number' => 'SK1001',
+        'last_order_total'  => '329',
+        'last_order_status' => 'ready',
+        'site_name'         => 'Shopkart',
+    ];
+    $max = max($indexes);
+    $out = [];
+    for ($i = 1; $i <= $max; $i++) {
+        $field = (string)($map[(string)$i] ?? '');
+        $out[] = $known[$field] ?? ('Sample ' . $i);
+    }
+    return $out;
+}
+
+/**
+ * Upload a local header image or video and return Meta's template handle.
+ *
+ * @return array{ok:bool,handle:string,error:string}
+ */
+function sk_wa_cloud_template_header_handle(string $filePath, array $cfg): array {
+    $fail = static function (string $error): array {
+        return ['ok' => false, 'handle' => '', 'error' => $error];
+    };
+    if (!is_file($filePath)) {
+        return $fail('Header file is missing on the server.');
+    }
+    $appId = trim((string)($cfg['app_id'] ?? ''));
+    $token = trim((string)($cfg['access_token'] ?? ''));
+    $graph = rtrim((string)($cfg['graph_base'] ?? 'https://graph.facebook.com/v21.0'), '/');
+    if ($appId === '' || $token === '') {
+        return $fail('Meta App ID or access token is missing, so the header file cannot be uploaded.');
+    }
+    $mime = (string)(@mime_content_type($filePath) ?: 'application/octet-stream');
+    $sessionBody = json_encode([
+        'file_name'   => basename($filePath),
+        'file_length' => filesize($filePath),
+        'file_type'   => $mime,
+    ]);
+    $ch = curl_init($graph . '/' . rawurlencode($appId) . '/uploads');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS     => $sessionBody,
+    ]);
+    $raw = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $session = is_string($raw) ? json_decode($raw, true) : null;
+    $sessionId = is_array($session) ? trim((string)($session['id'] ?? '')) : '';
+    if ($sessionId === '') {
+        $msg = is_array($session) ? (string)($session['error']['message'] ?? '') : '';
+        return $fail($msg !== '' ? $msg : ('Header upload failed (HTTP ' . $code . ').'));
+    }
+    $bin = file_get_contents($filePath);
+    if ($bin === false || $bin === '') {
+        return $fail('Could not read the header file.');
+    }
+    $ch = curl_init($graph . '/' . $sessionId);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 90,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: OAuth ' . $token,
+            'file_offset: 0',
+            'Content-Type: ' . $mime,
+        ],
+        CURLOPT_POSTFIELDS     => $bin,
+    ]);
+    $raw = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $uploaded = is_string($raw) ? json_decode($raw, true) : null;
+    $handle = is_array($uploaded) ? trim((string)($uploaded['h'] ?? '')) : '';
+    if ($handle === '') {
+        $msg = is_array($uploaded) ? (string)($uploaded['error']['message'] ?? '') : '';
+        return $fail($msg !== '' ? $msg : ('Header upload did not return a file handle (HTTP ' . $code . ').'));
+    }
+    return ['ok' => true, 'handle' => $handle, 'error' => ''];
+}
+
+function sk_wa_cloud_local_media_path(string $url): string {
+    $path = (string)(parse_url($url, PHP_URL_PATH) ?: '');
+    if (!preg_match('#/assets/uploads/whatsapp/([A-Za-z0-9._-]+)$#', $path, $m)) {
+        return '';
+    }
+    $file = FCPATH . 'assets/uploads/whatsapp/' . $m[1];
+    return is_file($file) ? $file : '';
+}
+
 function sk_wa_cloud_placeholder_indexes(string $text): array {
     if (!preg_match_all('/\{\{\s*(\d+)\s*\}\}/', $text, $m)) {
         return [];
