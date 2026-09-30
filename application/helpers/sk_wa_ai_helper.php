@@ -294,10 +294,13 @@ function sk_wa_ai_openai_loop(string $text, array $tenant, array $history, array
 function sk_wa_ai_gemini_loop(string $text, array $tenant, array $history, array $cfg): array {
     $decls = [];
     foreach (sk_wa_ai_tools() as $t) {
+        $params = $t['parameters'];
+        // Gemini rejects additionalProperties and drops the whole reply.
+        unset($params['additionalProperties']);
         $decls[] = [
             'name'        => $t['name'],
             'description' => $t['description'],
-            'parameters'  => $t['parameters'],
+            'parameters'  => $params,
         ];
     }
     $contents = [];
@@ -318,6 +321,7 @@ function sk_wa_ai_gemini_loop(string $text, array $tenant, array $history, array
     $lastTool = null;
     $lastResult = null;
     $reply = '';
+    $retried = false;
 
     for ($i = 0; $i < 4; $i++) {
         $res = sk_wa_ai_http('POST', $url, [
@@ -326,7 +330,17 @@ function sk_wa_ai_gemini_loop(string $text, array $tenant, array $history, array
             'tools'             => [['functionDeclarations' => $decls]],
         ], ['Content-Type: application/json']);
         if (empty($res['ok'])) {
-            log_message('error', 'WhatsApp Gemini: ' . ($res['error'] ?? 'failed'));
+            $err = (string)($res['error'] ?? 'failed');
+            $transient = stripos($err, 'high demand') !== false
+                || stripos($err, 'UNAVAILABLE') !== false
+                || stripos($err, '503') !== false;
+            if ($transient && !$retried) {
+                $retried = true;
+                $i--;
+                usleep(500000);
+                continue;
+            }
+            log_message('error', 'WhatsApp Gemini: ' . $err);
             break;
         }
         $parts = $res['data']['candidates'][0]['content']['parts'] ?? [];
@@ -338,7 +352,7 @@ function sk_wa_ai_gemini_loop(string $text, array $tenant, array $history, array
             }
             if (!empty($part['functionCall']['name'])) {
                 $fnParts[] = $part;
-            } elseif (isset($part['text'])) {
+            } elseif (isset($part['text']) && empty($part['thought'])) {
                 $textParts[] = (string)$part['text'];
             }
         }
