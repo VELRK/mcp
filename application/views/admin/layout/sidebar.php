@@ -192,6 +192,12 @@ if (!function_exists('sk_active')) {
       <?php endif; ?>
 
       <li class="nav-item">
+        <a href="<?= site_url('shopkart/whatsapp/ai') ?>"
+           class="nav-link sk-nav-link <?= ($this->uri->segment(3)==='ai') ? 'active' : '' ?>">
+          <i class="bi bi-stars me-2"></i> AI replies
+        </a>
+      </li>
+      <li class="nav-item">
         <a href="<?= site_url('shopkart/whatsapp/templates') ?>"
            class="nav-link sk-nav-link <?= ($this->uri->segment(3)==='templates') ? 'active' : '' ?>">
           <i class="bi bi-file-earmark-richtext me-2"></i> WA Templates

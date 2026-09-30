@@ -7,7 +7,7 @@ class Whatsapp extends Sk_Base {
 
     public function __construct() {
         parent::__construct();
-        $this->load->helper('sk_whatsapp_cloud');
+        $this->load->helper(['sk_whatsapp_cloud', 'sk_wa_ai']);
         $this->load->model('Sk_Whatsapp_cloud_model');
         sk_wa_cloud_ensure_schema();
     }
@@ -152,6 +152,61 @@ class Whatsapp extends Sk_Base {
             'success' => $ok,
             'message' => $ok ? 'Sent.' : ($result['message'] ?? 'Send failed.'),
         ]);
+    }
+
+    public function ai() {
+        $vid = $this->_resolve_ops_vendor_id();
+        $data['title'] = 'WhatsApp AI';
+        $data['vendor_id'] = $vid;
+        $data['vendors'] = [];
+        if ($this->is_super_admin()) {
+            $data['vendors'] = $this->db->select('id, business_name, name')
+                ->order_by('id', 'ASC')
+                ->get('vendors')
+                ->result_array();
+        }
+        $row = $vid > 0 ? sk_wa_ai_vendor_row($vid) : null;
+        $data['ai'] = [
+            'enabled'       => $row['enabled'] ?? '0',
+            'provider'      => $row['provider'] ?? 'openai',
+            'openai_model'  => $row['openai_model'] ?? 'gpt-4.1-mini',
+            'gemini_model'  => $row['gemini_model'] ?? 'gemini-2.0-flash',
+            'has_openai'    => $row && trim((string)$row['openai_key']) !== '',
+            'has_gemini'    => $row && trim((string)$row['gemini_key']) !== '',
+        ];
+        $this->render('whatsapp/ai', $data);
+    }
+
+    public function ai_save() {
+        if (strtoupper((string)$this->input->server('REQUEST_METHOD')) !== 'POST') {
+            redirect('shopkart/whatsapp/ai');
+            return;
+        }
+        $vid = $this->_resolve_ops_vendor_id();
+        if ($vid < 1) {
+            $this->session->set_flashdata('error', 'Choose a vendor before saving AI credentials.');
+            redirect('shopkart/whatsapp/ai');
+            return;
+        }
+        $existing = sk_wa_ai_vendor_row($vid);
+        $openai = trim((string)$this->input->post('openai_key', FALSE));
+        $gemini = trim((string)$this->input->post('gemini_key', FALSE));
+        if ($openai === '') {
+            $openai = (string)$existing['openai_key'];
+        }
+        if ($gemini === '') {
+            $gemini = (string)$existing['gemini_key'];
+        }
+        sk_wa_ai_vendor_save($vid, [
+            'enabled'       => $this->input->post('enabled') ? '1' : '0',
+            'provider'      => (string)$this->input->post('provider', TRUE),
+            'openai_key'    => $openai,
+            'openai_model'  => (string)$this->input->post('openai_model', TRUE),
+            'gemini_key'    => $gemini,
+            'gemini_model'  => (string)$this->input->post('gemini_model', TRUE),
+        ]);
+        $this->session->set_flashdata('success', 'AI credentials saved for this vendor.');
+        redirect('shopkart/whatsapp/ai' . ($this->is_super_admin() ? '?vendor_id=' . $vid : ''));
     }
 
     public function templates() {

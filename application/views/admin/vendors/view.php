@@ -102,6 +102,7 @@ $status_badges = [
               <div class="d-flex flex-wrap gap-1">
                 <?php if (!$isInactive): ?>
                   <a href="<?= site_url('admin/whatsapp/templates?vendor_id='.(int)$vendor['id']) ?>" class="btn btn-success btn-sm">Templates</a>
+                  <a href="<?= site_url('shopkart/whatsapp/ai?vendor_id='.(int)$vendor['id']) ?>" class="btn btn-outline-success btn-sm">AI keys</a>
                   <a href="<?= site_url('admin/vendors/whatsapp_report/'.$acc['id']) ?>" class="btn btn-outline-secondary btn-sm">Report</a>
                   <?php if (empty($acc['is_default'])): ?>
                     <form method="post" action="<?= site_url('admin/vendors/set_whatsapp_account_default/'.$vendor['id']) ?>" class="d-inline">

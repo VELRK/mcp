@@ -189,11 +189,23 @@ class Settings extends Sk_Base {
         if ($settingsTab === 'wacloud' || $this->input->post('wa_cloud_verify_token') !== null) {
             $data['wa_cloud_enabled'] = $this->input->post('wa_cloud_enabled') ? '1' : '0';
             $data['wa_mcp_enabled'] = $this->input->post('wa_mcp_enabled') ? '1' : '0';
-            $data['wa_ai_enabled'] = $this->input->post('wa_ai_enabled') ? '1' : '0';
-            $postedProvider = strtolower(trim((string)$this->input->post('wa_ai_provider', TRUE)));
-            if (in_array($postedProvider, ['openai', 'gemini'], true)) {
-                $data['wa_ai_provider'] = $postedProvider;
+            if (($this->admin['role'] ?? '') !== 'vendor') {
+                $data['wa_ai_enabled'] = $this->input->post('wa_ai_enabled') ? '1' : '0';
+                $postedProvider = strtolower(trim((string)$this->input->post('wa_ai_provider', TRUE)));
+                if (in_array($postedProvider, ['openai', 'gemini'], true)) {
+                    $data['wa_ai_provider'] = $postedProvider;
+                }
             }
+        }
+        if (($this->admin['role'] ?? '') === 'vendor') {
+            unset(
+                $data['wa_ai_provider'],
+                $data['wa_ai_openai_key'],
+                $data['wa_ai_openai_model'],
+                $data['wa_ai_gemini_key'],
+                $data['wa_ai_gemini_model'],
+                $data['wa_ai_enabled']
+            );
         }
 
         // Always persist Askeva text fields when present (including empty template).

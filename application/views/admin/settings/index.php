@@ -227,9 +227,17 @@
 
           <hr class="my-4">
           <h6 class="mb-1">AI replies (OpenAI or Gemini)</h6>
+          <?php if (($admin['role'] ?? '') === 'vendor'): ?>
+          <div class="alert alert-info small">
+            Your OpenAI or Gemini key is saved on
+            <a href="<?= site_url('shopkart/whatsapp/ai') ?>">WhatsApp → AI replies</a>.
+            Each vendor uses their own key.
+          </div>
+          <?php else: ?>
           <p class="text-muted small mb-3">
-            Inbound WhatsApp → this server → OpenAI Responses API or Gemini → if stock/product is needed, MCP tools read MySQL → the model writes a short reply → WhatsApp.
-            External MCP URL below is used only when AI is off.
+            These keys are only for chats that are not tied to a vendor.
+            Each vendor saves their own OpenAI or Gemini key under
+            <a href="<?= site_url('shopkart/whatsapp/ai') ?>">WhatsApp → AI replies</a>.
           </p>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" name="wa_ai_enabled" value="1" id="waAiOn"
@@ -265,6 +273,7 @@
                      value="" placeholder="<?= !empty($settings['wa_ai_gemini_key']) ? '•••• saved (leave blank to keep)' : 'AIza...' ?>">
             </div>
           </div>
+          <?php endif; ?>
 
           <hr class="my-4">
           <h6 class="mb-1">MCP bot replies</h6>

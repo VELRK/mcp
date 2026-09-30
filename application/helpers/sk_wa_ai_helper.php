@@ -6,6 +6,82 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * Customer text → OpenAI Responses or Gemini → MCP tool (MySQL) → natural reply.
  */
 
+function sk_wa_ai_ensure_vendor_schema(): void {
+    $CI =& get_instance();
+    if (!$CI->db->table_exists('vendor_wa_ai')) {
+        $CI->db->query("CREATE TABLE IF NOT EXISTS `vendor_wa_ai` (
+            `vendor_id` INT UNSIGNED NOT NULL,
+            `enabled` TINYINT(1) NOT NULL DEFAULT 0,
+            `provider` VARCHAR(16) NOT NULL DEFAULT 'openai',
+            `openai_key` TEXT NULL,
+            `openai_model` VARCHAR(80) NOT NULL DEFAULT 'gpt-4.1-mini',
+            `gemini_key` TEXT NULL,
+            `gemini_model` VARCHAR(80) NOT NULL DEFAULT 'gemini-2.0-flash',
+            `updated_at` DATETIME NULL,
+            PRIMARY KEY (`vendor_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+}
+
+/** @return array{vendor_id:int,enabled:string,provider:string,openai_key:string,openai_model:string,gemini_key:string,gemini_model:string} */
+function sk_wa_ai_vendor_row(int $vendorId): array {
+    $empty = [
+        'vendor_id'     => $vendorId,
+        'enabled'       => '0',
+        'provider'      => 'openai',
+        'openai_key'    => '',
+        'openai_model'  => 'gpt-4.1-mini',
+        'gemini_key'    => '',
+        'gemini_model'  => 'gemini-2.0-flash',
+    ];
+    if ($vendorId < 1) {
+        return $empty;
+    }
+    sk_wa_ai_ensure_vendor_schema();
+    $CI =& get_instance();
+    $row = $CI->db->where('vendor_id', $vendorId)->get('vendor_wa_ai')->row_array();
+    if (!$row) {
+        return $empty;
+    }
+    return [
+        'vendor_id'     => $vendorId,
+        'enabled'       => !empty($row['enabled']) ? '1' : '0',
+        'provider'      => (string)($row['provider'] ?? 'openai'),
+        'openai_key'    => (string)($row['openai_key'] ?? ''),
+        'openai_model'  => (string)($row['openai_model'] ?? 'gpt-4.1-mini'),
+        'gemini_key'    => (string)($row['gemini_key'] ?? ''),
+        'gemini_model'  => (string)($row['gemini_model'] ?? 'gemini-2.0-flash'),
+    ];
+}
+
+function sk_wa_ai_vendor_save(int $vendorId, array $data): void {
+    if ($vendorId < 1) {
+        return;
+    }
+    sk_wa_ai_ensure_vendor_schema();
+    $CI =& get_instance();
+    $provider = strtolower(trim((string)($data['provider'] ?? 'openai')));
+    if (!in_array($provider, ['openai', 'gemini'], true)) {
+        $provider = 'openai';
+    }
+    $payload = [
+        'enabled'       => !empty($data['enabled']) && (string)$data['enabled'] !== '0' ? 1 : 0,
+        'provider'      => $provider,
+        'openai_key'    => trim((string)($data['openai_key'] ?? '')),
+        'openai_model'  => trim((string)($data['openai_model'] ?? '')) ?: 'gpt-4.1-mini',
+        'gemini_key'    => trim((string)($data['gemini_key'] ?? '')),
+        'gemini_model'  => trim((string)($data['gemini_model'] ?? '')) ?: 'gemini-2.0-flash',
+        'updated_at'    => date('Y-m-d H:i:s'),
+    ];
+    $exists = $CI->db->where('vendor_id', $vendorId)->count_all_results('vendor_wa_ai');
+    if ($exists) {
+        $CI->db->where('vendor_id', $vendorId)->update('vendor_wa_ai', $payload);
+        return;
+    }
+    $payload['vendor_id'] = $vendorId;
+    $CI->db->insert('vendor_wa_ai', $payload);
+}
+
 function sk_wa_ai_config(?array $settings = null): array {
     $CI =& get_instance();
     if ($settings === null) {
@@ -13,6 +89,22 @@ function sk_wa_ai_config(?array $settings = null): array {
             $CI->load->model('Sk_Admin_model');
         }
         $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    $vendorId = (int)($settings['vendor_id'] ?? 0);
+    if ($vendorId > 0) {
+        $row = sk_wa_ai_vendor_row($vendorId);
+        $provider = strtolower(trim((string)($row['provider'] ?? 'openai')));
+        if (!in_array($provider, ['openai', 'gemini'], true)) {
+            $provider = 'openai';
+        }
+        return [
+            'enabled'       => !empty($row['enabled']) && $row['enabled'] !== '0',
+            'provider'      => $provider,
+            'openai_key'    => trim((string)($row['openai_key'] ?? '')),
+            'openai_model'  => trim((string)($row['openai_model'] ?? '')) ?: 'gpt-4.1-mini',
+            'gemini_key'    => trim((string)($row['gemini_key'] ?? '')),
+            'gemini_model'  => trim((string)($row['gemini_model'] ?? '')) ?: 'gemini-2.0-flash',
+        ];
     }
     $provider = strtolower(trim((string)($settings['wa_ai_provider'] ?? 'openai')));
     if (!in_array($provider, ['openai', 'gemini'], true)) {
