@@ -400,7 +400,19 @@ function sk_wa_cloud_not_ready_reason(?array $settings = null, ?int $vendorId = 
 
 function sk_wa_cloud_normalize_phone(string $phone): string {
     $digits = preg_replace('/\D+/', '', $phone);
-    return $digits !== null ? $digits : '';
+    if ($digits === null || $digits === '') {
+        return '';
+    }
+    if (strpos($digits, '0091') === 0) {
+        $digits = substr($digits, 2);
+    }
+    if (strlen($digits) === 10 && preg_match('/^[6-9]\d{9}$/', $digits)) {
+        return '91' . $digits;
+    }
+    if (strlen($digits) === 11 && $digits[0] === '0' && preg_match('/^0[6-9]\d{9}$/', $digits)) {
+        return '91' . substr($digits, 1);
+    }
+    return $digits;
 }
 
 function sk_wa_cloud_upload_dir(): string {

@@ -142,7 +142,7 @@ class Customers extends Sk_Base {
             'city'          => trim((string)$this->input->post('city', TRUE)),
             'state'         => trim((string)$this->input->post('state', TRUE)),
             'pincode'       => trim((string)$this->input->post('pincode', TRUE)),
-            'country'       => trim((string)$this->input->post('country', TRUE)) ?: 'Malaysia',
+            'country'       => trim((string)$this->input->post('country', TRUE)) ?: 'India',
             'address_phone' => trim((string)$this->input->post('address_phone', TRUE)),
         ];
 
@@ -163,9 +163,9 @@ class Customers extends Sk_Base {
             $out['email'] = strtolower($email);
         }
 
+        $this->load->helper('sk_isms');
+        $settings = $this->Sk_Admin_model->get_settings();
         if ($phone !== '') {
-            $this->load->helper('sk_isms');
-            $settings = $this->Sk_Admin_model->get_settings();
             $normalized = sk_isms_normalize_phone($phone, $settings);
             if (!$normalized) {
                 $out['error'] = sk_isms_phone_error();
@@ -176,6 +176,14 @@ class Customers extends Sk_Base {
                 return $out;
             }
             $out['phone'] = $normalized;
+        }
+        if ($out['address_phone'] !== '') {
+            $addrNorm = sk_isms_normalize_phone($out['address_phone'], $settings);
+            if (!$addrNorm) {
+                $out['error'] = 'Address phone must be a 10-digit Indian mobile number.';
+                return $out;
+            }
+            $out['address_phone'] = $addrNorm;
         }
 
         if ($out['email'] === null && $out['phone'] === null) {
@@ -202,7 +210,7 @@ class Customers extends Sk_Base {
             'city'         => $parsed['city'],
             'state'        => $parsed['state'],
             'pincode'      => $parsed['pincode'],
-            'country'      => $parsed['country'] ?: 'Malaysia',
+            'country'      => $parsed['country'] ?: 'India',
             'label'        => $parsed['address_label'] ?: 'Home',
             'address_type' => 'shipping',
             'is_default'   => 1,
@@ -286,8 +294,8 @@ class Customers extends Sk_Base {
         $out = fopen('php://output', 'w');
         fwrite($out, "\xEF\xBB\xBF");
         fputcsv($out, ['name', 'phone', 'email', 'status']);
-        fputcsv($out, ['Jane Doe', '60123456789', 'jane@example.com', '1']);
-        fputcsv($out, ['John Smith', '60198765432', '', '1']);
+        fputcsv($out, ['Jane Doe', '9876543210', 'jane@example.com', '1']);
+        fputcsv($out, ['John Smith', '9123456780', '', '1']);
         fclose($out);
         exit;
     }
@@ -387,7 +395,7 @@ class Customers extends Sk_Base {
                 $normalized = sk_isms_normalize_phone($phone, $settings);
                 if (!$normalized) {
                     $skipped++;
-                    $errors[] = "Row {$rowNum}: invalid phone ({$phone}).";
+                    $errors[] = "Row {$rowNum}: invalid phone ({$phone}). Use a 10-digit Indian mobile.";
                     continue;
                 }
                 if ($this->Sk_User_model->phone_exists($normalized)) {

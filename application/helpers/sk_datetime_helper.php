@@ -72,6 +72,32 @@ if (!function_exists('sk_api_datetime')) {
     }
 }
 
+/**
+ * Treat a naive DB datetime as the app timezone and return the same moment in another zone.
+ */
+if (!function_exists('sk_shift_datetime')) {
+    function sk_shift_datetime($value, string $timezone = 'Asia/Kolkata', string $format = 'Y-m-d H:i:s'): string {
+        if ($value === null || $value === '' || $value === '0000-00-00 00:00:00') {
+            return '';
+        }
+        try {
+            $from = new DateTimeZone(sk_app_timezone());
+            $to = new DateTimeZone($timezone);
+            $raw = trim((string)$value);
+            if (preg_match('/[Zz]|[+\-]\d{2}:?\d{2}$/', $raw)) {
+                $dt = new DateTimeImmutable($raw);
+            } else {
+                $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw, $from)
+                    ?: DateTimeImmutable::createFromFormat('Y-m-d', $raw, $from)
+                    ?: new DateTimeImmutable($raw, $from);
+            }
+            return $dt->setTimezone($to)->format($format);
+        } catch (Throwable $e) {
+            return trim((string)$value);
+        }
+    }
+}
+
 /** Attach created_at_iso + created_at_formatted onto rows that have created_at. */
 if (!function_exists('sk_attach_api_dates')) {
     function sk_attach_api_dates(array $rows): array {

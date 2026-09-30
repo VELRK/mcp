@@ -131,7 +131,7 @@
                       value="<?= htmlspecialchars($settings['whatsapp_number'] ?? '') ?>"
                       placeholder="e.g. 919876543210">
                   </div>
-                  <div class="form-text small text-muted">Malaysia country code without + (default 60). Order status alerts are under the <strong>Order WhatsApp</strong> tab.</div>
+                  <div class="form-text small text-muted">Indian mobile with country code 91, no + (example 919876543210). Order status alerts are under the <strong>Order WhatsApp</strong> tab.</div>
                 </div>
               </div>
             </div>
@@ -495,7 +495,7 @@
             <div class="col-md-4">
               <label class="form-label">Country code</label>
               <input type="text" name="isms_country_code" class="form-control"
-                     value="<?= htmlspecialchars($settings['isms_country_code'] ?? '60') ?>" placeholder="60">
+                     value="<?= htmlspecialchars($settings['isms_country_code'] ?? '91') ?>" placeholder="91">
             </div>
             <div class="col-md-4">
               <label class="form-label">OTP expiry (minutes)</label>
@@ -546,8 +546,8 @@
             <div class="col-12"><hr class="my-1"><h6 class="text-muted mb-0">Developer testing</h6></div>
             <div class="col-12">
               <div class="alert alert-secondary small mb-0 py-2">
-                <strong>Default dev login:</strong> mobile <code>0180000000</code> (or <code>60180000000</code>) + OTP <code>1234</code>.
-                Works without iSMS credits. This number never sends real SMS even when iSMS is enabled.
+                <strong>Developer test:</strong> use the 10-digit Indian mobile saved below with OTP <code>1234</code>.
+                That number never sends a real SMS, even when iSMS is enabled.
               </div>
             </div>
             <div class="col-md-6">
@@ -559,7 +559,7 @@
             <div class="col-md-6">
               <label class="form-label">Test mobile number</label>
               <input type="text" name="isms_test_phone" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['isms_test_phone'] ?? '60180000000') ?>" placeholder="60180000000">
+                     value="<?= htmlspecialchars($settings['isms_test_phone'] ?? '9800000010') ?>" placeholder="9800000010">
               <div class="form-text">Always uses test OTP above — no SMS sent for this number.</div>
             </div>
             <div class="col-12">

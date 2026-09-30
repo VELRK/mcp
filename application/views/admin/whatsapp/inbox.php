@@ -74,8 +74,8 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <label class="form-label">Phone (with country code)</label>
-        <input type="text" name="phone" class="form-control" placeholder="60123456789" required>
+        <label class="form-label">Phone (10-digit Indian mobile)</label>
+        <input type="text" name="phone" class="form-control" inputmode="numeric" placeholder="9876543210" required>
         <label class="form-label mt-2">Name (optional)</label>
         <input type="text" name="name" class="form-control">
       </div>
@@ -102,6 +102,18 @@
       return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
     });
   }
+  function clock(s) {
+    var raw = String(s || '');
+    var t = raw.slice(11, 16);
+    if (t.length < 5) return '';
+    var h = parseInt(t.slice(0, 2), 10);
+    if (isNaN(h)) return t;
+    var m = t.slice(3, 5);
+    var ap = h >= 12 ? 'pm' : 'am';
+    h = h % 12;
+    if (h === 0) h = 12;
+    return h + ':' + m + ' ' + ap;
+  }
   function initials(name, phone) {
     var n = (name || phone || 'WA').trim();
     return n.slice(0, 2).toUpperCase();
@@ -118,7 +130,7 @@
         + '<div class="wa-avatar">' + esc(initials(r.name, r.phone)) + '</div>'
         + '<div class="wa-item-body"><div class="wa-item-top"><span class="wa-item-name">'
         + esc(r.name || r.phone) + '</span><span class="wa-item-time">'
-        + esc((r.last_at || '').slice(11, 16)) + '</span></div>'
+        + esc(clock(r.last_at)) + '</span></div>'
         + '<div class="wa-item-preview">' + esc(r.last_message || '') + '</div></div>'
         + (unread ? '<span class="wa-unread">' + unread + '</span>' : '')
         + '</div>';
@@ -149,7 +161,7 @@
     return '<div class="wa-bubble ' + cls + '" data-mid="' + m.id + '">'
       + media
       + (skipText ? '' : (label ? '<div>' + esc(label).replace(/\n/g, '<br>') + '</div>' : ''))
-      + '<div class="wa-meta">' + esc(m.status || '') + ' · ' + esc((m.created_at || '').slice(11, 16)) + '</div>'
+      + '<div class="wa-meta">' + esc(m.status || '') + ' · ' + esc(clock(m.created_at)) + ' IST</div>'
       + '</div>';
   }
   function renderThread(payload, append) {

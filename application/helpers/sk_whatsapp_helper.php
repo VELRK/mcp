@@ -192,20 +192,28 @@ function sk_whatsapp_template_for_status(string $status, array $order, array $cf
     return null;
 }
 
-/** Normalize to digits with country code (MY default 60). */
+/** Normalize to digits with India country code 91. A 10-digit mobile is stored as 91xxxxxxxxxx. */
 function sk_whatsapp_normalize_phone(string $phone, array $settings = []): string {
     $phone = preg_replace('/\D+/', '', $phone);
     if ($phone === '') {
         return '';
     }
-    // Strip leading 00
     if (strpos($phone, '00') === 0) {
         $phone = substr($phone, 2);
     }
+    if (strlen($phone) === 12 && strpos($phone, '91') === 0) {
+        return $phone;
+    }
+    if (strlen($phone) === 11 && $phone[0] === '0' && preg_match('/^0[6-9]\d{9}$/', $phone)) {
+        return '91' . substr($phone, 1);
+    }
+    if (strlen($phone) === 10 && preg_match('/^[6-9]\d{9}$/', $phone)) {
+        return '91' . $phone;
+    }
     if ($phone[0] === '0') {
-        $cc = preg_replace('/\D+/', '', (string)($settings['default_phone_country'] ?? '60'));
-        if ($cc === '') {
-            $cc = '60';
+        $cc = preg_replace('/\D+/', '', (string)($settings['default_phone_country'] ?? '91'));
+        if ($cc === '' || $cc === '60') {
+            $cc = '91';
         }
         $phone = $cc . substr($phone, 1);
     }

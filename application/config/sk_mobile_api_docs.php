@@ -16,7 +16,7 @@ $config['guide'] = [
         '1. Call Register or Login first — the explorer auto-saves the JWT into the Token box.',
         '2. For guest cart, set any stable X-Session-ID (e.g. mobile-device-uuid).',
         '3. Use a product_id that has stock > 0 before Cart Add / Checkout.',
-        '4. Malaysian phones: 0123456789 or 60123456789 (normalized to 60…).',
+        '4. Indian mobiles: 10 digits, e.g. 9876543210 (stored as 919876543210).',
         '5. Payment verify needs a real Razorpay payload — samples show expected shape.',
         '6. Affiliate portal APIs use affiliate JWT from Affiliate Login (not customer JWT). Approve the affiliate in Admin before login succeeds.',
         '7. OTP signup: do NOT invent names like SER001 / User 1234. New users get empty name + email null; collect real name (required) and optional company/email on checkout or profile.',

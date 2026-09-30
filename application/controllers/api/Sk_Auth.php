@@ -56,7 +56,7 @@ class Sk_Auth extends Sk_Base_Api {
                 'city'         => $address['city'] ?? '',
                 'state'        => $address['state'] ?? '',
                 'pincode'      => $address['pincode'] ?? '',
-                'country'      => 'Malaysia',
+                'country'      => 'India',
                 'address_type' => 'shipping',
                 'is_default'   => 1,
             ]);
@@ -241,7 +241,7 @@ class Sk_Auth extends Sk_Base_Api {
         $normalized = $this->isms->normalize_phone($phone);
 
         if (!$normalized || !$this->isms->parse_phone($phone)) {
-            return $this->error('Valid Malaysia mobile number required (e.g. 0123456789 or 60123456789).');
+            return $this->error('Enter a 10-digit Indian mobile number (e.g. 9876543210).');
         }
 
         if (sk_isms_is_test_phone($settings, $normalized)) {

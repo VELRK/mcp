@@ -161,7 +161,7 @@ $status_badges = [
           </div>
           <div class="mb-2">
             <label class="form-label small">Display Phone</label>
-            <input type="text" name="wa_display_phone" class="form-control form-control-sm" placeholder="+60 …">
+            <input type="text" name="wa_display_phone" class="form-control form-control-sm" placeholder="+91 98765 43210">
           </div>
           <div class="mb-2">
             <label class="form-label small">Business ID</label>

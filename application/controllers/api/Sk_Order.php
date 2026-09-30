@@ -213,7 +213,7 @@ class Sk_Order extends Sk_Base_Api {
             ? $shippingPhone
             : sk_isms_normalize_phone($bill['phone'] ?? '', $settings);
         if (!$billingSame && $billingPhone === '') {
-            return $this->error('A valid mobile number is required for billing.');
+            return $this->error(sk_isms_phone_error());
         }
         $this->_ensure_order_billing_schema();
         $order_data['billing_name']     = $bill['full_name'] ?? $addr['full_name'];
@@ -415,7 +415,7 @@ class Sk_Order extends Sk_Base_Api {
             'billing_city' => "VARCHAR(100) NULL",
             'billing_state' => "VARCHAR(100) NULL",
             'billing_pincode' => "VARCHAR(20) NULL",
-            'billing_country' => "VARCHAR(80) NULL DEFAULT 'Malaysia'",
+            'billing_country' => "VARCHAR(80) NULL DEFAULT 'India'",
         ];
         foreach ($cols as $col => $def) {
             if (!$this->db->field_exists($col, 'orders')) {

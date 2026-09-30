@@ -14,7 +14,7 @@ class Isms {
     protected $api_key = '';
     protected $sender_id = '';
     protected $message_template = '';
-    protected $country_code = '60';
+    protected $country_code = '91';
     protected $otp_interval = 5;
     protected $test_otp = '1234';
 
@@ -48,63 +48,44 @@ class Isms {
         $this->sender_id = trim($settings['isms_sender_id'] ?? '');
         $this->message_template = trim($settings['isms_message'] ?? '')
             ?: 'Your OTP is %OTP%. Valid for 5 minutes.';
-        $this->country_code = trim($settings['isms_country_code'] ?? '60') ?: '60';
+        $this->country_code = '91';
         $this->otp_interval = max(1, min(30, (int)($settings['isms_otp_interval'] ?? 5)));
         $this->test_otp = trim($settings['isms_test_otp'] ?? '1234') ?: '1234';
     }
 
     /**
-     * Normalize phone to digits-only E.164-style (e.g. 60123456789).
+     * Normalize an Indian mobile to digits with country code (919876543210).
      */
     public function normalize_phone($phone) {
-        $digits = preg_replace('/\D/', '', (string)$phone);
-        if ($digits === '') {
-            return '';
-        }
-        $cc = $this->country_code;
-        if (strpos($digits, $cc) === 0) {
-            $mobile = ltrim(substr($digits, strlen($cc)), '0');
-            return $mobile !== '' ? $cc . $mobile : '';
-        }
-        // Local form with leading 0: 01XXXXXXXX (10) or 01XXXXXXXXX (11)
-        if (strpos($digits, '0') === 0) {
-            return $cc . ltrim(substr($digits, 1), '0');
-        }
-        // National number typed beside +60 UI: 1XXXXXXXX (9) or 1XXXXXXXXX (10)
-        // e.g. 111-086 1982 → 1110861982 → 601110861982
-        if ((strlen($digits) === 9 || strlen($digits) === 10) && isset($digits[0]) && $digits[0] === '1') {
-            return $cc . $digits;
-        }
-        return $digits;
+        $parsed = $this->parse_phone($phone);
+        return $parsed ? $parsed['normalized'] : '';
     }
 
     /**
+     * Indian mobile: exactly 10 digits starting 6–9.
+     * Also accepts +91 / 91 and a single leading 0.
+     *
      * @return array{country_code:string,mobile:string,normalized:string}|null
      */
     public function parse_phone($phone) {
-        $normalized = $this->normalize_phone($phone);
-        if ($normalized === '') {
+        $digits = preg_replace('/\D/', '', (string)$phone);
+        if ($digits === '') {
             return null;
         }
-        $cc = $this->country_code;
-        if (strpos($normalized, $cc) !== 0) {
-            return null;
+        if (strpos($digits, '0091') === 0) {
+            $digits = substr($digits, 4);
+        } elseif (strpos($digits, '91') === 0 && strlen($digits) === 12) {
+            $digits = substr($digits, 2);
+        } elseif ($digits[0] === '0' && strlen($digits) === 11) {
+            $digits = substr($digits, 1);
         }
-        $mobile = substr($normalized, strlen($cc));
-        $mobile = ltrim($mobile, '0');
-        $len = strlen($mobile);
-        // 9 digits → local 01XXXXXXXX; 10 digits → local 01XXXXXXXXX (e.g. 011-1086 1982)
-        if ($mobile === '' || ($len !== 9 && $len !== 10)) {
-            return null;
-        }
-        // Malaysian mobile numbers use 01X locally (first digit after country code is 1).
-        if ($mobile[0] !== '1') {
+        if (!preg_match('/^[6-9]\d{9}$/', $digits)) {
             return null;
         }
         return [
-            'country_code' => $cc,
-            'mobile'       => $mobile,
-            'normalized'   => $cc . $mobile,
+            'country_code' => '91',
+            'mobile'       => $digits,
+            'normalized'   => '91' . $digits,
         ];
     }
 
@@ -142,7 +123,7 @@ class Isms {
 
         $parsed = $this->parse_phone($phone);
         if (!$parsed) {
-            return ['success' => false, 'message' => 'Invalid Malaysia mobile number. Use 01XXXXXXXX or 01XXXXXXXXX (e.g. 0123456789 or 01110861982).'];
+            return ['success' => false, 'message' => 'Enter a 10-digit Indian mobile number (e.g. 9876543210).'];
         }
 
         $otp = $this->generate_otp();

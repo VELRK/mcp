@@ -33,7 +33,8 @@ $store   = $vendor['store'] ?? [];
       </div>
       <div class="col-md-4">
         <label class="form-label">Phone</label>
-        <input type="text" name="phone" class="form-control" value="<?= htmlspecialchars($vendor['phone'] ?? '') ?>">
+        <input type="text" name="phone" class="form-control" inputmode="numeric" maxlength="14"
+               value="<?= htmlspecialchars($vendor['phone'] ?? '') ?>" placeholder="9876543210">
       </div>
       <div class="col-md-4">
         <label class="form-label">Password <?= $is_edit ? '(leave blank to keep)' : '' ?></label>

@@ -23,6 +23,12 @@ class Whatsapp extends Sk_Base {
     public function conversations() {
         $search = trim((string)$this->input->get('q', TRUE));
         $rows = $this->Sk_Whatsapp_cloud_model->list_conversations($search);
+        foreach ($rows as &$row) {
+            if (!empty($row['last_at'])) {
+                $row['last_at'] = sk_shift_datetime($row['last_at'], 'Asia/Kolkata');
+            }
+        }
+        unset($row);
         return $this->json(['success' => true, 'conversations' => $rows]);
     }
 
@@ -38,14 +44,20 @@ class Whatsapp extends Sk_Base {
         }
         $msgs = $this->Sk_Whatsapp_cloud_model->list_messages($id, $after);
         $msgs = $this->_hydrate_message_media($msgs, $conv);
+        foreach ($msgs as &$msg) {
+            if (!empty($msg['created_at'])) {
+                $msg['created_at'] = sk_shift_datetime($msg['created_at'], 'Asia/Kolkata');
+            }
+        }
+        unset($msg);
         return $this->json(['success' => true, 'conversation' => $conv, 'messages' => $msgs]);
     }
 
     public function start() {
         $phone = sk_wa_cloud_normalize_phone((string)$this->input->post('phone', TRUE));
         $name = trim((string)$this->input->post('name', TRUE));
-        if (strlen($phone) < 8) {
-            return $this->json(['success' => false, 'message' => 'Enter a valid phone with country code.']);
+        if (!preg_match('/^91[6-9]\d{9}$/', $phone)) {
+            return $this->json(['success' => false, 'message' => 'Enter a 10-digit Indian mobile number.']);
         }
         $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation($phone, $name);
         return $this->json(['success' => true, 'conversation' => $conv]);

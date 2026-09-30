@@ -289,7 +289,7 @@ class Sk_User_model extends CI_Model {
             'city'         => $city,
             'state'        => $state,
             'pincode'      => $pincode,
-            'country'      => trim((string) ($addr['country'] ?? $addr['shipping_country'] ?? 'Malaysia')) ?: 'Malaysia',
+            'country'      => trim((string) ($addr['country'] ?? $addr['shipping_country'] ?? 'India')) ?: 'India',
             'label'        => 'Home',
             'address_type' => 'shipping',
             'is_default'   => 1,

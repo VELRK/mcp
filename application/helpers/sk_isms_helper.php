@@ -94,7 +94,9 @@ function sk_isms_get_test_config(array $settings = null) {
     }
     $otp = trim($settings['isms_test_otp'] ?? '') ?: $defaults['otp'];
     $local = $phone;
-    if (strpos($local, '60') === 0) {
+    if (strpos($local, '91') === 0 && strlen($local) === 12) {
+        $local = substr($local, 2);
+    } elseif (strpos($local, '60') === 0) {
         $local = '0' . substr($local, 2);
     }
     return [
@@ -123,6 +125,13 @@ function sk_isms_test_phone_aliases(array $settings) {
         $CI->isms->normalize_phone($canonical),
         $canonical,
     ];
+
+    if (strpos($canonical, '91') === 0 && strlen($canonical) === 12) {
+        $national = substr($canonical, 2);
+        $aliases[] = $national;
+        $aliases[] = $CI->isms->normalize_phone($national);
+        $aliases[] = $CI->isms->normalize_phone('0' . $national);
+    }
 
     // Local / national forms of the SAME number
     if (strpos($canonical, '60') === 0) {
@@ -315,7 +324,7 @@ function sk_isms_clear_session($phone) {
 }
 
 function sk_isms_phone_error() {
-    return 'Valid Malaysia mobile required (e.g. 0123456789, 01110861982, or 601110861982).';
+    return 'Enter a 10-digit Indian mobile number (e.g. 9876543210).';
 }
 
 /**
@@ -339,33 +348,15 @@ function sk_isms_normalize_phone($phone, array $settings = null) {
 }
 
 /**
- * Contact for Razorpay Curlec prefill: +{country}{mobile} (e.g. +60123456789).
+ * Razorpay prefill contact: +91 and a 10-digit Indian mobile.
  * Returns empty string when the number is missing or invalid.
- * Tolerates spaces, leading 0, 60 / +60, and admin-entered MY mobiles when iSMS parse fails.
  */
 function sk_razorpay_contact($phone, array $settings = null) {
     $normalized = sk_isms_normalize_phone($phone, $settings);
-    $digits = preg_replace('/\D/', '', (string)($normalized !== '' ? $normalized : $phone));
-    if ($digits === '') {
+    if ($normalized === '' || !preg_match('/^91[6-9]\d{9}$/', $normalized)) {
         return '';
     }
-
-    // Manual MY normalize when library did not produce a usable value.
-    if ($normalized === '' || strpos($digits, '60') !== 0) {
-        if (strpos($digits, '60') === 0) {
-            // already country-prefixed
-        } elseif (strpos($digits, '0') === 0) {
-            $digits = '60' . substr($digits, 1);
-        } elseif (strpos($digits, '0') === 0 && strlen($digits) === 10) {
-            $digits = '60' . substr($digits, 1);
-        }
-    }
-
-    // Curlec MY: 60 + mobile starting with 1, 9 or 10 digits (local 01XXXXXXXX / 01XXXXXXXXX).
-    if (!preg_match('/^60[1][0-9]{8,9}$/', $digits)) {
-        return '';
-    }
-    return '+' . $digits;
+    return '+' . $normalized;
 }
 
 /**

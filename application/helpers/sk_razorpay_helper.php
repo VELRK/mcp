@@ -344,10 +344,10 @@ function sk_razorpay_build_prefill(string $name, string $phone, string $email = 
 
     $contact = sk_razorpay_contact($phone, $settings);
     $digits = preg_replace('/\D/', '', $contact);
-    if (strpos($digits, '60') === 0 && strlen($digits) >= 10) {
-        $local = '0' . substr($digits, 2);
+    if (strpos($digits, '91') === 0 && strlen($digits) === 12) {
+        $local = substr($digits, 2);
     } else {
-        $local = $phone;
+        $local = preg_replace('/\D/', '', $phone);
     }
 
     $prefill = [

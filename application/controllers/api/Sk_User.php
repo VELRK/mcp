@@ -109,7 +109,7 @@ class Sk_User extends Sk_Base_Api {
         $this->Sk_User_model->ensure_address_schema();
         $data['user_id'] = $this->user['user_id'];
         $data['label']   = $data['label'] ?? 'Home';
-        $data['country'] = $data['country'] ?? 'Malaysia';
+        $data['country'] = $data['country'] ?? 'India';
         $data['company_name'] = trim($data['company_name'] ?? '') ?: null;
         $data['address_type'] = in_array(($data['address_type'] ?? 'shipping'), ['shipping', 'billing'], true)
             ? $data['address_type'] : 'shipping';

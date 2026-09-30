@@ -145,7 +145,7 @@ function sk_invoice_build(array $order, array $settings = [], ?array $sellerOver
             'city'    => $order['billing_city'] ?? $order['shipping_city'] ?? '',
             'state'   => $order['billing_state'] ?? $order['shipping_state'] ?? '',
             'pincode' => $order['billing_pincode'] ?? $order['shipping_pincode'] ?? '',
-            'country' => $order['billing_country'] ?? $order['shipping_country'] ?? 'Malaysia',
+            'country' => $order['billing_country'] ?? $order['shipping_country'] ?? 'India',
         ],
         'items'          => $items,
         'subtotal'       => $subtotal,

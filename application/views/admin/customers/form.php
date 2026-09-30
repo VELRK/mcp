@@ -39,10 +39,16 @@ $action = $isEdit
       </div>
       <div class="col-md-6">
         <label class="form-label">Phone</label>
-        <input type="text" name="phone" class="form-control"
-               value="<?= htmlspecialchars($c['phone'] ?? '') ?>"
-               placeholder="e.g. 60123456789">
-        <div class="form-text">Include country code when possible (MY default 60).</div>
+        <?php
+          $phoneRaw = preg_replace('/\D/', '', (string)($c['phone'] ?? ''));
+          $phoneShow = (strlen($phoneRaw) === 12 && strpos($phoneRaw, '91') === 0) ? substr($phoneRaw, 2) : (string)($c['phone'] ?? '');
+          $addrRaw = preg_replace('/\D/', '', (string)($a['phone'] ?? ''));
+          $addrShow = $addrRaw === '' ? $phoneShow : ((strlen($addrRaw) === 12 && strpos($addrRaw, '91') === 0) ? substr($addrRaw, 2) : (string)$a['phone']);
+        ?>
+        <input type="text" name="phone" class="form-control" inputmode="numeric" maxlength="14"
+               value="<?= htmlspecialchars($phoneShow) ?>"
+               placeholder="9876543210">
+        <div class="form-text">10-digit Indian mobile number. Do not add 0 or +91.</div>
       </div>
       <div class="col-md-6">
         <label class="form-label">Email <span class="text-muted fw-normal">(optional)</span></label>
@@ -102,20 +108,20 @@ $action = $isEdit
                value="<?= htmlspecialchars($a['state'] ?? '') ?>">
       </div>
       <div class="col-md-4">
-        <label class="form-label">Postcode</label>
+        <label class="form-label">PIN code</label>
         <input type="text" name="pincode" class="form-control"
                value="<?= htmlspecialchars($a['pincode'] ?? '') ?>">
       </div>
       <div class="col-md-6">
         <label class="form-label">Country</label>
         <input type="text" name="country" class="form-control"
-               value="<?= htmlspecialchars($a['country'] ?? 'Malaysia') ?>">
+               value="<?= htmlspecialchars(($a['country'] ?? '') !== '' && ($a['country'] ?? '') !== 'Malaysia' ? $a['country'] : 'India') ?>">
       </div>
       <div class="col-md-6">
         <label class="form-label">Address phone</label>
         <input type="text" name="address_phone" class="form-control"
-               value="<?= htmlspecialchars($a['phone'] ?? ($c['phone'] ?? '')) ?>"
-               placeholder="Delivery contact phone">
+               value="<?= htmlspecialchars($addrShow) ?>"
+               placeholder="9876543210">
       </div>
     </div>
   </div>
