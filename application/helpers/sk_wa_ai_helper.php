@@ -16,11 +16,14 @@ function sk_wa_ai_ensure_vendor_schema(): void {
             `openai_key` TEXT NULL,
             `openai_model` VARCHAR(80) NOT NULL DEFAULT 'gpt-4.1-mini',
             `gemini_key` TEXT NULL,
-            `gemini_model` VARCHAR(80) NOT NULL DEFAULT 'gemini-2.0-flash',
+            `gemini_model` VARCHAR(80) NOT NULL DEFAULT 'gemini-3.8-flash',
             `updated_at` DATETIME NULL,
             PRIMARY KEY (`vendor_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
+    $CI->db->where('gemini_model', 'gemini-2.0-flash')->update('vendor_wa_ai', [
+        'gemini_model' => 'gemini-3.8-flash',
+    ]);
 }
 
 /** @return array{vendor_id:int,enabled:string,provider:string,openai_key:string,openai_model:string,gemini_key:string,gemini_model:string} */
@@ -32,7 +35,7 @@ function sk_wa_ai_vendor_row(int $vendorId): array {
         'openai_key'    => '',
         'openai_model'  => 'gpt-4.1-mini',
         'gemini_key'    => '',
-        'gemini_model'  => 'gemini-2.0-flash',
+        'gemini_model'  => 'gemini-3.8-flash',
     ];
     if ($vendorId < 1) {
         return $empty;
@@ -50,7 +53,7 @@ function sk_wa_ai_vendor_row(int $vendorId): array {
         'openai_key'    => (string)($row['openai_key'] ?? ''),
         'openai_model'  => (string)($row['openai_model'] ?? 'gpt-4.1-mini'),
         'gemini_key'    => (string)($row['gemini_key'] ?? ''),
-        'gemini_model'  => (string)($row['gemini_model'] ?? 'gemini-2.0-flash'),
+        'gemini_model'  => (string)($row['gemini_model'] ?? 'gemini-3.8-flash'),
     ];
 }
 
@@ -70,7 +73,7 @@ function sk_wa_ai_vendor_save(int $vendorId, array $data): void {
         'openai_key'    => trim((string)($data['openai_key'] ?? '')),
         'openai_model'  => trim((string)($data['openai_model'] ?? '')) ?: 'gpt-4.1-mini',
         'gemini_key'    => trim((string)($data['gemini_key'] ?? '')),
-        'gemini_model'  => trim((string)($data['gemini_model'] ?? '')) ?: 'gemini-2.0-flash',
+        'gemini_model'  => trim((string)($data['gemini_model'] ?? '')) ?: 'gemini-3.8-flash',
         'updated_at'    => date('Y-m-d H:i:s'),
     ];
     $exists = $CI->db->where('vendor_id', $vendorId)->count_all_results('vendor_wa_ai');
@@ -103,7 +106,7 @@ function sk_wa_ai_config(?array $settings = null): array {
             'openai_key'    => trim((string)($row['openai_key'] ?? '')),
             'openai_model'  => trim((string)($row['openai_model'] ?? '')) ?: 'gpt-4.1-mini',
             'gemini_key'    => trim((string)($row['gemini_key'] ?? '')),
-            'gemini_model'  => trim((string)($row['gemini_model'] ?? '')) ?: 'gemini-2.0-flash',
+            'gemini_model'  => trim((string)($row['gemini_model'] ?? '')) ?: 'gemini-3.8-flash',
         ];
     }
     $provider = strtolower(trim((string)($settings['wa_ai_provider'] ?? 'openai')));
@@ -117,7 +120,7 @@ function sk_wa_ai_config(?array $settings = null): array {
         'openai_key'    => trim((string)($settings['wa_ai_openai_key'] ?? '')),
         'openai_model'  => trim((string)($settings['wa_ai_openai_model'] ?? 'gpt-4.1-mini')) ?: 'gpt-4.1-mini',
         'gemini_key'    => trim((string)($settings['wa_ai_gemini_key'] ?? '')),
-        'gemini_model'  => trim((string)($settings['wa_ai_gemini_model'] ?? 'gemini-2.0-flash')) ?: 'gemini-2.0-flash',
+        'gemini_model'  => trim((string)($settings['wa_ai_gemini_model'] ?? 'gemini-3.8-flash')) ?: 'gemini-3.8-flash',
     ];
 }
 

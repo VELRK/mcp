@@ -260,7 +260,7 @@
             <div class="col-md-4">
               <label class="form-label">Gemini model</label>
               <input type="text" name="wa_ai_gemini_model" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['wa_ai_gemini_model'] ?? 'gemini-2.0-flash') ?>">
+                     value="<?= htmlspecialchars($settings['wa_ai_gemini_model'] ?? 'gemini-3.8-flash') ?>">
             </div>
             <div class="col-md-6">
               <label class="form-label">OpenAI API key</label>

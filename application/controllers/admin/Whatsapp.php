@@ -170,7 +170,7 @@ class Whatsapp extends Sk_Base {
             'enabled'       => $row['enabled'] ?? '0',
             'provider'      => $row['provider'] ?? 'openai',
             'openai_model'  => $row['openai_model'] ?? 'gpt-4.1-mini',
-            'gemini_model'  => $row['gemini_model'] ?? 'gemini-2.0-flash',
+            'gemini_model'  => $row['gemini_model'] ?? 'gemini-3.8-flash',
             'has_openai'    => $row && trim((string)$row['openai_key']) !== '',
             'has_gemini'    => $row && trim((string)$row['gemini_key']) !== '',
         ];

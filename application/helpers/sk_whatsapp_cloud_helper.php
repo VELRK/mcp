@@ -182,7 +182,7 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
         'wa_ai_openai_key'         => '',
         'wa_ai_openai_model'       => 'gpt-4.1-mini',
         'wa_ai_gemini_key'         => '',
-        'wa_ai_gemini_model'       => 'gemini-2.0-flash',
+        'wa_ai_gemini_model'       => 'gemini-3.8-flash',
     ];
     $hasGroup = $CI->db->field_exists('group', 'settings');
     foreach ($defaults as $key => $value) {
