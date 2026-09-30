@@ -214,7 +214,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             'shop_name' => 'Shop',
         ];
         $chat = sk_wa_ai_chat($text, $tenant, $history, $settings);
-        $reply = trim((string)($chat['reply'] ?? ''));
+        $reply = sk_wa_ai_clean_text((string)($chat['reply'] ?? ''));
         if ($reply === '') {
             log_message('error', 'WhatsApp AI returned an empty reply (' . ($chat['provider'] ?? '') . ').');
             return;

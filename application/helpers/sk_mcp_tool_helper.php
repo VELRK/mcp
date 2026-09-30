@@ -210,17 +210,26 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             return (int)($v['stock'] ?? 0);
         }, $product['variants'] ?? []);
         $availableStock = !empty($stocks) ? max($stocks) : (int)($product['stock'] ?? 0);
-        $displayPrice = isset($product['effective_price']) ? (float)$product['effective_price'] : ((float)($product['price'] ?? 0));
+        $basePrice = (float)($product['price'] ?? 0);
+        $displayPrice = isset($product['effective_price']) ? (float)$product['effective_price'] : $basePrice;
+        if ($displayPrice <= 0) {
+            $displayPrice = $basePrice;
+        }
 
         $matchRows[] = [
             'id' => (int)($product['id'] ?? 0),
             'name' => (string)($product['name'] ?? ''),
             'sku' => (string)($product['sku'] ?? ''),
-            'color' => $parsed['color'] !== '' ? $parsed['color'] : trim((string)($product['color'] ?? '')),
-            'size' => $candidateSize !== '' && $sizeMatch ? $candidateSize : (string)($product['unit_label'] ?? ''),
+            'color' => trim((string)($product['color'] ?? '')),
+            'sizes' => trim((string)($product['sizes'] ?? '')),
+            'size' => $candidateSize !== '' && $sizeMatch ? $candidateSize : '',
+            'pack_of' => trim((string)($product['pack_of'] ?? '')),
+            'length' => trim((string)($product['saree_length'] ?? '')),
+            'blouse_included' => !empty($product['blouse_included']),
             'available' => $availableStock > 0,
             'stock' => $availableStock,
             'price' => $displayPrice,
+            'mrp' => $basePrice > $displayPrice ? $basePrice : 0,
             'currency' => 'INR',
             'match_score' => $score,
             'image' => !empty($product['images'][0]['image']) ? $product['images'][0]['image'] : '',
@@ -744,7 +753,15 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
                 'tenant_id' => $tenantId,
                 'product_id' => (int)($product['id'] ?? 0),
                 'name' => (string)($product['name'] ?? ''),
+                'color' => trim((string)($product['color'] ?? '')),
+                'sizes' => trim((string)($product['sizes'] ?? '')),
+                'pack_of' => trim((string)($product['pack_of'] ?? '')),
+                'length' => trim((string)($product['saree_length'] ?? '')),
+                'blouse_included' => !empty($product['blouse_included']),
+                'stock' => (int)($product['stock'] ?? 0),
                 'price' => (float)($product['effective_price'] ?? $product['price'] ?? 0),
+                'mrp' => ((float)($product['price'] ?? 0) > (float)($product['effective_price'] ?? $product['price'] ?? 0))
+                    ? (float)$product['price'] : 0,
                 'image_url' => $image,
                 'variants' => $product['variants'] ?? [],
             ],

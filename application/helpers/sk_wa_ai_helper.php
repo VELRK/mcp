@@ -171,9 +171,69 @@ function sk_wa_ai_tools(): array {
 function sk_wa_ai_instructions(array $tenant): string {
     $shop = trim((string)($tenant['shop_name'] ?? 'the shop'));
     return 'You are the WhatsApp shop assistant for ' . $shop . '. '
-        . 'Reply in the customer language, short and natural (1-3 sentences). '
-        . 'When they ask about a product, price, size, color, or availability, call search_products or check_stock before answering. '
-        . 'Never invent stock or prices. Use only tool results. Prices are INR.';
+        . 'Reply in the customer language, short and plain. Do not use markdown or asterisks. '
+        . 'When they ask about a product, price, size, color, or availability, call search_products before answering. '
+        . 'Use only tool fields. If sizes is empty, say there is no size choice. Never invent a size, color, pack, or price. '
+        . 'If they say yes or proceed to order, confirm the listed product and ask for their name and delivery address. Do not repeat their words. Prices are INR.';
+}
+
+function sk_wa_ai_clean_text(string $text): string {
+    $text = preg_replace('/\*\*(.*?)\*\*/u', '$1', $text) ?? $text;
+    $text = str_replace(['**', '__'], '', $text);
+    return trim($text);
+}
+
+function sk_wa_ai_is_confirm(string $text): bool {
+    $text = trim($text);
+    if ($text === '' || strlen($text) > 80) {
+        return false;
+    }
+    return (bool)preg_match('/\b(yes|yeah|yep|ok|okay|proceed|confirm|place)\b/ui', $text);
+}
+
+function sk_wa_ai_product_facts(array $toolResult): string {
+    $products = $toolResult['data']['products'] ?? [];
+    if (!is_array($products) || empty($products[0]) || !is_array($products[0])) {
+        $one = $toolResult['data'] ?? null;
+        if (is_array($one) && !empty($one['name']) && isset($one['price'])) {
+            $products = [$one];
+        }
+    }
+    if (!is_array($products) || empty($products[0]['name'])) {
+        return '';
+    }
+    $p = $products[0];
+    $lines = [trim((string)$p['name'])];
+    $color = trim((string)($p['color'] ?? ''));
+    if ($color !== '') {
+        $lines[] = 'Color: ' . $color;
+    }
+    $sizes = trim((string)($p['sizes'] ?? ''));
+    $lines[] = $sizes !== '' ? ('Sizes: ' . $sizes) : 'Sizes: no size choice on this listing';
+    $pack = trim((string)($p['pack_of'] ?? ''));
+    if ($pack !== '') {
+        $lines[] = 'Pack of ' . $pack;
+    }
+    $length = trim((string)($p['length'] ?? ''));
+    if ($length !== '') {
+        $lines[] = 'Length: ' . $length . ' m';
+    }
+    if (!empty($p['blouse_included'])) {
+        $lines[] = 'Blouse piece included';
+    }
+    $price = (float)($p['price'] ?? 0);
+    $mrp = (float)($p['mrp'] ?? 0);
+    if ($price > 0) {
+        $line = 'Price ₹' . number_format($price, 0);
+        if ($mrp > $price) {
+            $line .= ' (was ₹' . number_format($mrp, 0) . ')';
+        }
+        $lines[] = $line;
+    }
+    $stock = (int)($p['stock'] ?? 0);
+    $lines[] = $stock > 0 ? ($stock . ' in stock') : 'Out of stock';
+    $lines[] = 'Send your name and delivery address to place this order.';
+    return implode("\n", $lines);
 }
 
 /**
@@ -285,10 +345,13 @@ function sk_wa_ai_openai_loop(string $text, array $tenant, array $history, array
         $reply = '';
     }
 
-    if ($reply === '' && $lastResult) {
+    $fact = $lastResult ? sk_wa_ai_product_facts($lastResult) : '';
+    if ($fact !== '') {
+        $reply = $fact;
+    } elseif ($reply === '' && $lastResult) {
         $reply = sk_wa_ai_fallback_reply($lastResult);
     }
-    return ['reply' => $reply, 'tool' => $lastTool, 'tool_result' => $lastResult, 'provider' => 'openai'];
+    return ['reply' => sk_wa_ai_clean_text($reply), 'tool' => $lastTool, 'tool_result' => $lastResult, 'provider' => 'openai'];
 }
 
 function sk_wa_ai_gemini_loop(string $text, array $tenant, array $history, array $cfg): array {
@@ -381,10 +444,34 @@ function sk_wa_ai_gemini_loop(string $text, array $tenant, array $history, array
         $reply = '';
     }
 
-    if ($reply === '' && $lastResult) {
+    $fact = $lastResult ? sk_wa_ai_product_facts($lastResult) : '';
+    if ($fact === '' && sk_wa_ai_is_confirm($text)) {
+        $query = '';
+        foreach (array_reverse($history) as $h) {
+            if (($h['role'] ?? '') !== 'user') {
+                continue;
+            }
+            $line = trim((string)($h['content'] ?? ''));
+            if ($line !== '' && !sk_wa_ai_is_confirm($line)) {
+                $query = $line;
+                break;
+            }
+        }
+        if ($query !== '') {
+            $found = sk_wa_ai_run_tool('search_products', ['query' => $query], $tenant);
+            $fact = sk_wa_ai_product_facts($found);
+            if ($fact !== '') {
+                $lastTool = 'search_products';
+                $lastResult = $found;
+            }
+        }
+    }
+    if ($fact !== '') {
+        $reply = $fact;
+    } elseif ($reply === '' && $lastResult) {
         $reply = sk_wa_ai_fallback_reply($lastResult);
     }
-    return ['reply' => $reply, 'tool' => $lastTool, 'tool_result' => $lastResult, 'provider' => 'gemini'];
+    return ['reply' => sk_wa_ai_clean_text($reply), 'tool' => $lastTool, 'tool_result' => $lastResult, 'provider' => 'gemini'];
 }
 
 function sk_wa_ai_fallback_reply(array $toolResult): string {
