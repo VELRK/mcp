@@ -62,6 +62,23 @@ class Whatsapp_cloud {
         return $this->request('DELETE', $waba . '/message_templates?name=' . rawurlencode($name));
     }
 
+    /**
+     * Mark the customer message read and show the WhatsApp typing bubble
+     * until the reply is sent, or for 25 seconds.
+     */
+    public function show_typing(string $messageId): array {
+        $messageId = trim($messageId);
+        if ($messageId === '') {
+            return ['success' => false, 'message' => 'Message id missing.'];
+        }
+        return $this->send_message([
+            'messaging_product' => 'whatsapp',
+            'status'            => 'read',
+            'message_id'        => $messageId,
+            'typing_indicator'  => ['type' => 'text'],
+        ]);
+    }
+
     public function send_text(string $to, string $text): array {
         return $this->send_message([
             'messaging_product' => 'whatsapp',

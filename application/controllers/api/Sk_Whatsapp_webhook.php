@@ -157,6 +157,14 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         if (!$conv || trim((string)($parsed['text'] ?? $parsed['id'] ?? '')) === '') {
             return;
         }
+        $wamid = trim((string)($job['wamid'] ?? ''));
+        if ($wamid !== '') {
+            if (isset($this->whatsapp_cloud)) {
+                unset($this->whatsapp_cloud);
+            }
+            $this->load->library('Whatsapp_cloud', $resolvedSettings);
+            $this->whatsapp_cloud->show_typing($wamid);
+        }
         if (sk_wa_ai_is_ready($resolvedSettings)) {
             $this->_reply_via_ai($job, $resolvedSettings, $vendorId, (string)$conv['phone']);
             return;
@@ -243,7 +251,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
     }
 
-    /** @return array<int, array{conversation:array,parsed:array,vendor_id:int,phone_number_id:string}> */
+    /** @return array<int, array{conversation:array,parsed:array,wamid:string,vendor_id:int,phone_number_id:string}> */
     private function _store_messages(array $messages, array $contacts, int $vendorId = 0, string $phoneNumberId = ''): array {
         $names = [];
         foreach ($contacts as $c) {
@@ -306,6 +314,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             $jobs[] = [
                 'conversation'    => $conv,
                 'parsed'          => $parsed,
+                'wamid'           => $wamid,
                 'vendor_id'       => $vendorId,
                 'phone_number_id' => $phoneNumberId,
             ];
