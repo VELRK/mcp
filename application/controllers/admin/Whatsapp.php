@@ -65,13 +65,21 @@ class Whatsapp extends Sk_Base {
 
     public function send() {
         $settings = $this->Sk_Admin_model->get_settings();
-        if (!sk_wa_cloud_is_ready($settings)) {
-            return $this->json(['success' => false, 'message' => 'Connect Meta Cloud API in Settings → WhatsApp Cloud.']);
-        }
         $convId = (int)$this->input->post('conversation_id');
         $conv = $this->Sk_Whatsapp_cloud_model->get_conversation($convId);
         if (!$conv) {
             return $this->json(['success' => false, 'message' => 'Conversation not found.']);
+        }
+        $vid = (int)($conv['vendor_id'] ?? 0);
+        if ($vid > 0) {
+            $settings['vendor_id'] = $vid;
+        }
+        $phoneId = trim((string)($conv['phone_number_id'] ?? ''));
+        if ($phoneId !== '') {
+            $settings['_wa_phone_number_id'] = $phoneId;
+        }
+        if (!sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null)) {
+            return $this->json(['success' => false, 'message' => 'Connect Meta Cloud API in Settings → WhatsApp Cloud.']);
         }
 
         $type = trim((string)$this->input->post('type', TRUE));
@@ -80,7 +88,8 @@ class Whatsapp extends Sk_Base {
         }
         $caption = trim((string)$this->input->post('body', FALSE));
 
-        $this->load->library('Whatsapp_cloud', $settings);
+        require_once APPPATH . 'libraries/Whatsapp_cloud.php';
+        $this->whatsapp_cloud = new Whatsapp_cloud($settings);
         $result = ['success' => false, 'message' => 'Nothing to send.'];
         $mediaUrl = '';
         $mediaId = '';

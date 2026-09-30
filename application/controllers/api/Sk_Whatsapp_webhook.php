@@ -159,11 +159,12 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
         $wamid = trim((string)($job['wamid'] ?? ''));
         if ($wamid !== '') {
-            if (isset($this->whatsapp_cloud)) {
-                unset($this->whatsapp_cloud);
+            try {
+                require_once APPPATH . 'libraries/Whatsapp_cloud.php';
+                (new Whatsapp_cloud($resolvedSettings))->show_typing($wamid);
+            } catch (Throwable $e) {
+                log_message('error', 'WhatsApp typing: ' . $e->getMessage());
             }
-            $this->load->library('Whatsapp_cloud', $resolvedSettings);
-            $this->whatsapp_cloud->show_typing($wamid);
         }
         if (sk_wa_ai_is_ready($resolvedSettings)) {
             $this->_reply_via_ai($job, $resolvedSettings, $vendorId, (string)$conv['phone']);
@@ -231,7 +232,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $reply = sk_wa_ai_clean_text((string)($chat['reply'] ?? ''));
         if ($reply === '') {
             log_message('error', 'WhatsApp AI returned an empty reply (' . ($chat['provider'] ?? '') . ').');
-            return;
+            $reply = 'I got your message. Tell me the product, or send your name and delivery address to continue.';
         }
         sk_wa_mcp_send_specs($to, [['type' => 'text', 'text' => $reply]], $conv, $settings);
     }

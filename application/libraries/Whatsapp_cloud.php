@@ -68,15 +68,31 @@ class Whatsapp_cloud {
      */
     public function show_typing(string $messageId): array {
         $messageId = trim($messageId);
-        if ($messageId === '') {
-            return ['success' => false, 'message' => 'Message id missing.'];
+        $phoneId = $this->cfg['phone_number_id'];
+        $token = $this->cfg['access_token'];
+        if ($messageId === '' || $phoneId === '' || $token === '') {
+            return ['success' => false, 'message' => 'Typing indicator is not ready.'];
         }
-        return $this->send_message([
-            'messaging_product' => 'whatsapp',
-            'status'            => 'read',
-            'message_id'        => $messageId,
-            'typing_indicator'  => ['type' => 'text'],
+        $ch = curl_init($this->cfg['graph_base'] . '/' . $phoneId . '/messages');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $token,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS     => json_encode([
+                'messaging_product' => 'whatsapp',
+                'status'            => 'read',
+                'message_id'        => $messageId,
+                'typing_indicator'  => ['type' => 'text'],
+            ]),
         ]);
+        curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ['success' => $code >= 200 && $code < 300, 'http' => $code];
     }
 
     public function send_text(string $to, string $text): array {
