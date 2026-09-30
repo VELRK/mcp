@@ -169,7 +169,7 @@ class Whatsapp extends Sk_Base {
         $data['vendor_id'] = $vid;
         $data['vendors'] = [];
         if ($this->is_super_admin()) {
-            $data['vendors'] = $this->db->select('id, business_name, name')
+            $data['vendors'] = $this->db->select('id, business_name, owner_name')
                 ->order_by('id', 'ASC')
                 ->get('vendors')
                 ->result_array();

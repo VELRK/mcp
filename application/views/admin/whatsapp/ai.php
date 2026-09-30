@@ -19,7 +19,7 @@ $isVendor = (($admin['role'] ?? '') === 'vendor');
       <select name="vendor_id" class="form-select" onchange="this.form.submit()">
         <option value="">Select a vendor</option>
         <?php foreach (($vendors ?? []) as $v): ?>
-          <?php $label = trim((string)($v['business_name'] ?? '')) ?: trim((string)($v['name'] ?? '')); ?>
+          <?php $label = trim((string)($v['business_name'] ?? '')) ?: trim((string)($v['owner_name'] ?? '')); ?>
           <option value="<?= (int)$v['id'] ?>" <?= $vid === (int)$v['id'] ? 'selected' : '' ?>>
             #<?= (int)$v['id'] ?> <?= htmlspecialchars($label !== '' ? $label : 'Vendor') ?>
           </option>

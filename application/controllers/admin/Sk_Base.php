@@ -110,8 +110,9 @@ class Sk_Base extends CI_Controller {
         if ($site !== '') {
             return $site;
         }
-        $vendor = $this->db->select('business_name, name')->where('id', $vendor_id)->get('vendors')->row_array();
-        $biz = trim((string)($vendor['business_name'] ?? $vendor['name'] ?? ''));
+        $vendorQuery = $this->db->select('business_name, owner_name')->where('id', $vendor_id)->get('vendors');
+        $vendor = $vendorQuery ? (array)$vendorQuery->row_array() : [];
+        $biz = trim((string)($vendor['business_name'] ?? $vendor['owner_name'] ?? ''));
         return $biz !== '' ? $biz : 'Store';
     }
 

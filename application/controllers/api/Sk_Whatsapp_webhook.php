@@ -167,7 +167,17 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             }
         }
         if (sk_wa_ai_is_ready($resolvedSettings)) {
-            $this->_reply_via_ai($job, $resolvedSettings, $vendorId, (string)$conv['phone']);
+            try {
+                $this->_reply_via_ai($job, $resolvedSettings, $vendorId, (string)$conv['phone']);
+            } catch (Throwable $e) {
+                log_message('error', 'WhatsApp AI reply: ' . $e->getMessage());
+                sk_wa_mcp_send_specs(
+                    (string)$conv['phone'],
+                    [['type' => 'text', 'text' => 'I got your message. Tell me the product, or send your name and delivery address to continue.']],
+                    $conv,
+                    $resolvedSettings
+                );
+            }
             return;
         }
         if (!sk_wa_mcp_is_ready($resolvedSettings)) {
@@ -219,8 +229,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
         $shopName = 'Shop';
         if ($vendorId > 0 && $this->db->table_exists('vendors')) {
-            $vendor = $this->db->select('business_name, name')->where('id', $vendorId)->get('vendors')->row_array();
-            $shopName = trim((string)($vendor['business_name'] ?? $vendor['name'] ?? '')) ?: $shopName;
+            $vendorQuery = $this->db->select('business_name, owner_name')->where('id', $vendorId)->get('vendors');
+            $vendor = $vendorQuery ? (array)$vendorQuery->row_array() : [];
+            $shopName = trim((string)($vendor['business_name'] ?? $vendor['owner_name'] ?? '')) ?: $shopName;
         }
         $tenant = [
             'tenant_id'      => $vendorId > 0 ? $vendorId : 1,
