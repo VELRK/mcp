@@ -208,10 +208,16 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'content' => $body,
             ];
         }
+        $shopName = 'Shop';
+        if ($vendorId > 0 && $this->db->table_exists('vendors')) {
+            $vendor = $this->db->select('business_name, name')->where('id', $vendorId)->get('vendors')->row_array();
+            $shopName = trim((string)($vendor['business_name'] ?? $vendor['name'] ?? '')) ?: $shopName;
+        }
         $tenant = [
-            'tenant_id' => $vendorId > 0 ? $vendorId : 1,
-            'tenant'    => $vendorId > 0 ? (string)$vendorId : '1',
-            'shop_name' => 'Shop',
+            'tenant_id'      => $vendorId > 0 ? $vendorId : 1,
+            'tenant'         => $vendorId > 0 ? (string)$vendorId : '1',
+            'shop_name'      => $shopName,
+            'customer_phone' => $to,
         ];
         $chat = sk_wa_ai_chat($text, $tenant, $history, $settings);
         $reply = sk_wa_ai_clean_text((string)($chat['reply'] ?? ''));
