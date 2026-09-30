@@ -6,6 +6,9 @@
         <?php if (!empty($vendor_id)): ?>Vendor #<?= (int)$vendor_id ?> · <?php endif; ?>
         Phone ID: <code><?= htmlspecialchars((string)($cfg['phone_number_id'] ?? '—')) ?></code>
         · WABA: <code><?= htmlspecialchars((string)($cfg['waba_id'] ?? '—')) ?></code>
+        <?php if (!empty($meta_sync['ok'])): ?>
+          · <span class="text-success">Status loaded from Meta (<?= (int)$meta_sync['count'] ?>)</span>
+        <?php endif; ?>
       </div>
     <?php endif; ?>
   </div>
@@ -13,7 +16,7 @@
     <a href="<?= site_url('admin/whatsapp_requests/pending') ?>" class="btn btn-sm btn-outline-secondary">WA Numbers</a>
     <a href="<?= site_url('shopkart/whatsapp') ?>" class="btn btn-sm btn-outline-secondary">Inbox</a>
     <a href="<?= site_url('shopkart/whatsapp/campaigns') ?>" class="btn btn-sm btn-outline-success">Campaigns</a>
-    <a href="<?= site_url('shopkart/whatsapp/templates/sync') ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>" class="btn btn-sm btn-outline-success">Sync from Meta</a>
+    <a href="<?= site_url('shopkart/whatsapp/templates') ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>" class="btn btn-sm btn-outline-success">Refresh status</a>
     <a href="<?= site_url('shopkart/whatsapp/templates/add') ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>" class="btn btn-sm btn-success">New template</a>
   </div>
 </div>
@@ -24,6 +27,11 @@
       ? sk_wa_cloud_not_ready_reason(null, !empty($vendor_id) ? (int)$vendor_id : null)
       : 'Meta Cloud API is not connected.') ?>
   You can still save drafts, then push after Embed Login.
+</div>
+<?php elseif (!empty($meta_sync['error'])): ?>
+<div class="alert alert-warning">
+  Could not refresh from Meta: <?= htmlspecialchars($meta_sync['error']) ?>
+  The list below is the last saved copy in the database.
 </div>
 <?php endif; ?>
 

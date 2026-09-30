@@ -258,14 +258,27 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             }
             $parsed = sk_wa_mcp_parse_inbound($m);
             $type = (string)($m['type'] ?? 'text');
-            $body = $parsed['text'] !== '' ? $parsed['text'] : ucfirst($type);
-            $mediaUrl = '';
-            if ($type === 'image') {
-                $mediaUrl = (string)($m['image']['id'] ?? '');
-            } elseif ($type === 'video') {
-                $mediaUrl = (string)($m['video']['id'] ?? '');
+            $mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
+            $mediaId = '';
+            $filename = '';
+            if (in_array($type, $mediaTypes, true) && is_array($m[$type] ?? null)) {
+                $mediaId = (string)($m[$type]['id'] ?? '');
+                $filename = trim((string)($m[$type]['filename'] ?? ''));
             }
-            $storeType = in_array($type, ['text', 'image', 'video'], true) ? $type : 'text';
+            $body = $parsed['text'] !== '' ? $parsed['text'] : ($filename !== '' ? $filename : ucfirst($type));
+            $mediaUrl = '';
+            if ($mediaId !== '') {
+                $resolved = $settings;
+                if ($vendorId > 0) {
+                    $resolved['vendor_id'] = $vendorId;
+                }
+                if ($phoneNumberId !== '') {
+                    $resolved['_wa_phone_number_id'] = $phoneNumberId;
+                }
+                $cfg = sk_wa_cloud_config($resolved, $vendorId > 0 ? $vendorId : null);
+                $mediaUrl = sk_wa_cloud_cache_media($mediaId, (string)($cfg['access_token'] ?? ''), (string)($cfg['graph_base'] ?? ''));
+            }
+            $storeType = in_array($type, array_merge(['text'], $mediaTypes), true) ? $type : 'text';
             $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation(
                 $from,
                 $names[$from] ?? '',
@@ -279,8 +292,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'direction'    => 'in',
                 'type'         => $storeType,
                 'body'         => $body,
-                'media_url'    => $mediaUrl ?: null,
-                'media_id'     => $mediaUrl ?: null,
+                'media_url'    => $mediaUrl !== '' ? $mediaUrl : ($mediaId !== '' ? $mediaId : null),
+                'media_id'     => $mediaId !== '' ? $mediaId : null,
                 'status'       => 'received',
                 'raw_json'     => json_encode($m, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             ]);

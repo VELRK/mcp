@@ -37,6 +37,7 @@ class Whatsapp extends Sk_Base {
             $this->Sk_Whatsapp_cloud_model->mark_read($id);
         }
         $msgs = $this->Sk_Whatsapp_cloud_model->list_messages($id, $after);
+        $msgs = $this->_hydrate_message_media($msgs, $conv);
         return $this->json(['success' => true, 'conversation' => $conv, 'messages' => $msgs]);
     }
 
@@ -62,7 +63,7 @@ class Whatsapp extends Sk_Base {
         }
 
         $type = trim((string)$this->input->post('type', TRUE));
-        if (!in_array($type, ['text', 'image', 'video', 'template'], true)) {
+        if (!in_array($type, ['text', 'image', 'video', 'audio', 'document', 'template'], true)) {
             $type = 'text';
         }
         $caption = trim((string)$this->input->post('body', FALSE));
@@ -148,11 +149,13 @@ class Whatsapp extends Sk_Base {
             $settings['vendor_id'] = $vid;
         }
         $cfg = sk_wa_cloud_config($settings, $vid > 0 ? $vid : null);
+        $sync = $this->_pull_templates_from_meta($settings, $vid);
         $data['title'] = 'WhatsApp Templates';
         $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates($vid > 0 ? $vid : null);
         $data['ready'] = sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null);
         $data['cfg'] = $cfg;
         $data['vendor_id'] = $vid;
+        $data['meta_sync'] = $sync;
         $this->render('whatsapp/templates', $data);
     }
 
@@ -259,10 +262,23 @@ class Whatsapp extends Sk_Base {
         if ($vid > 0) {
             $settings['vendor_id'] = $vid;
         }
+        $sync = $this->_pull_templates_from_meta($settings, $vid);
+        if (empty($sync['ok'])) {
+            $this->session->set_flashdata('error', $sync['error'] !== '' ? $sync['error'] : 'Could not sync templates.');
+        } else {
+            $this->session->set_flashdata('success', 'Synced ' . (int)$sync['count'] . ' template(s) from Meta.');
+        }
+        $this->_templates_redirect($vid);
+    }
+
+    /**
+     * Refresh template rows from Meta, then the page reads wa_cloud_templates.
+     *
+     * @return array{ok:bool,count:int,error:string}
+     */
+    private function _pull_templates_from_meta(array $settings, int $vid): array {
         if (!sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null)) {
-            $this->session->set_flashdata('error', sk_wa_cloud_not_ready_reason($settings, $vid > 0 ? $vid : null));
-            $this->_templates_redirect($vid);
-            return;
+            return ['ok' => false, 'count' => 0, 'error' => ''];
         }
         if (isset($this->whatsapp_cloud)) {
             unset($this->whatsapp_cloud);
@@ -270,9 +286,7 @@ class Whatsapp extends Sk_Base {
         $this->load->library('Whatsapp_cloud', $settings);
         $res = $this->whatsapp_cloud->list_templates();
         if (empty($res['success'])) {
-            $this->session->set_flashdata('error', $res['message'] ?? 'Could not sync templates.');
-            $this->_templates_redirect($vid);
-            return;
+            return ['ok' => false, 'count' => 0, 'error' => (string)($res['message'] ?? 'Could not load templates from Meta.')];
         }
         $n = 0;
         foreach ((array)($res['data']['data'] ?? []) as $remote) {
@@ -280,8 +294,7 @@ class Whatsapp extends Sk_Base {
                 $n++;
             }
         }
-        $this->session->set_flashdata('success', 'Synced ' . $n . ' template(s) from Meta.');
-        $this->_templates_redirect($vid);
+        return ['ok' => true, 'count' => $n, 'error' => ''];
     }
 
     public function campaigns() {
@@ -562,9 +575,12 @@ class Whatsapp extends Sk_Base {
         }
         $dir = sk_wa_cloud_upload_dir();
         $ext = strtolower(pathinfo((string)$_FILES['media']['name'], PATHINFO_EXTENSION));
-        $allowed = $kind === 'video'
-            ? ['mp4', '3gp', 'mov']
-            : ['jpg', 'jpeg', 'png', 'webp'];
+        $allowedMap = [
+            'video'    => ['mp4', '3gp', 'mov'],
+            'audio'    => ['mp3', 'ogg', 'm4a', 'aac', 'amr', 'opus'],
+            'document' => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
+        ];
+        $allowed = $allowedMap[$kind] ?? ['jpg', 'jpeg', 'png', 'webp'];
         if (!in_array($ext, $allowed, true)) {
             return ['error' => 'Allowed: ' . implode(', ', $allowed)];
         }
@@ -573,11 +589,79 @@ class Whatsapp extends Sk_Base {
         if (!move_uploaded_file($_FILES['media']['tmp_name'], $dest)) {
             return ['error' => 'Could not save upload.'];
         }
-        $mime = (string)(@mime_content_type($dest) ?: ($kind === 'video' ? 'video/mp4' : 'image/jpeg'));
+        $fallbackMime = [
+            'video'    => 'video/mp4',
+            'audio'    => 'audio/mpeg',
+            'document' => 'application/pdf',
+        ];
+        $mime = (string)(@mime_content_type($dest) ?: ($fallbackMime[$kind] ?? 'image/jpeg'));
         return [
             'path' => $dest,
             'url'  => sk_wa_cloud_public_url($safe),
             'mime' => $mime,
         ];
+    }
+
+    /**
+     * Turn stored Meta media ids into local image/video/audio/file URLs for the inbox.
+     *
+     * @param array<int,array<string,mixed>> $msgs
+     * @return array<int,array<string,mixed>>
+     */
+    private function _hydrate_message_media(array $msgs, array $conv): array {
+        $settings = $this->Sk_Admin_model->get_settings();
+        $vid = (int)($conv['vendor_id'] ?? 0);
+        if ($vid > 0) {
+            $settings['vendor_id'] = $vid;
+        }
+        $phoneId = trim((string)($conv['phone_number_id'] ?? ''));
+        if ($phoneId !== '') {
+            $settings['_wa_phone_number_id'] = $phoneId;
+        }
+        $cfg = sk_wa_cloud_config($settings, $vid > 0 ? $vid : null);
+        $token = (string)($cfg['access_token'] ?? '');
+        $base = (string)($cfg['graph_base'] ?? '');
+        $done = 0;
+        foreach ($msgs as $i => $m) {
+            if ($done >= 8 || $token === '') {
+                break;
+            }
+            $type = (string)($m['type'] ?? '');
+            $mediaId = trim((string)($m['media_id'] ?? ''));
+            $url = trim((string)($m['media_url'] ?? ''));
+            if ($mediaId === '' && ctype_digit($url)) {
+                $mediaId = $url;
+            }
+            $rawType = '';
+            if ($mediaId === '' && !empty($m['raw_json'])) {
+                $raw = json_decode((string)$m['raw_json'], true);
+                if (is_array($raw)) {
+                    $rawType = (string)($raw['type'] ?? '');
+                    $node = $raw[$rawType] ?? null;
+                    if (is_array($node) && !empty($node['id'])) {
+                        $mediaId = (string)$node['id'];
+                        if (!in_array($type, ['image', 'video', 'audio', 'document', 'sticker'], true)) {
+                            $type = $rawType;
+                        }
+                    }
+                }
+            }
+            if (!in_array($type, ['image', 'video', 'audio', 'document', 'sticker'], true) || $mediaId === '') {
+                continue;
+            }
+            if ($url !== '' && preg_match('#^https?://#i', $url)) {
+                continue;
+            }
+            $saved = sk_wa_cloud_cache_media($mediaId, $token, $base);
+            if ($saved === '') {
+                continue;
+            }
+            $this->Sk_Whatsapp_cloud_model->update_message_media((int)$m['id'], $saved, $mediaId, $type);
+            $msgs[$i]['media_url'] = $saved;
+            $msgs[$i]['media_id'] = $mediaId;
+            $msgs[$i]['type'] = $type;
+            $done++;
+        }
+        return $msgs;
     }
 }

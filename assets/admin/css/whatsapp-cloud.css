@@ -21,7 +21,9 @@
 .wa-bubble { max-width:72%; padding:8px 10px; border-radius:8px; margin-bottom:8px; box-shadow:0 1px 1px rgba(0,0,0,.08); font-size:14px; line-height:1.45; word-wrap:break-word; }
 .wa-bubble.in { background:#fff; margin-right:auto; }
 .wa-bubble.out { background:#d9fdd3; margin-left:auto; }
-.wa-bubble img, .wa-bubble video { max-width:100%; border-radius:6px; display:block; margin-bottom:6px; }
+.wa-bubble img, .wa-bubble video { max-width:100%; max-height:280px; border-radius:6px; display:block; margin-bottom:6px; }
+.wa-bubble audio { width:240px; max-width:100%; display:block; margin-bottom:6px; }
+.wa-doc, .wa-file { display:inline-block; margin-bottom:6px; font-weight:600; }
 .wa-meta { display:flex; justify-content:flex-end; gap:6px; font-size:11px; color:#667781; margin-top:2px; }
 .wa-composer { background:#f0f2f5; padding:10px 12px; display:flex; gap:8px; align-items:flex-end; }
 .wa-composer textarea { flex:1; border:none; border-radius:8px; resize:none; min-height:42px; max-height:120px; padding:10px 12px; }

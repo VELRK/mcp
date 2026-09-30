@@ -415,6 +415,70 @@ function sk_wa_cloud_public_url(string $filename): string {
     return base_url('assets/uploads/whatsapp/' . ltrim($filename, '/'));
 }
 
+/**
+ * Download a Cloud API media id and store a public file URL.
+ * Graph media links expire and require the access token, so the inbox cannot use them directly.
+ */
+function sk_wa_cloud_cache_media(string $mediaId, string $accessToken, string $graphBase = ''): string {
+    $mediaId = trim($mediaId);
+    $accessToken = trim($accessToken);
+    if ($mediaId === '' || $accessToken === '' || !ctype_digit($mediaId)) {
+        return '';
+    }
+    if ($graphBase === '') {
+        $graphBase = 'https://graph.facebook.com/v21.0';
+    }
+    $meta = sk_wa_cloud_http_get(rtrim($graphBase, '/') . '/' . $mediaId, $accessToken);
+    $fileUrl = trim((string)($meta['url'] ?? ''));
+    if ($fileUrl === '') {
+        return '';
+    }
+    $bin = sk_wa_cloud_http_get_raw($fileUrl, $accessToken);
+    if ($bin === '') {
+        return '';
+    }
+    $mime = strtolower(trim((string)($meta['mime_type'] ?? '')));
+    $extMap = [
+        'image/jpeg' => 'jpg', 'image/jpg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif',
+        'video/mp4' => 'mp4', 'video/3gpp' => '3gp', 'video/quicktime' => 'mov',
+        'audio/ogg' => 'ogg', 'audio/mpeg' => 'mp3', 'audio/mp4' => 'm4a', 'audio/aac' => 'aac', 'audio/amr' => 'amr',
+        'application/pdf' => 'pdf', 'application/msword' => 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+        'text/plain' => 'txt',
+    ];
+    $ext = $extMap[$mime] ?? 'bin';
+    $name = 'in_' . $mediaId . '.' . $ext;
+    $dest = sk_wa_cloud_upload_dir() . $name;
+    if (@file_put_contents($dest, $bin) === false) {
+        return '';
+    }
+    return sk_wa_cloud_public_url($name);
+}
+
+/** @return array<string,mixed> */
+function sk_wa_cloud_http_get(string $url, string $accessToken): array {
+    $raw = sk_wa_cloud_http_get_raw($url, $accessToken);
+    $decoded = $raw !== '' ? json_decode($raw, true) : null;
+    return is_array($decoded) ? $decoded : [];
+}
+
+function sk_wa_cloud_http_get_raw(string $url, string $accessToken): string {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $accessToken],
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 25,
+    ]);
+    $raw = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!is_string($raw) || $code < 200 || $code >= 300) {
+        return '';
+    }
+    return $raw;
+}
+
 /** Customer detail modules that can be mapped onto {{1}}, {{2}} template slots. */
 function sk_wa_cloud_customer_modules(): array {
     return [

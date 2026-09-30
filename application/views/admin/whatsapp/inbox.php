@@ -54,9 +54,9 @@
     <form class="wa-composer" id="waComposer" enctype="multipart/form-data">
       <input type="hidden" name="conversation_id" id="waConvId" value="">
       <input type="hidden" name="type" id="waType" value="text">
-      <label class="btn btn-light btn-sm mb-0" title="Image / video">
+      <label class="btn btn-light btn-sm mb-0" title="Image, video, audio or file">
         <i class="bi bi-paperclip"></i>
-        <input type="file" name="media" id="waMedia" accept="image/*,video/*" hidden>
+        <input type="file" name="media" id="waMedia" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" hidden>
       </label>
       <textarea name="body" id="waBody" placeholder="Type a message" rows="1"></textarea>
       <button type="submit" class="btn btn-wa" <?= empty($ready) ? 'disabled' : '' ?>>
@@ -129,16 +129,26 @@
   }
   function bubbleHtml(m) {
     var cls = m.direction === 'out' ? 'out' : 'in';
+    var url = String(m.media_url || '');
+    var http = url.indexOf('http') === 0;
     var media = '';
-    if (m.type === 'image' && m.media_url && m.media_url.indexOf('http') === 0) {
-      media = '<img src="' + esc(m.media_url) + '" alt="">';
+    var type = String(m.type || '');
+    if (http && (type === 'image' || type === 'sticker')) {
+      media = '<img src="' + esc(url) + '" alt="">';
+    } else if (http && type === 'video') {
+      media = '<video src="' + esc(url) + '" controls playsinline></video>';
+    } else if (http && type === 'audio') {
+      media = '<audio src="' + esc(url) + '" controls></audio>';
+    } else if (http && type === 'document') {
+      media = '<a class="wa-doc" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(m.body || 'Open file') + '</a>';
+    } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'document' || type === 'sticker') {
+      media = '<div class="wa-file">' + esc(type) + '</div>';
     }
-    if (m.type === 'video' && m.media_url && m.media_url.indexOf('http') === 0) {
-      media = '<video src="' + esc(m.media_url) + '" controls></video>';
-    }
+    var label = String(m.body || '');
+    var skipText = media && (label === '' || label.toLowerCase() === type || type === 'document');
     return '<div class="wa-bubble ' + cls + '" data-mid="' + m.id + '">'
       + media
-      + (m.body ? '<div>' + esc(m.body).replace(/\n/g, '<br>') + '</div>' : '')
+      + (skipText ? '' : (label ? '<div>' + esc(label).replace(/\n/g, '<br>') + '</div>' : ''))
       + '<div class="wa-meta">' + esc(m.status || '') + ' · ' + esc((m.created_at || '').slice(11, 16)) + '</div>'
       + '</div>';
   }
@@ -183,7 +193,15 @@
   document.getElementById('waSearch').addEventListener('input', loadList);
   document.getElementById('waMedia').addEventListener('change', function () {
     var f = this.files && this.files[0];
-    document.getElementById('waType').value = f && f.type.indexOf('video') === 0 ? 'video' : (f ? 'image' : 'text');
+    var type = 'text';
+    if (f) {
+      var mime = f.type || '';
+      if (mime.indexOf('video') === 0) type = 'video';
+      else if (mime.indexOf('audio') === 0) type = 'audio';
+      else if (mime.indexOf('image') === 0) type = 'image';
+      else type = 'document';
+    }
+    document.getElementById('waType').value = type;
   });
   document.getElementById('waComposer').addEventListener('submit', function (e) {
     e.preventDefault();

@@ -222,6 +222,20 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
         $this->update_campaign_recipient_by_wamid($wamid, $status, $error);
     }
 
+    public function update_message_media(int $id, string $mediaUrl, string $mediaId = '', string $type = ''): void {
+        if ($id < 1 || $mediaUrl === '') {
+            return;
+        }
+        $upd = ['media_url' => $mediaUrl];
+        if ($mediaId !== '') {
+            $upd['media_id'] = $mediaId;
+        }
+        if (in_array($type, ['image', 'video', 'audio', 'document', 'sticker'], true)) {
+            $upd['type'] = $type;
+        }
+        $this->db->where('id', $id)->update('wa_cloud_messages', $upd);
+    }
+
     public function list_campaigns(): array {
         if (!$this->db->table_exists('wa_cloud_campaigns')) {
             return [];

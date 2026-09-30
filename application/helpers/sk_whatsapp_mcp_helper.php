@@ -68,6 +68,12 @@ function sk_wa_mcp_parse_inbound(array $m): array {
         $out['text'] = trim((string)($m['image']['caption'] ?? 'Image'));
     } elseif ($type === 'video') {
         $out['text'] = trim((string)($m['video']['caption'] ?? 'Video'));
+    } elseif (in_array($type, ['audio', 'document', 'sticker'], true)) {
+        $node = is_array($m[$type] ?? null) ? $m[$type] : [];
+        $out['text'] = trim((string)($node['caption'] ?? $node['filename'] ?? ucfirst($type)));
+        if ($out['text'] === '') {
+            $out['text'] = ucfirst($type);
+        }
     } else {
         $out['text'] = ucfirst($type);
     }
