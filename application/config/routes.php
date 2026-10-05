@@ -558,6 +558,12 @@ $route['admin/settings/save_isms'] = 'admin/Settings/save_isms';
 $route['admin/settings/save_test_otp'] = 'admin/Settings/save_test_otp';
 $route['shopkart/settings/test_isms'] = 'admin/Settings/test_isms';
 $route['shopkart/settings/save_isms'] = 'admin/Settings/save_isms';
+$route['admin/automation_tasks'] = 'admin/Automation_tasks/index';
+$route['admin/automation_tasks/create'] = 'admin/Automation_tasks/create';
+$route['admin/automation_tasks/store'] = 'admin/Automation_tasks/store';
+$route['admin/automation_tasks/edit/(:num)'] = 'admin/Automation_tasks/edit/$1';
+$route['admin/automation_tasks/update/(:num)'] = 'admin/Automation_tasks/update/$1';
+$route['admin/automation_tasks/delete/(:num)'] = 'admin/Automation_tasks/delete/$1';
 $route['shopkart/settings/save_test_otp'] = 'admin/Settings/save_test_otp';
 // Mobile API Explorer (Postman-style customer API docs + live tester)
 $route['shopkart/api-explorer'] = 'admin/Api_explorer/index';

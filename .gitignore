@@ -130,3 +130,9 @@ docs/
 
 # ── AI tooling ────────────────────────────────────────────────
 .claude/
+
+# Local smoke / temp artefacts
+cookies.txt
+out.txt
+dashboard_*.html
+tmp_*.php

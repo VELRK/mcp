@@ -1,0 +1,121 @@
+/* assets/admin/css/admin_modern.css */
+/* Modern Elegant Theme – uses glassmorphism, subtle gradients, and Inter font */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary-bg: rgba(255,255,255,0.8);
+  --primary-color: #128C7E; /* Updated WhatsApp green */
+  --accent-color: #25D366; /* WhatsApp light green */
+  --border-radius: 8px;
+  --shadow-elev: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+body, html {
+  font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+  background: linear-gradient(135deg, #f0f4f8, #e8ebf1);
+  color: var(--primary-color);
+  margin:0; padding:0;
+}
+
+/* Sidebar */
+#sk-sidebar, aside.sk-sidebar {
+  background: var(--primary-color) !important; /* WhatsApp dark green */
+  color: #ffffff;
+  border-right: 1px solid rgba(255,255,255,0.2);
+  border-radius: 0 8px 8px 0;
+  padding-top: 1rem;
+}
+
+/* Sidebar links */
+#sk-sidebar .sk-nav-link,
+aside.sk-sidebar .sk-nav-link {
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: background .2s ease, color .2s ease;
+}
+#sk-sidebar .sk-nav-link:hover,
+aside.sk-sidebar .sk-nav-link:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--accent-color);
+}
+#sk-sidebar .sk-nav-link.active,
+aside.sk-sidebar .sk-nav-link.active {
+  background: var(--accent-color);
+  color: #fff;
+}
+#sk-sidebar a, aside.sk-sidebar a {
+  color: #fff;
+  transition: color .2s ease;
+}
+#sk-sidebar a:hover, aside.sk-sidebar a:hover {
+  color: var(--accent-color);
+}
+
+/* Topbar */
+.sk-topbar {
+  background: #ffffff !important; /* White header */
+  color: var(--primary-color);
+  padding: 0.5rem 1rem;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  box-shadow: var(--shadow-elev);
+}
+
+/* Main Content */
+main.sk-main, .sk-main {
+  background: #f9fafb; /* Light gray for contrast */
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  margin: 1rem;
+  box-shadow: var(--shadow-elev);
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--accent-color) !important;
+  border: none;
+  border-radius: var(--border-radius);
+  color: #fff;
+  transition: background .2s ease, transform .1s;
+}
+.btn-primary:hover {
+  background: #128c7e !important; /* Darker WhatsApp green */
+  transform: translateY(-1px);
+}
+
+/* Tables */
+.table th, .table td {
+  vertical-align: middle;
+}
+.table-hover tbody tr:hover { background: rgba(0,0,0,0.02); }
+
+/* Cards */
+.card {
+  border: none;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-elev);
+  background: var(--primary-bg);
+}
+
+/* Forms */
+.form-control {
+  border-radius: var(--border-radius);
+  border: 1px solid #ced4da;
+  background: #fff;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from { opacity:0; transform: translateY(10px); }
+  to { opacity:1; transform: translateY(0); }
+}
+.animate-fade-in-up { animation: fadeInUp .4s ease-out; }
+
+/* Card shadows for subtle depth */
+.card {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+

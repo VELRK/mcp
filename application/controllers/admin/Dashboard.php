@@ -45,7 +45,13 @@ class Dashboard extends Sk_Base {
             $data['total_revenue']   = $stats['total_revenue'];
             $data['monthly_revenue'] = $stats['monthly_revenue'];
             $data['total_products']  = $stats['total_products'];
-            $data['total_customers'] = $stats['total_customers'];
+            $data['total_customers']    = $stats['total_customers'];
+            // Avg Order Value (simple average)
+            $data['avg_order_value'] = $stats['total_orders'] ? $stats['total_revenue'] / $stats['total_orders'] : 0;
+            // Active Sessions (last 15 minutes)
+            $this->load->database();
+            $this->db->where('timestamp >', time() - 900);
+            $data['active_sessions'] = $this->db->count_all_results('ci_sessions');
             $data['recent_orders']   = $this->Sk_Order_model->recent_orders(8);
             $data['top_products']    = $this->Sk_Order_model->top_products(5);
             $data['revenue_chart']   = $this->Sk_Order_model->revenue_by_day(30);
