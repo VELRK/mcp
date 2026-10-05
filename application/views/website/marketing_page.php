@@ -6,8 +6,9 @@
   <title><?= htmlspecialchars($title) ?> — Talk AI Pilot</title>
   <meta name="description" content="<?= htmlspecialchars($lead) ?>">
   <link rel="icon" href="<?= base_url('assets/images/logo/favicon.svg') ?>">
+  <link rel="stylesheet" href="<?= base_url('assets/website/css/landing.css') ?>">
   <style>
-    :root{--ink:#10172b;--muted:#657087;--purple:#6750e8;--purple2:#8c63ff;--navy:#070d24;--line:#e8e9f2;--soft:#f6f5fb;--green:#20c876}
+    :root{--ink:#0b1220;--muted:#5c6478;--purple:#20c876;--purple2:#17a864;--navy:#0a1628;--line:#e5e8ef;--soft:#f4f7fb;--green:#20c876;--green-dark:#17a864}
     *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6}a{color:inherit;text-decoration:none}
     .wrap{width:min(1160px,calc(100% - 40px));margin:auto}.nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.93);border-bottom:1px solid var(--line);backdrop-filter:blur(14px)}.nav-in{height:76px;display:flex;align-items:center;justify-content:space-between;gap:24px}
     .brand{font-size:21px;font-weight:850;letter-spacing:-.045em;white-space:nowrap}.brand span,.active{color:var(--purple)}.links{display:flex;align-items:center;gap:25px;font-size:14px;font-weight:700;color:#424a60}.links a:hover{color:var(--purple)}
@@ -36,11 +37,14 @@
     <a class="brand" href="<?= base_url() ?>">Talk <span>AI</span> Pilot</a>
     <nav class="links" aria-label="Primary">
       <a href="<?= base_url() ?>">Home</a>
-      <a class="<?= $active === 'about' ? 'active' : '' ?>" href="<?= site_url('about') ?>">About</a>
-      <a class="<?= $active === 'services' ? 'active' : '' ?>" href="<?= site_url('services') ?>">Services</a>
-      <a class="<?= $active === 'contact' ? 'active' : '' ?>" href="<?= site_url('contact') ?>">Contact</a>
+      <a class="<?= ($active ?? '') === 'platform' ? 'active' : '' ?>" href="<?= site_url('platform') ?>">Product</a>
+      <a class="<?= ($active ?? '') === 'channels' ? 'active' : '' ?>" href="<?= site_url('channels') ?>">Channels</a>
+      <a class="<?= ($active ?? '') === 'pricing' ? 'active' : '' ?>" href="<?= site_url('pricing') ?>">Pricing</a>
+      <a class="<?= ($active ?? '') === 'about' ? 'active' : '' ?>" href="<?= site_url('about') ?>">About</a>
+      <a class="<?= ($active ?? '') === 'services' ? 'active' : '' ?>" href="<?= site_url('services') ?>">Services</a>
+      <a class="<?= ($active ?? '') === 'contact' ? 'active' : '' ?>" href="<?= site_url('contact') ?>">Contact</a>
     </nav>
-    <div class="actions"><a class="btn" href="<?= site_url('admin/login') ?>">Sign in</a><a class="btn btn-primary" href="<?= site_url('contact') ?>">Start free</a><button class="menu" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">☰</button></div>
+    <div class="actions"><a class="btn" href="<?= site_url('admin/login') ?>">Login</a><a class="btn btn-primary" href="<?= site_url('contact') ?>">Book demo</a><button class="menu" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">☰</button></div>
   </div></header>
 
   <main>
