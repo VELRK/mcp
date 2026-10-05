@@ -1,5 +1,5 @@
 <?php
-defined('BASEPATH') OR exit('No direct script access allowed');
+// Safe to load from index.php before CodeIgniter defines BASEPATH.
 
 /**
  * Load KEY=VALUE pairs from a .env file into getenv/$_ENV/$_SERVER (once).
