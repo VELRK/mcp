@@ -25,7 +25,7 @@ class Vendors extends Sk_Base {
 
         $result = $this->Sk_Vendor_model->get_all($filters, $limit, $offset);
 
-        $data['title']   = 'Vendors - 2DEAL Admin';
+        $data['title']   = 'Vendors - Talk AI Pilot Admin';
         $data['vendors'] = $result['rows'];
         $data['total']   = $result['total'];
         $data['page']    = $page;

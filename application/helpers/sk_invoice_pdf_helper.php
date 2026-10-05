@@ -11,7 +11,7 @@ function sk_invoice_token_secret(): string {
     if ($key === '') {
         $CI->load->model('Sk_Admin_model');
         $settings = $CI->Sk_Admin_model->get_settings();
-        $key = (string)($settings['askeva_api_token'] ?? '') . (string)($settings['site_name'] ?? '2DEAL');
+        $key = (string)($settings['askeva_api_token'] ?? '') . (string)($settings['site_name'] ?? 'Talk AI Pilot');
     }
     return hash('sha256', 'invoice|' . $key);
 }

@@ -2,7 +2,7 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * Firebase Cloud Messaging (HTTP v1) helpers for 2DEAL.
+ * Firebase Cloud Messaging (HTTP v1) helpers for Talk AI Pilot.
  */
 
 function sk_fcm_ensure_schema(): void {

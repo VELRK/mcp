@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Vendor Login - 2DEAL</title>
+  <title>Vendor Login - Talk AI Pilot</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin.css') ?>">
@@ -32,6 +32,7 @@
     <?php endif; ?>
 
     <form action="<?= site_url('admin/vendor/login/submit') ?>" method="POST">
+      <input type="hidden" name="<?= $this->security->get_csrf_token_name(); ?>" value="<?= $this->security->get_csrf_hash(); ?>">
       <div class="mb-3">
         <label class="form-label">Vendor Email</label>
         <div class="input-group">

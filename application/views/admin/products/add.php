@@ -12,11 +12,16 @@ function opt($list, $val) {
 }
 ?>
 
-<div class="sk-page-header">
-  <h5 class="sk-page-title"><i class="bi bi-plus-circle me-2 text-warning"></i>Add Product</h5>
-  <a href="<?= site_url('admin/products') ?>" class="btn btn-sm btn-outline-secondary">
-    <i class="bi bi-arrow-left me-1"></i> Back
-  </a>
+<?php
+$page_title = 'Create Product';
+$breadcrumb = [
+    ['label' => 'Product List', 'url' => site_url('shopkart/products')],
+    'Create Product',
+];
+$this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb'));
+?>
+<div class="d-flex justify-content-end mb-3">
+  <a href="<?= site_url('shopkart/products') ?>" class="btn btn-sm btn-light"><i class="mdi mdi-arrow-left me-1"></i> Back</a>
 </div>
 
 <form action="<?= site_url('admin/products/store') ?>" method="POST" enctype="multipart/form-data">

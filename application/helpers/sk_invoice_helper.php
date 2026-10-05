@@ -239,7 +239,7 @@ function sk_invoice_seller_from_settings(array $settings): array {
     if ($name === '') {
         $name = trim((string)($settings['site_name'] ?? ''));
     }
-    if ($name === '' || strcasecmp($name, '2DEAL') === 0 || strcasecmp($name, 'Default Store') === 0
+    if ($name === '' || strcasecmp($name, 'Talk AI Pilot') === 0 || strcasecmp($name, 'Default Store') === 0
         || stripos($name, 'shopkart') !== false) {
         $name = $defaults['name'];
     }
@@ -294,7 +294,7 @@ function sk_invoice_seller_from_vendor(array $vendor, array $store, array $setti
     $bizName = trim((string)($vendor['business_name'] ?? ''));
     $sellerName = $storeName !== ''
         ? $storeName
-        : ($bizName !== '' ? $bizName : ($platform['name'] ?? '2DEAL'));
+        : ($bizName !== '' ? $bizName : ($platform['name'] ?? 'Talk AI Pilot'));
 
     $addrParts = array_filter([
         $store['pickup_line1'] ?? '',
@@ -587,7 +587,7 @@ function sk_invoice_email_body(array $invoice, array $order, array $settings = [
     $CI =& get_instance();
     $CI->load->helper('sk_invoice_pdf');
 
-    $site = htmlspecialchars($settings['site_name'] ?? '2DEAL');
+    $site = htmlspecialchars($settings['site_name'] ?? 'Talk AI Pilot');
     $name = htmlspecialchars($order['customer_name'] ?? ($order['shipping_name'] ?? 'Customer'));
     $orderNo = htmlspecialchars($invoice['order_number'] ?? ($order['order_number'] ?? ''));
     $invoiceNo = htmlspecialchars($invoice['invoice_no'] ?? '');

@@ -61,7 +61,7 @@ class Products extends Sk_Base {
         unset($prod);
 
         $data = [
-            'title'           => 'Products - 2DEAL Admin',
+            'title'           => 'Products - Talk AI Pilot Admin',
             'products'        => $products,
             'total'           => $this->Sk_Product_model->count_all_admin($filters),
             'page'            => $page,

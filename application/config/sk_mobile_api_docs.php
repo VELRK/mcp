@@ -387,7 +387,7 @@ $config['catalog'] = [
                 'slug' => 'south-indian-bridal-silk-gold',
                 'variants' => [['id' => '1', 'label' => '1 Box', 'stock' => '0', 'price' => '0.00']],
                 'related' => [],
-                'seo' => ['meta_title' => 'South Indian Bridal Silk - Gold | 2DEAL'],
+                'seo' => ['meta_title' => 'South Indian Bridal Silk - Gold | Talk AI Pilot'],
             ],
         ],
     ],
@@ -1523,7 +1523,7 @@ $config['catalog'] = [
             'success' => true,
             'message' => 'Success',
             'data' => [
-                'site_name' => '2DEAL',
+                'site_name' => 'Talk AI Pilot',
                 'tax_rate' => 18,
                 'shipping_charge' => 50,
                 'free_shipping_above' => 999,
@@ -1568,8 +1568,8 @@ $config['catalog'] = [
             'success' => true,
             'message' => 'Success',
             'data' => [
-                'site_name' => '2DEAL',
-                'meta_title' => '2DEAL - Buy Silk, Cotton & Designer Sarees Online',
+                'site_name' => 'Talk AI Pilot',
+                'meta_title' => 'Talk AI Pilot - Buy Silk, Cotton & Designer Sarees Online',
             ],
         ],
     ],

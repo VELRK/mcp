@@ -42,7 +42,7 @@ class Sk_Seo_model extends CI_Model {
     /** Normalize SEO payload for API / frontend. */
     public function format_page(array $row, ?array $globals = null): array {
         $globals = $globals ?? [];
-        $site    = $globals['site_name'] ?? '2DEAL';
+        $site    = $globals['site_name'] ?? 'Talk AI Pilot';
         $title   = trim($row['meta_title'] ?? '') ?: trim($row['page_label'] ?? $site);
         $desc    = trim($row['meta_description'] ?? '');
         $ogTitle = trim($row['og_title'] ?? '') ?: $title;
@@ -67,7 +67,7 @@ class Sk_Seo_model extends CI_Model {
 
     public function format_entity(array $row, string $type, ?array $globals = null): array {
         $globals = $globals ?? [];
-        $site    = $globals['site_name'] ?? '2DEAL';
+        $site    = $globals['site_name'] ?? 'Talk AI Pilot';
         $name    = $row['title'] ?? $row['name'] ?? $site;
         $fallbackDesc = $row['excerpt'] ?? $row['short_desc'] ?? strip_tags($row['description'] ?? '');
         $fallbackDesc = mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($fallbackDesc))), 0, 160);
@@ -100,7 +100,7 @@ class Sk_Seo_model extends CI_Model {
         foreach ($rows as $r) {
             $map[$r['key']] = $r['value'];
         }
-        $site  = $map['site_name'] ?? '2DEAL';
+        $site  = $map['site_name'] ?? 'Talk AI Pilot';
         $title = trim($map['meta_title'] ?? '') ?: $site;
         $desc  = trim($map['meta_desc'] ?? '');
 

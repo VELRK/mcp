@@ -14,11 +14,17 @@ $saleStartLocal = !empty($p['sale_start_at']) ? date('Y-m-d\TH:i', strtotime($p[
 $saleEndLocal = !empty($p['sale_end_at']) ? date('Y-m-d\TH:i', strtotime($p['sale_end_at'])) : '';
 ?>
 
-<div class="sk-page-header">
-  <h5 class="sk-page-title"><i class="bi bi-pencil me-2 text-warning"></i>Edit: <?= htmlspecialchars($p['name']) ?></h5>
-  <a href="<?= site_url('admin/products') ?>" class="btn btn-sm btn-outline-secondary">
-    <i class="bi bi-arrow-left me-1"></i> Back
-  </a>
+<?php
+$page_title = 'Product Overview';
+$breadcrumb = [
+    ['label' => 'Product List', 'url' => site_url('shopkart/products')],
+    $p['name'],
+];
+$this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb'));
+?>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0"><?= htmlspecialchars($p['name']) ?></h5>
+  <a href="<?= site_url('shopkart/products') ?>" class="btn btn-sm btn-light"><i class="mdi mdi-arrow-left me-1"></i> Back</a>
 </div>
 
 <form action="<?= site_url('admin/products/update/'.$p['id']) ?>" method="POST" enctype="multipart/form-data">

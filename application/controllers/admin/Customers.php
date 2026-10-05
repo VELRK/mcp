@@ -20,7 +20,7 @@ class Customers extends Sk_Base {
         $limit  = 100;
         $offset = ($page - 1) * $limit;
 
-        $data['title']     = 'Customers - 2DEAL Admin';
+        $data['title']     = 'Customers - Talk AI Pilot Admin';
         $data['customers'] = $this->Sk_User_model->get_all_admin($limit, $offset, $filters);
         $data['total']     = $this->Sk_User_model->count_admin($filters);
         $data['page']      = $page;

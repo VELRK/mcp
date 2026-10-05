@@ -18,7 +18,7 @@ class Vendor_login extends CI_Controller {
         if ($this->session->userdata('sk_admin_id')) {
             redirect('admin/dashboard');
         }
-        $data['title'] = 'Vendor Login - 2DEAL';
+        $data['title'] = 'Vendor Login - Talk AI Pilot';
         $this->load->view('admin/vendor_login', $data);
     }
 
@@ -73,7 +73,7 @@ class Vendor_login extends CI_Controller {
         if ($this->session->userdata('sk_vendor_login')) {
             redirect('admin/vendor/account/password');
         }
-        $data['title'] = 'Vendor Forgot Password - 2DEAL';
+        $data['title'] = 'Vendor Forgot Password - Talk AI Pilot';
         $this->load->view('admin/vendor_forgot_password', $data);
     }
 
@@ -118,7 +118,7 @@ class Vendor_login extends CI_Controller {
         if (!$email) {
             redirect('admin/vendor/forgot-password');
         }
-        $data['title'] = 'Vendor Reset Password - 2DEAL';
+        $data['title'] = 'Vendor Reset Password - Talk AI Pilot';
         $data['email'] = $email;
         $this->load->view('admin/vendor_reset_password', $data);
     }

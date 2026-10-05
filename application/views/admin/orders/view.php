@@ -1,21 +1,23 @@
 <?php $currency = sk_currency_symbol($settings); ?>
 
-<div class="sk-page-header">
-  <h5 class="sk-page-title">
-    <i class="bi bi-receipt me-2 text-warning"></i>
-    Order <span class="text-warning"><?= htmlspecialchars($order['order_number']) ?></span>
-  </h5>
-  <div class="d-flex gap-2">
-    <a href="<?= site_url('admin/orders/invoice/'.$order['id']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-printer me-1"></i> Invoice
-    </a>
-    <button type="button" class="btn btn-sm btn-outline-primary" id="btnSendInvoice" onclick="sendInvoice(<?= (int)$order['id'] ?>)">
-      <i class="bi bi-envelope me-1"></i> Email Invoice
-    </button>
-    <a href="<?= site_url('admin/orders') ?>" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-arrow-left me-1"></i> Back
-    </a>
-  </div>
+<?php
+$page_title = 'Order ' . ($order['order_number'] ?? '');
+$breadcrumb = [
+    ['label' => 'Order List', 'url' => site_url('shopkart/orders')],
+    $order['order_number'] ?? 'Overview',
+];
+$this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb'));
+?>
+<div class="d-flex flex-wrap gap-2 justify-content-end mb-3">
+  <a href="<?= site_url('shopkart/orders/invoice/'.$order['id']) ?>" target="_blank" class="btn btn-sm btn-light">
+    <i class="mdi mdi-printer me-1"></i> Invoice
+  </a>
+  <button type="button" class="btn btn-sm btn-primary" id="btnSendInvoice" onclick="sendInvoice(<?= (int)$order['id'] ?>)">
+    <i class="mdi mdi-email-outline me-1"></i> Email Invoice
+  </button>
+  <a href="<?= site_url('shopkart/orders') ?>" class="btn btn-sm btn-light">
+    <i class="mdi mdi-arrow-left me-1"></i> Back
+  </a>
 </div>
 
 <div class="row g-3">

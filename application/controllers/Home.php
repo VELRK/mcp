@@ -9,6 +9,6 @@ class Home extends CI_Controller {
 
 	public function index()
 	{
-		$this->output->set_output(render_template('home.html', 'home'));
+		$this->load->view('website/home_landing');
 	}
 }

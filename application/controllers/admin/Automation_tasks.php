@@ -13,7 +13,9 @@ class Automation_tasks extends CI_Controller {
     // List all tasks
     public function index()
     {
-        $data['tasks'] = $this->Automation_task_model->get_all();
+        $data['tasks'] = $this->db->table_exists('automation_tasks')
+            ? $this->Automation_task_model->get_all()
+            : [];
         $data['title'] = 'Automation Tasks';
         $this->load->view('admin/layout/header', $data);
         $this->load->view('admin/layout/sidebar');

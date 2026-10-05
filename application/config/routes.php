@@ -56,12 +56,16 @@ $route['translate_uri_dashes'] = FALSE;
 // TalkAIPilot landing (website templates via CodeIgniter)
 $route['home'] = 'Home/index';
 $route['index'] = 'Home/index';
-$route['about'] = 'About/index';
-$route['about-us'] = 'About/index';
-$route['about-us-05'] = 'About/index';
-$route['service'] = 'Service/index';
+$route['platform'] = 'Marketing_site/platform';
+$route['channels'] = 'Marketing_site/channels';
+$route['solutions'] = 'Marketing_site/solutions';
+$route['pricing'] = 'Marketing_site/pricing';
+$route['about'] = 'Marketing_site/about';
+$route['about-us'] = 'Marketing_site/about';
+$route['about-us-05'] = 'Marketing_site/about';
+$route['service'] = 'Marketing_site/services';
 $route['service/(:any)'] = 'Service/detail/$1';
-$route['services'] = 'Service/index';
+$route['services'] = 'Marketing_site/services';
 $route['services/(:any)'] = 'Service/detail/$1';
 $route['case-studies-01'] = 'Service/index';
 $route['case-studies-02'] = 'Service/index';
@@ -70,13 +74,15 @@ $route['case-studies-04'] = 'Service/index';
 $route['case-studies-05'] = 'Service/index';
 $route['case-studies-01/index.html'] = 'Service/index';
 $route['case-studies-04/index.html'] = 'Service/index';
-$route['contact'] = 'Contact/index';
+$route['contact'] = 'Marketing_site/contact';
+$route['contact/save'] = 'Contact/save';
+$route['contact/submit'] = 'Contact/submit';
 $route['enquiry'] = 'Enquiry/index';
-$route['privacy'] = 'Legal/privacy';
-$route['privacy-policy'] = 'Legal/privacy';
-$route['terms'] = 'Legal/terms';
-$route['terms-and-conditions'] = 'Legal/terms';
-$route['terms-conditions'] = 'Legal/terms';
+$route['privacy'] = 'Marketing_site/privacy';
+$route['privacy-policy'] = 'Marketing_site/privacy';
+$route['terms'] = 'Marketing_site/terms';
+$route['terms-and-conditions'] = 'Marketing_site/terms';
+$route['terms-conditions'] = 'Marketing_site/terms';
 
 // Additional routes
 $route['listing'] = 'Listing/index';
@@ -199,19 +205,19 @@ $route['404_override'] = '';
 $route['translate_uri_dashes'] = FALSE;
 
 // Additional routes
-$route['about'] = 'About/index';
+$route['about'] = 'Marketing_site/about';
 $route['properties'] = 'Home/properties';
 $route['listing'] = 'Listing/index';
 $route['blog'] = 'Blog/index';
 $route['blog/detail/(:num)'] = 'Blog/detail/$1';
 $route['blog/(:num)'] = 'Blog/detail/$1';
-$route['contact'] = 'Contact/index';
+$route['contact'] = 'Marketing_site/contact';
 $route['contact/submit'] = 'Contact/submit';
 // Property routes - support both slug and ID for backward compatibility
 $route['property/(:any)'] = 'Home/property_detail/$1';
 $route['property-detail/(:any)'] = 'Home/property_detail/$1';
-$route['privacy-policy'] = 'Legal/privacy';
-$route['terms-conditions'] = 'Legal/terms';
+$route['privacy-policy'] = 'Marketing_site/privacy';
+$route['terms-conditions'] = 'Marketing_site/terms';
 $route['testimonials'] = 'Home/testimonials';
 
 // Legacy property admin routes removed — use /admin/* ShopKart panel routes (mirrored at end of file)

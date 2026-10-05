@@ -4,12 +4,14 @@ $f = $filters ?? [];
 $show_vendor_col = !empty($show_vendor_col);
 ?>
 
-<div class="sk-page-header">
-  <h5 class="sk-page-title"><i class="bi bi-box-seam me-2 text-warning"></i>Products</h5>
-  <a href="<?= site_url('shopkart/products/add') ?>" class="btn btn-warning btn-sm fw-semibold">
-    <i class="bi bi-plus-lg me-1"></i> Add Product
-  </a>
-</div>
+<?php
+$page_title = 'Product List';
+$breadcrumb = [
+    ['label' => 'Ecommerce', 'url' => site_url('shopkart/products')],
+    'Product List',
+];
+$this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb'));
+?>
 
 <!-- Filters (auto AJAX) -->
 <div class="card sk-table-card shadow-sm mb-3">
@@ -86,21 +88,26 @@ $show_vendor_col = !empty($show_vendor_col);
   </div>
 </div>
 
-<div class="card sk-table-card shadow-sm" id="productListCard">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead>
+<div class="card" id="productListCard">
+  <div class="card-header">
+    <h5 class="card-title">Product List</h5>
+    <a href="<?= site_url('shopkart/products/add') ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-plus me-1"></i>Add Product</a>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive text-nowrap">
+      <table class="table align-middle mb-0">
+        <thead class="table-light">
           <tr>
-            <th style="width:60px;">Image</th>
-            <th>Name</th>
+            <th>ID</th>
+            <th>Product</th>
             <?php if ($show_vendor_col): ?><th>Vendor</th><?php endif; ?>
             <th>Category</th>
-            <th>Subcategory</th>
+            <th>SKU</th>
             <th>Price</th>
+            <th>Discount</th>
             <th>Stock</th>
             <th>Status</th>
-            <th>Actions</th>
+            <th class="text-end">Actions</th>
           </tr>
         </thead>
         <tbody id="productListBody">

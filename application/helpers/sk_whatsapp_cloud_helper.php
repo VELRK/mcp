@@ -741,7 +741,7 @@ function sk_wa_cloud_load_customer_context(?array $user, ?array $settings = null
         'last_order_number' => trim((string)($order['order_number'] ?? '')),
         'last_order_total'  => $orderTotal,
         'last_order_status' => trim((string)($order['status'] ?? '')),
-        'site_name'         => trim((string)($settings['site_name'] ?? $settings['company_legal_name'] ?? '2DEAL')),
+        'site_name'         => trim((string)($settings['site_name'] ?? $settings['company_legal_name'] ?? 'Talk AI Pilot')),
     ];
 }
 

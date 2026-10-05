@@ -45,10 +45,10 @@ if (!empty($_SERVER['HTTP_HOST'])) {
         if (preg_match('#^/?[A-Za-z]:/#', $script)) {
             $uri = str_replace('\\', '/', $_SERVER['REQUEST_URI'] ?? '/');
             $uriPath = explode('?', $uri, 2)[0];
-            if (preg_match('#^/(mcp|deal)(/|$)#', $uriPath, $m)) {
+            if (preg_match('#^/(ecomm|deal)(/|$)#', $uriPath, $m)) {
                 $config['base_url'] = $scheme . '://' . $host . '/' . $m[1] . '/';
             } else {
-                $config['base_url'] = $scheme . '://' . $host . '/mcp/';
+                $config['base_url'] = $scheme . '://' . $host . '/ecomm/';
             }
         } else {
             $path = dirname($script);
@@ -67,7 +67,7 @@ if (!empty($_SERVER['HTTP_HOST'])) {
         }
     }
 } else {
-    $config['base_url'] = 'http://localhost/mcp/';
+    $config['base_url'] = 'http://localhost/ecomm/';
 }
 
 // Never leak a Windows filesystem path into generated links (403 Forbidden).
@@ -75,7 +75,7 @@ if (!empty($_SERVER['HTTP_HOST'])) {
 if (!empty($config['base_url']) && preg_match('#https?://[A-Za-z]:[/\\\\]#', $config['base_url'])) {
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $config['base_url'] = $scheme . '://' . $host . '/mcp/';
+    $config['base_url'] = $scheme . '://' . $host . '/ecomm/';
 }
 
 
@@ -445,7 +445,7 @@ $config['sess_driver'] = 'files';
 $config['sess_cookie_name'] = 'ci_session';
 $config['sess_samesite'] = 'Lax';
 $config['sess_expiration'] = 7200;
-$config['sess_save_path'] = NULL;
+$config['sess_save_path'] = sys_get_temp_dir(); // Fixed from NULL to valid path
 $config['sess_match_ip'] = FALSE;
 $config['sess_time_to_update'] = 300;
 $config['sess_regenerate_destroy'] = FALSE;
@@ -469,8 +469,8 @@ $config['sess_regenerate_destroy'] = FALSE;
 $config['cookie_prefix'] = '';
 $config['cookie_domain'] = '';
 $config['cookie_path'] = '/';
-$config['cookie_secure'] = FALSE;
-$config['cookie_httponly'] = FALSE;
+$config['cookie_secure'] = FALSE; // IMPORTANT: Set to TRUE on production HTTPS
+$config['cookie_httponly'] = TRUE; // Prevent Javascript access to session/cookies
 $config['cookie_samesite'] = 'Lax';
 
 /*
@@ -515,12 +515,16 @@ $config['global_xss_filtering'] = FALSE;
 | 'csrf_regenerate' = Regenerate token on every submission
 | 'csrf_exclude_uris' = Array of URIs which ignore CSRF checks
 */
-$config['csrf_protection'] = FALSE;
-$config['csrf_token_name'] = 'csrf_test_name';
-$config['csrf_cookie_name'] = 'csrf_cookie_name';
+$config['csrf_protection'] = TRUE; // Enabled CSRF
+$config['csrf_token_name'] = 'csrf_token';
+$config['csrf_cookie_name'] = 'csrf_cookie';
 $config['csrf_expire'] = 7200;
 $config['csrf_regenerate'] = TRUE;
-$config['csrf_exclude_uris'] = array();
+// Exclude external webhooks from CSRF checks
+$config['csrf_exclude_uris'] = array(
+    'Conversations/Whatsapp/.*', // Allow Meta/WhatsApp API
+    'AiAgent/.*',                // Allow external AI APIs
+);
 
 /*
 |--------------------------------------------------------------------------

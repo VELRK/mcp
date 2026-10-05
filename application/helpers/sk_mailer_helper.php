@@ -160,7 +160,7 @@ function sk_send_mail($to_email, $to_name, $subject, $html_body, array $attachme
     $smtp_pass = trim($settings['smtp_pass'] ?? '');
     $smtp_port = $status['port'];
     $from_email = $status['from'];
-    $from_name  = $settings['smtp_from_name'] ?? ($settings['site_name'] ?? '2DEAL');
+    $from_name  = $settings['smtp_from_name'] ?? ($settings['site_name'] ?? 'Talk AI Pilot');
 
     $CI->email->clear(true);
     $CI->email->initialize([
@@ -213,7 +213,7 @@ function sk_mail_notify_admin(string $subject, string $innerHtml, array $setting
     if ($adminEmail === '' || !filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
         return false;
     }
-    $site_name = htmlspecialchars($settings['site_name'] ?? '2DEAL');
+    $site_name = htmlspecialchars($settings['site_name'] ?? 'Talk AI Pilot');
     $safeSubject = htmlspecialchars($subject);
     $body = "
 <!DOCTYPE html>
@@ -300,7 +300,7 @@ function sk_mail_order_confirmation($order, $settings = []) {
     }
 
     $payment_label = strtoupper($order['payment_method'] ?? 'COD');
-    $site_name = $settings['site_name'] ?? '2DEAL';
+    $site_name = $settings['site_name'] ?? 'Talk AI Pilot';
 
     $body = "
 <!DOCTYPE html>
@@ -431,7 +431,7 @@ function sk_mail_order_status($order, $new_status, $settings = [], bool $notifyA
 
     $s = $status_labels[$new_status] ?? ['label' => ucfirst($new_status), 'color' => '#64748b', 'icon' => '📋'];
     $subject  = "{$s['icon']} Order #{$order['order_number']} – {$s['label']}";
-    $site_name = $settings['site_name'] ?? '2DEAL';
+    $site_name = $settings['site_name'] ?? 'Talk AI Pilot';
 
     $tracking_html = '';
     if (!empty($order['tracking_number'])) {
@@ -492,7 +492,7 @@ function sk_mail_order_status($order, $new_status, $settings = [], bool $notifyA
 function sk_mail_password_reset_code($user, $code, $settings = [], $portalLabel = null) {
     $to_email = $user['email'] ?? '';
     $to_name  = $user['name'] ?? 'Customer';
-    $site_name = $settings['site_name'] ?? '2DEAL';
+    $site_name = $settings['site_name'] ?? 'Talk AI Pilot';
     $portal = $portalLabel ? htmlspecialchars($portalLabel) : 'Account';
     $subject = 'Password Reset Verification Code – ' . $site_name;
 
@@ -545,7 +545,7 @@ function sk_mail_contact_enquiry(string $name, string $email, string $message, a
     if (empty($settings)) {
         $settings = sk_mailer_settings();
     }
-    $site_name = $settings['site_name'] ?? '2DEAL';
+    $site_name = $settings['site_name'] ?? 'Talk AI Pilot';
     $safeName  = htmlspecialchars($name);
     $safeMsg   = nl2br(htmlspecialchars($message));
     $userSubject = 'We received your message' . ' – ' . $site_name;

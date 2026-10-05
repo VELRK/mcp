@@ -243,12 +243,20 @@ class Sk_Order_model extends CI_Model {
 
         // Build a full date range so chart shows every day (zero for days with no orders)
         $map = [];
-        foreach ($rows as $r) $map[$r['date']] = (float) $r['revenue'];
+        $orders = [];
+        foreach ($rows as $r) {
+            $map[$r['date']] = (float) $r['revenue'];
+            $orders[$r['date']] = (int) ($r['orders'] ?? 0);
+        }
 
         $result = [];
         for ($i = $days - 1; $i >= 0; $i--) {
             $d = date('Y-m-d', strtotime("-{$i} days"));
-            $result[] = ['date' => date('d M', strtotime($d)), 'revenue' => $map[$d] ?? 0];
+            $result[] = [
+                'date' => date('d M', strtotime($d)),
+                'revenue' => $map[$d] ?? 0,
+                'orders' => $orders[$d] ?? 0,
+            ];
         }
         return $result;
     }

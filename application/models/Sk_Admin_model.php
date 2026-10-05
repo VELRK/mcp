@@ -67,7 +67,7 @@ class Sk_Admin_model extends CI_Model {
         $patch = ['golden_letterhead_seeded' => '1'];
 
         $legal = trim((string)($settings['company_legal_name'] ?? ''));
-        if ($legal === '' || strcasecmp($legal, '2DEAL') === 0 || stripos($legal, 'shopkart') !== false) {
+        if ($legal === '' || strcasecmp($legal, 'Talk AI Pilot') === 0 || stripos($legal, 'shopkart') !== false) {
             $patch['company_legal_name'] = $defaults['company_legal_name'];
         }
 
@@ -158,7 +158,7 @@ class Sk_Admin_model extends CI_Model {
     }
 
     /**
-     * Rename legacy ShopKart / ShopKart Sarees labels to 2DEAL in settings DB
+     * Rename legacy ShopKart / ShopKart Sarees labels to Talk AI Pilot in settings DB
      * so email, WhatsApp, invoices, and storefront all use the new brand.
      */
     private function _ensure_brand_name(array &$settings): void {
@@ -173,9 +173,14 @@ class Sk_Admin_model extends CI_Model {
             $val = trim((string)($settings[$key] ?? ''));
             if ($val === '') {
                 if ($key === 'site_name' || $key === 'smtp_from_name') {
-                    $this->save_settings([$key => '2DEAL']);
-                    $settings[$key] = '2DEAL';
+                    $this->save_settings([$key => 'Talk AI Pilot']);
+                    $settings[$key] = 'Talk AI Pilot';
                 }
+                continue;
+            }
+            if (strcasecmp($val, '2DEAL') === 0 || strcasecmp($val, '2Deal') === 0) {
+                $this->save_settings([$key => 'Talk AI Pilot']);
+                $settings[$key] = 'Talk AI Pilot';
                 continue;
             }
             if (stripos($val, 'shopkart') === false) {
@@ -183,11 +188,11 @@ class Sk_Admin_model extends CI_Model {
             }
             // Exact old brand names
             if (preg_match('/^shopkart(\s+sarees)?$/i', $val)) {
-                $new = '2DEAL';
+                $new = 'Talk AI Pilot';
             } else {
                 // Keep surrounding copy, swap brand token
-                $new = preg_replace('/shopkart\s+sarees/i', '2DEAL', $val);
-                $new = preg_replace('/shopkart/i', '2DEAL', $new);
+                $new = preg_replace('/shopkart\s+sarees/i', 'Talk AI Pilot', $val);
+                $new = preg_replace('/shopkart/i', 'Talk AI Pilot', $new);
             }
             if ($new !== $val) {
                 $this->save_settings([$key => $new]);

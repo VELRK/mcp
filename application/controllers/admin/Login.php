@@ -13,7 +13,7 @@ class Login extends Sk_Base {
         if ($this->session->userdata('sk_admin_id') || $this->session->userdata('sk_vendor_login')) {
             redirect('admin/dashboard');
         }
-        $data['title'] = 'Admin Login - 2DEAL';
+        $data['title'] = 'Admin Login - Talk AI Pilot';
         $this->load->view('admin/login', $data);
     }
 

@@ -11,25 +11,48 @@ $qs = http_build_query(array_filter([
 }));
 ?>
 
-<div class="sk-page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-  <div>
-    <h5 class="sk-page-title mb-1"><i class="bi bi-people me-2 text-warning"></i>Customers</h5>
-    <small class="text-muted">
-      <?= (int)$counts['total'] ?> total ·
-      <?= (int)$counts['active'] ?> active ·
-      <?= (int)$counts['blocked'] ?> blocked
-    </small>
+<?php
+$page_title = 'Customer List';
+$breadcrumb = [
+    ['label' => 'Ecommerce', 'url' => site_url('admin/customers')],
+    'Customer List',
+];
+$this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb'));
+?>
+
+<div class="row">
+  <div class="col-md-4">
+    <div class="card card-h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="avatar avatar-sm text-primary bg-primary-subtle rounded-circle d-flex align-items-center justify-content-center"><i class="mdi mdi-account-group-outline"></i></div>
+          <p class="text-muted mb-0">Total Customers</p>
+        </div>
+        <h4 class="mb-0"><?= number_format((int) $counts['total']) ?></h4>
+      </div>
+    </div>
   </div>
-  <div class="d-flex flex-wrap gap-2">
-    <a href="<?= site_url('admin/customers/export?' . $qs) ?>" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-download me-1"></i> Export Excel
-    </a>
-    <a href="<?= site_url('admin/customers/import') ?>" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-upload me-1"></i> Import
-    </a>
-    <a href="<?= site_url('admin/customers/add') ?>" class="btn btn-warning btn-sm fw-semibold">
-      <i class="bi bi-plus-lg me-1"></i> Add Customer
-    </a>
+  <div class="col-md-4">
+    <div class="card card-h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="avatar avatar-sm text-success bg-success-subtle rounded-circle d-flex align-items-center justify-content-center"><i class="mdi mdi-account-check-outline"></i></div>
+          <p class="text-muted mb-0">Active Customers</p>
+        </div>
+        <h4 class="mb-0"><?= number_format((int) $counts['active']) ?></h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card card-h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="avatar avatar-sm text-danger bg-danger-subtle rounded-circle d-flex align-items-center justify-content-center"><i class="mdi mdi-account-off-outline"></i></div>
+          <p class="text-muted mb-0">Blocked Customers</p>
+        </div>
+        <h4 class="mb-0"><?= number_format((int) $counts['blocked']) ?></h4>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -70,17 +93,27 @@ $qs = http_build_query(array_filter([
   </div>
 </div>
 
-<div class="card sk-table-card shadow-sm">
-  <div class="card-body p-0">
-    <table class="table table-hover align-middle mb-0">
-      <thead>
+<div class="d-flex flex-wrap gap-2 justify-content-end mb-3">
+  <a href="<?= site_url('admin/customers/export?' . $qs) ?>" class="btn btn-light btn-sm"><i class="mdi mdi-download me-1"></i> Export</a>
+  <a href="<?= site_url('admin/customers/import') ?>" class="btn btn-light btn-sm"><i class="mdi mdi-upload me-1"></i> Import</a>
+  <a href="<?= site_url('admin/customers/add') ?>" class="btn btn-primary btn-sm"><i class="mdi mdi-plus me-1"></i> Add Customer</a>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h5 class="card-title">Customer List</h5>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive text-nowrap">
+    <table class="table align-middle mb-0">
+      <thead class="table-light">
         <tr>
-          <th>Name</th>
+          <th>Customer</th>
           <th>Email</th>
           <th>Phone</th>
           <th>Joined</th>
           <th>Status</th>
-          <th>Actions</th>
+          <th class="text-end">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -99,7 +132,7 @@ $qs = http_build_query(array_filter([
           <td><?= htmlspecialchars($c['phone'] ?? '-') ?></td>
           <td><?= !empty($c['created_at']) ? date('d M Y', strtotime($c['created_at'])) : '-' ?></td>
           <td>
-            <span class="badge <?= !empty($c['status']) ? 'bg-success' : 'bg-danger' ?>">
+            <span class="badge <?= !empty($c['status']) ? 'badge-label-success' : 'badge-label-danger' ?>">
               <?= !empty($c['status']) ? 'Active' : 'Blocked' ?>
             </span>
           </td>
@@ -164,5 +197,6 @@ $qs = http_build_query(array_filter([
       </ul>
     </nav>
     <?php endif; ?>
+  </div>
   </div>
 </div>
