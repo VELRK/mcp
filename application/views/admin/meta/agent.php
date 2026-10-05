@@ -152,6 +152,12 @@ $webhook = $webhook_uri ?? '';
 <script>
 (function () {
   var result = document.getElementById('mbaResult');
+  var csrfName = <?= json_encode($this->security->get_csrf_token_name()) ?>;
+  var csrfHash = <?= json_encode($this->security->get_csrf_hash()) ?>;
+  function csrfFromCookie() {
+    var m = document.cookie.match(/(?:^|; )csrf_cookie=([^;]*)/);
+    return m ? decodeURIComponent(m[1]) : csrfHash;
+  }
   function show(ok, msg, data) {
     result.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-secondary');
     result.classList.add(ok ? 'alert-success' : 'alert-danger');
@@ -165,6 +171,7 @@ $webhook = $webhook_uri ?? '';
       if (!phone || !op) return;
       btn.disabled = true;
       var body = new FormData();
+      body.append(csrfName, csrfFromCookie());
       body.append('phone_number_id', phone);
       body.append('op', op);
       if (op === 'test') {
@@ -177,11 +184,20 @@ $webhook = $webhook_uri ?? '';
         body: body,
         credentials: 'same-origin',
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-        .then(function (x) {
-          show(!!(x.j && x.j.success), (x.j && x.j.message) || 'Done', x.j && x.j.data);
-          if (x.j && x.j.success) setTimeout(function () { location.reload(); }, 900);
-        })
+      }).then(function (r) {
+        return r.text().then(function (t) {
+          var j = null;
+          try { j = JSON.parse(t); } catch (e) {}
+          return { ok: r.ok, j: j, raw: t };
+        });
+      }).then(function (x) {
+        if (!x.j) {
+          show(false, x.ok ? 'Unexpected response' : 'Request blocked (refresh the page and try again)');
+          return;
+        }
+        show(!!x.j.success, x.j.message || 'Done', x.j.data);
+        if (x.j.success) setTimeout(function () { location.reload(); }, 900);
+      })
         .catch(function (e) { show(false, e.message || 'Request failed'); })
         .finally(function () { btn.disabled = false; });
     });
