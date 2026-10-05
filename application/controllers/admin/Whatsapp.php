@@ -7,7 +7,9 @@ class Whatsapp extends Sk_Base {
 
     public function __construct() {
         parent::__construct();
-        $this->load->helper(['sk_whatsapp_cloud', 'sk_wa_ai']);
+        $this->load->helper(['sk_whatsapp_cloud', 'sk_meta_business_agent']);
+        $this->load->model('Sk_Vendor_meta_agent_model');
+        $this->Sk_Vendor_meta_agent_model->ensure_schema();
         $this->load->model('Sk_Whatsapp_cloud_model');
         sk_wa_cloud_ensure_schema();
     }
@@ -50,7 +52,12 @@ class Whatsapp extends Sk_Base {
             }
         }
         unset($msg);
-        return $this->json(['success' => true, 'conversation' => $conv, 'messages' => $msgs]);
+        return $this->json([
+            'success' => true,
+            'conversation' => $conv,
+            'messages' => $msgs,
+            'thread_owner' => (string)($conv['thread_owner'] ?? 'meta_agent'),
+        ]);
     }
 
     public function start() {
@@ -157,65 +164,61 @@ class Whatsapp extends Sk_Base {
             'raw_json'      => json_encode($result['data'] ?? $result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ]);
 
+        // Sending from the app takes thread control from Meta Business Agent.
+        if ($ok) {
+            $this->Sk_Vendor_meta_agent_model->set_conversation_owner($convId, 'app', 'admin_send');
+        }
+
         return $this->json([
             'success' => $ok,
             'message' => $ok ? 'Sent.' : ($result['message'] ?? 'Send failed.'),
+            'thread_owner' => $ok ? 'app' : ($conv['thread_owner'] ?? 'meta_agent'),
         ]);
+    }
+
+    /**
+     * Take or release Meta Business Agent thread control for a conversation.
+     */
+    public function thread_control() {
+        $convId = (int)$this->input->post('conversation_id');
+        $action = strtolower(trim((string)$this->input->post('action', TRUE)));
+        if (!in_array($action, ['take', 'release'], true)) {
+            return $this->json(['success' => false, 'message' => 'action must be take or release.']);
+        }
+        $conv = $this->Sk_Whatsapp_cloud_model->get_conversation($convId);
+        if (!$conv) {
+            return $this->json(['success' => false, 'message' => 'Conversation not found.']);
+        }
+        $phoneId = trim((string)($conv['phone_number_id'] ?? ''));
+        if ($phoneId === '') {
+            $settings = $this->Sk_Admin_model->get_settings();
+            $cfg = sk_wa_cloud_config($settings, (int)($conv['vendor_id'] ?? 0) ?: null);
+            $phoneId = trim((string)($cfg['phone_number_id'] ?? ''));
+        }
+        if ($phoneId === '') {
+            return $this->json(['success' => false, 'message' => 'Missing phone_number_id for this chat.']);
+        }
+        $settings = $this->Sk_Admin_model->get_settings();
+        $res = sk_meta_ba_thread_control($phoneId, (string)$conv['phone'], $action, $settings);
+        if (!empty($res['ok'])) {
+            $owner = $action === 'release' ? 'meta_agent' : 'app';
+            $this->Sk_Vendor_meta_agent_model->set_conversation_owner($convId, $owner, 'thread_control_' . $action);
+        }
+        return $this->json([
+            'success' => !empty($res['ok']),
+            'message' => $res['ok'] ? ('Thread ' . $action . ' completed.') : ($res['error'] ?? 'Thread control failed'),
+            'thread_owner' => $action === 'release' ? 'meta_agent' : 'app',
+            'data' => $res['data'],
+        ], !empty($res['ok']) ? 200 : 400);
     }
 
     public function ai() {
-        $vid = $this->_resolve_ops_vendor_id();
-        $data['title'] = 'WhatsApp AI';
-        $data['vendor_id'] = $vid;
-        $data['vendors'] = [];
-        if ($this->is_super_admin()) {
-            $data['vendors'] = $this->db->select('id, business_name, owner_name')
-                ->order_by('id', 'ASC')
-                ->get('vendors')
-                ->result_array();
-        }
-        $row = $vid > 0 ? sk_wa_ai_vendor_row($vid) : null;
-        $data['ai'] = [
-            'enabled'       => $row['enabled'] ?? '0',
-            'provider'      => $row['provider'] ?? 'openai',
-            'openai_model'  => $row['openai_model'] ?? 'gpt-4.1-mini',
-            'gemini_model'  => $row['gemini_model'] ?? 'gemini-3.8-flash',
-            'has_openai'    => $row && trim((string)$row['openai_key']) !== '',
-            'has_gemini'    => $row && trim((string)$row['gemini_key']) !== '',
-        ];
-        $this->render('whatsapp/ai', $data);
+        // Legacy OpenAI/Gemini WhatsApp AI page removed — Meta Business Agent owns replies.
+        redirect('admin/meta/agent');
     }
 
     public function ai_save() {
-        if (strtoupper((string)$this->input->server('REQUEST_METHOD')) !== 'POST') {
-            redirect('shopkart/whatsapp/ai');
-            return;
-        }
-        $vid = $this->_resolve_ops_vendor_id();
-        if ($vid < 1) {
-            $this->session->set_flashdata('error', 'Choose a vendor before saving AI credentials.');
-            redirect('shopkart/whatsapp/ai');
-            return;
-        }
-        $existing = sk_wa_ai_vendor_row($vid);
-        $openai = trim((string)$this->input->post('openai_key', FALSE));
-        $gemini = trim((string)$this->input->post('gemini_key', FALSE));
-        if ($openai === '') {
-            $openai = (string)$existing['openai_key'];
-        }
-        if ($gemini === '') {
-            $gemini = (string)$existing['gemini_key'];
-        }
-        sk_wa_ai_vendor_save($vid, [
-            'enabled'       => $this->input->post('enabled') ? '1' : '0',
-            'provider'      => (string)$this->input->post('provider', TRUE),
-            'openai_key'    => $openai,
-            'openai_model'  => (string)$this->input->post('openai_model', TRUE),
-            'gemini_key'    => $gemini,
-            'gemini_model'  => (string)$this->input->post('gemini_model', TRUE),
-        ]);
-        $this->session->set_flashdata('success', 'AI credentials saved for this vendor.');
-        redirect('shopkart/whatsapp/ai' . ($this->is_super_admin() ? '?vendor_id=' . $vid : ''));
+        redirect('admin/meta/agent');
     }
 
     public function templates() {

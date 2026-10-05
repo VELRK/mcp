@@ -2,12 +2,22 @@
 // ── CORS headers — must be first, before any output ──────────────────────────
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Session-ID');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Session-ID, X-Api-Key, X-MCP-Token');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Load root .env into getenv() before CodeIgniter boots (no secrets in PHP files).
+$skDotenv = __DIR__ . DIRECTORY_SEPARATOR . 'application' . DIRECTORY_SEPARATOR . 'helpers' . DIRECTORY_SEPARATOR . 'sk_dotenv_helper.php';
+if (is_file($skDotenv)) {
+	require_once $skDotenv;
+	if (!defined('FCPATH')) {
+		define('FCPATH', __DIR__ . DIRECTORY_SEPARATOR);
+	}
+	sk_dotenv_load(__DIR__ . DIRECTORY_SEPARATOR . '.env');
+}
 
 /**
  * CodeIgniter

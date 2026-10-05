@@ -464,6 +464,7 @@ $route['admin/whatsapp/conversations'] = 'admin/Whatsapp/conversations';
 $route['admin/whatsapp/thread/(:num)'] = 'admin/Whatsapp/thread/$1';
 $route['admin/whatsapp/send'] = 'admin/Whatsapp/send';
 $route['admin/whatsapp/start'] = 'admin/Whatsapp/start';
+$route['admin/whatsapp/thread_control']['POST'] = 'admin/Whatsapp/thread_control';
 $route['admin/whatsapp/ai'] = 'admin/Whatsapp/ai';
 $route['admin/whatsapp/ai/save'] = 'admin/Whatsapp/ai_save';
 $route['admin/whatsapp/templates'] = 'admin/Whatsapp/templates';
@@ -528,6 +529,8 @@ $route['admin/meta/connect'] = 'admin/Meta/connect';
 $route['admin/meta/callback'] = 'admin/Meta/callback';
 $route['admin/meta/exchange'] = 'admin/Meta/exchange';
 $route['admin/meta/save_app'] = 'admin/Meta/save_app';
+$route['admin/meta/agent'] = 'admin/Meta_agent/index';
+$route['admin/meta/agent/action']['POST'] = 'admin/Meta_agent/action';
 
 $route['admin/whatsapp_requests'] = 'admin/Whatsapp_requests/index';
 $route['admin/whatsapp_requests/submit'] = 'admin/Whatsapp_requests/submit';
@@ -654,7 +657,12 @@ $route['shopkart-api/order/(:num)/invoice/download']['GET'] = 'api/Sk_Order/invo
 $route['shopkart-api/shipping/track']['POST'] = 'api/Sk_Shipping/track';
 $route['shopkart-api/whatsapp/webhook']['GET']  = 'api/Sk_Whatsapp_webhook/index';
 $route['shopkart-api/whatsapp/webhook']['POST'] = 'api/Sk_Whatsapp_webhook/index';
-$route['shopkart-api/whatsapp/mcp']['POST']     = 'api/Sk_Whatsapp_webhook/mcp';
+// Meta Business Agent commerce connectors (API key auth; tenant from phone_number_id)
+$route['shopkart-api/meta-agent/connectors/(:any)/search_products']['POST']    = 'api/Sk_Meta_agent_connectors/search_products/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/check_stock']['POST']        = 'api/Sk_Meta_agent_connectors/check_stock/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_order_status']['POST']   = 'api/Sk_Meta_agent_connectors/get_order_status/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_delivery_status']['POST']= 'api/Sk_Meta_agent_connectors/get_delivery_status/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/human_handoff']['POST']      = 'api/Sk_Meta_agent_connectors/human_handoff/$1';
 // Promo
 $route['shopkart-api/apply-coupon']['POST'] = 'api/Sk_Promo/apply';
 // Payment

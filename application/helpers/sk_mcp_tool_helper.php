@@ -621,13 +621,50 @@ function sk_ai_get_delivery_status(int $orderId, ?int $tenantId = null): array {
 
 function sk_ai_human_handoff(array $context = [], ?int $tenantId = null): array {
     $data = is_array($context) ? $context : [];
+    $reason = trim((string)($data['reason'] ?? 'Customer requested human support.'));
+    $phone = trim((string)($data['customer_phone'] ?? $data['phone'] ?? ''));
+    $conversationId = 0;
+    try {
+        $CI =& get_instance();
+        if (!isset($CI->Sk_Whatsapp_cloud_model)) {
+            $CI->load->model('Sk_Whatsapp_cloud_model');
+        }
+        if (!isset($CI->Sk_Vendor_meta_agent_model)) {
+            $CI->load->model('Sk_Vendor_meta_agent_model');
+        }
+        $CI->Sk_Vendor_meta_agent_model->ensure_schema();
+        if ($phone !== '' && function_exists('sk_wa_cloud_normalize_phone')) {
+            $phone = sk_wa_cloud_normalize_phone($phone);
+            $conv = $CI->Sk_Whatsapp_cloud_model->find_or_create_conversation(
+                $phone,
+                '',
+                $tenantId && $tenantId > 0 ? $tenantId : null,
+                trim((string)($data['phone_number_id'] ?? '')) ?: null
+            );
+            $conversationId = (int)($conv['id'] ?? 0);
+            if ($conversationId > 0) {
+                $CI->Sk_Vendor_meta_agent_model->set_conversation_owner($conversationId, 'human', $reason);
+                $CI->db->where('id', $conversationId)->update('wa_cloud_conversations', [
+                    'unread'         => (int)($conv['unread'] ?? 0) + 1,
+                    'last_message'   => 'Handoff: ' . mb_substr($reason, 0, 180),
+                    'last_direction' => 'in',
+                    'last_at'        => date('Y-m-d H:i:s'),
+                    'updated_at'     => date('Y-m-d H:i:s'),
+                ]);
+            }
+        }
+    } catch (Throwable $e) {
+        log_message('error', 'sk_ai_human_handoff: ' . $e->getMessage());
+    }
     return [
         'success' => true,
         'data' => [
             'tenant_id' => $tenantId ?? 0,
+            'conversation_id' => $conversationId,
             'handoff_to' => 'human_agent',
-            'reason' => trim((string)($data['reason'] ?? 'Customer requested human support.')),
-            'customer_phone' => trim((string)($data['customer_phone'] ?? $data['phone'] ?? '')),
+            'thread_owner' => 'human',
+            'reason' => $reason,
+            'customer_phone' => $phone,
             'message' => 'The customer has been routed to a human support agent.',
         ],
         'error' => null,

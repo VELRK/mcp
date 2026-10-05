@@ -23,7 +23,7 @@ class Settings extends Sk_Base {
             }
         }
         try {
-            $data['title']    = 'Settings - 2DEAL Admin';
+            $data['title']    = 'Settings - Talk AI Pilot Admin';
             $data['settings'] = $this->Sk_Admin_model->get_settings();
             $this->render('settings/index', $data);
         } catch (Throwable $e) {
@@ -42,7 +42,7 @@ class Settings extends Sk_Base {
 
         $settings = $this->Sk_Admin_model->get_settings();
         $data = [
-            'title' => 'Settings - 2DEAL Admin',
+            'title' => 'Settings - Talk AI Pilot Admin',
             'settings' => $settings,
             'sql_query' => '',
             'sql_result' => null,
@@ -138,8 +138,6 @@ class Settings extends Sk_Base {
             'whatsapp_number',
             'askeva_api_url', 'askeva_api_token', 'askeva_order_template', 'askeva_template_lang',
             'wa_cloud_verify_token',
-            'wa_mcp_url', 'wa_mcp_token', 'wa_mcp_timeout',
-            'wa_ai_provider', 'wa_ai_openai_key', 'wa_ai_openai_model', 'wa_ai_gemini_key', 'wa_ai_gemini_model',
             'saas_billing_token', 'saas_default_vendor_id', 'saas_cron_key',
             'company_legal_name', 'gstin', 'pan_no', 'state_code', 'invoice_prefix', 'invoice_footer',
             'isms_username', 'isms_password', 'isms_api_key', 'isms_sender_id', 'isms_message',
@@ -149,8 +147,7 @@ class Settings extends Sk_Base {
             'isms_password', 'isms_api_key', 'smtp_pass', 'razorpay_key_secret',
             'razorpay_webhook_secret',
             'askeva_api_token',
-            'wa_mcp_token', 'saas_billing_token', 'saas_cron_key',
-            'wa_ai_openai_key', 'wa_ai_gemini_key',
+            'saas_billing_token', 'saas_cron_key',
         ];
         $preserve_if_empty = $raw_fields;
 
@@ -188,24 +185,9 @@ class Settings extends Sk_Base {
         $settingsTab = trim((string)$this->input->post('settings_tab'));
         if ($settingsTab === 'wacloud' || $this->input->post('wa_cloud_verify_token') !== null) {
             $data['wa_cloud_enabled'] = $this->input->post('wa_cloud_enabled') ? '1' : '0';
-            $data['wa_mcp_enabled'] = $this->input->post('wa_mcp_enabled') ? '1' : '0';
-            if (($this->admin['role'] ?? '') !== 'vendor') {
-                $data['wa_ai_enabled'] = $this->input->post('wa_ai_enabled') ? '1' : '0';
-                $postedProvider = strtolower(trim((string)$this->input->post('wa_ai_provider', TRUE)));
-                if (in_array($postedProvider, ['openai', 'gemini'], true)) {
-                    $data['wa_ai_provider'] = $postedProvider;
-                }
-            }
-        }
-        if (($this->admin['role'] ?? '') === 'vendor') {
-            unset(
-                $data['wa_ai_provider'],
-                $data['wa_ai_openai_key'],
-                $data['wa_ai_openai_model'],
-                $data['wa_ai_gemini_key'],
-                $data['wa_ai_gemini_model'],
-                $data['wa_ai_enabled']
-            );
+            // Legacy local AI / external MCP reply engines removed — Meta Business Agent owns replies.
+            $data['wa_mcp_enabled'] = '0';
+            $data['wa_ai_enabled'] = '0';
         }
 
         // Always persist Askeva text fields when present (including empty template).
@@ -303,7 +285,7 @@ class Settings extends Sk_Base {
                 $details[] = 'No password or API key saved — re-enter credentials and click Test again.';
             }
             if ($diag['looks_like_email']) {
-                $details[] = 'Username looks like an email. iSMS API needs your account username from the portal profile (e.g. 2Deal), not your email.';
+                $details[] = 'Username looks like an email. iSMS API needs your account username from the portal profile (e.g. 2DEAL1), not your email.';
             }
             if ($diag['secret_saved']) {
                 $details[] = 'Stored username: ' . sk_isms_mask_username($diag['username'])
@@ -354,7 +336,7 @@ class Settings extends Sk_Base {
         }
 
         $to = trim($settings['admin_email'] ?? '') ?: trim($settings['site_email'] ?? $this->admin['email'] ?? '');
-        $site = $settings['site_name'] ?? '2DEAL';
+        $site = $settings['site_name'] ?? 'Talk AI Pilot';
         $sent = sk_send_mail(
             $to,
             $this->admin['name'] ?? 'Admin',

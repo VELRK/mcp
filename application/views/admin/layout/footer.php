@@ -2,9 +2,12 @@
         </div> <!-- page-content -->
         <footer class="footer">
             <div class="container-fluid">
-                <div class="row">
+                <div class="row align-items-center">
                     <div class="col-sm-6">
-                        <script>document.write(new Date().getFullYear())</script> © 2DEAL.
+                        <script>document.write(new Date().getFullYear())</script> © Talk AI Pilot.
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-sm-end d-none d-sm-block">Talk AI Pilot</div>
                     </div>
                 </div>
             </div>

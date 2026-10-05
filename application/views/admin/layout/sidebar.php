@@ -1,164 +1,169 @@
 <?php
-$uri = $this->uri->segment(2); // e.g. 'dashboard', 'products'
+$admin = $admin ?? [];
+$vendor_context = $vendor_context ?? null;
+$uri = (string) $this->uri->segment(2);
+$uri3 = (string) $this->uri->segment(3);
 if (!function_exists('sk_active')) {
-  function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
+    function sk_active($seg, $match) { return $seg === $match ? 'active' : ''; }
 }
+$is_super = empty($impersonating) && empty($vendor_logged_in) && ($admin['role'] ?? '') === 'superadmin';
+$is_vendor = !empty($impersonating) || (!empty($vendor_context) && $vendor_context->vendor_id());
+$open = static function (array $keys) use ($uri) {
+    return in_array($uri, $keys, true) ? 'mm-active' : '';
+};
 ?>
-    <!-- Start Sidebar -->
-    <div class="app-menu navbar-menu">
-        <!-- LOGO -->
-        <div class="navbar-brand-box text-center">
-            <a href="<?= site_url('shopkart/dashboard') ?>" class="logo logo-dark">
-                <span class="logo-sm">
-                    <h4 class="mt-4 mb-0 text-white"><i class="bi bi-bag-heart-fill text-warning"></i></h4>
-                </span>
-                <span class="logo-lg">
-                    <h4 class="mt-4 mb-0 text-white"><i class="bi bi-bag-heart-fill text-warning me-1"></i> 2DEAL</h4>
-                </span>
-            </a>
-            <a href="<?= site_url('shopkart/dashboard') ?>" class="logo logo-light">
-                <span class="logo-sm">
-                    <h4 class="mt-4 mb-0 text-white"><i class="bi bi-bag-heart-fill text-warning"></i></h4>
-                </span>
-                <span class="logo-lg">
-                    <h4 class="mt-4 mb-0 text-white"><i class="bi bi-bag-heart-fill text-warning me-1"></i> 2DEAL</h4>
-                </span>
-            </a>
-        </div>
-
-        <div data-simplebar class="h-100">
-            <!--- Sidemenu -->
+    <div class="sidebar-left">
+        <div class="sidebar-slide h-100" data-simplebar>
             <div id="sidebar-menu">
-                <ul class="metismenu list-unstyled" id="side-menu">
-                    <li class="menu-title">Main Menu</li>
-
-                    <li>
-                        <a href="<?= site_url('shopkart/dashboard') ?>" class="<?= sk_active($uri,'dashboard') ?>">
-                            <i class="mdi mdi-speedometer"></i>
+                <ul class="left-menu list-unstyled" id="side-menu">
+                    <li class="<?= $open(['dashboard', '']) ?>">
+                        <a href="<?= site_url('admin/dashboard') ?>" class="<?= sk_active($uri, 'dashboard') ?>">
+                            <i data-eva="compass-outline"></i>
                             <span>Dashboard</span>
                         </a>
                     </li>
 
-                    <?php if (empty($impersonating) && empty($vendor_logged_in) && ($admin['role'] ?? '') === 'superadmin'): ?>
-                    <li class="menu-title">Marketplace</li>
-                    <li>
-                        <a href="<?= site_url('shopkart/vendors') ?>" class="<?= sk_active($uri,'vendors') ?>">
-                            <i class="mdi mdi-store"></i>
-                            <span>Vendors</span>
+                    <li class="menu-title">Store</li>
+                    <li class="<?= $open(['products']) ?>">
+                        <a href="javascript:void(0);" class="has-arrow">
+                            <i data-eva="shopping-bag-outline"></i>
+                            <span>Products</span>
+                        </a>
+                        <ul class="sub-menu" aria-expanded="false">
+                            <li><a href="<?= site_url('admin/products') ?>" class="<?= ($uri === 'products' && $uri3 !== 'add') ? 'active' : '' ?>">Product List</a></li>
+                            <li><a href="<?= site_url('admin/products/add') ?>" class="<?= ($uri === 'products' && $uri3 === 'add') ? 'active' : '' ?>">Create Product</a></li>
+                            <li><a href="<?= site_url('admin/categories') ?>">Categories</a></li>
+                            <li><a href="<?= site_url('admin/brands') ?>">Brands</a></li>
+                            <li><a href="<?= site_url('admin/inventory') ?>">Inventory</a></li>
+                            <li><a href="<?= site_url('admin/variant-units') ?>">Variant Units</a></li>
+                        </ul>
+                    </li>
+                    <li class="<?= $open(['orders']) ?>">
+                        <a href="<?= site_url('admin/orders') ?>" class="<?= sk_active($uri, 'orders') ?>">
+                            <i data-eva="shopping-cart-outline"></i>
+                            <span>Orders</span>
                         </a>
                     </li>
-                    <?php endif; ?>
-
-                    <?php if (!empty($impersonating) || (!empty($vendor_context) && $vendor_context->vendor_id())): ?>
+                    <li class="<?= $open(['customers']) ?>">
+                        <a href="<?= site_url('admin/customers') ?>" class="<?= sk_active($uri, 'customers') ?>">
+                            <i data-eva="people-outline"></i>
+                            <span>Customers</span>
+                        </a>
+                    </li>
                     <li>
-                        <a href="<?= site_url('shopkart/stores/edit/'.($vendor_context->vendor_id() ?? '')) ?>" class="<?= sk_active($uri,'stores') ?>">
-                            <i class="mdi mdi-store"></i>
-                            <span>My Store</span>
+                        <a href="<?= site_url('admin/banners') ?>" class="<?= sk_active($uri, 'banners') ?>">
+                            <i data-eva="image-outline"></i>
+                            <span>Banners</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="<?= site_url('admin/promo') ?>" class="<?= sk_active($uri, 'promo') ?>">
+                            <i data-eva="pricetags-outline"></i>
+                            <span>Promo Codes</span>
+                        </a>
+                    </li>
+
+                    <li class="menu-title">Apps</li>
+                    <li class="<?= $open(['whatsapp', 'whatsapp-report', 'whatsapp_requests', 'meta']) ?>">
+                        <a href="javascript:void(0);" class="has-arrow">
+                            <i data-eva="message-circle-outline"></i>
+                            <span>WhatsApp</span>
+                        </a>
+                        <ul class="sub-menu" aria-expanded="false">
+                            <li><a href="<?= site_url('admin/whatsapp') ?>" class="<?= ($uri === 'whatsapp' && $uri3 === '') ? 'active' : '' ?>">Inbox</a></li>
+                            <li><a href="<?= site_url('admin/whatsapp/templates') ?>">Templates</a></li>
+                            <li><a href="<?= site_url('admin/whatsapp/campaigns') ?>">Campaigns</a></li>
+                            <li><a href="<?= site_url('admin/whatsapp-report') ?>">Delivery report</a></li>
+                            <li><a href="<?= site_url('admin/meta/agent') ?>" class="<?= ($uri === 'meta' && $uri3 === 'agent') ? 'active' : '' ?>">Meta Business Agent</a></li>
+                            <?php if ($is_super): ?>
+                            <li><a href="<?= site_url('admin/whatsapp_requests/pending') ?>">Numbers</a></li>
+                            <li><a href="<?= site_url('admin/meta') ?>">Meta connect</a></li>
+                            <?php else: ?>
+                            <li><a href="<?= site_url('admin/whatsapp_requests') ?>">My numbers</a></li>
+                            <?php endif; ?>
+                        </ul>
+                    </li>
+                    <li>
+                        <a href="<?= site_url('admin/automation_tasks') ?>" class="<?= sk_active($uri, 'automation_tasks') ?>">
+                            <i data-eva="flash-outline"></i>
+                            <span>Automation</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="<?= site_url('admin/notifications') ?>" class="<?= sk_active($uri, 'notifications') ?>">
+                            <i data-eva="bell-outline"></i>
+                            <span>Notifications</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="<?= site_url('admin/contacts') ?>" class="<?= sk_active($uri, 'contacts') ?>">
+                            <i data-eva="email-outline"></i>
+                            <span>Contacts</span>
+                        </a>
+                    </li>
+
+                    <?php if ($is_vendor): ?>
+                    <li class="menu-title">My Store</li>
+                    <li>
+                        <a href="<?= site_url('admin/stores/edit/'.($vendor_context->vendor_id() ?? '')) ?>" class="<?= sk_active($uri, 'stores') ?>">
+                            <i data-eva="home-outline"></i>
+                            <span>Store settings</span>
                         </a>
                     </li>
                     <?php if (!empty($vendor_logged_in)): ?>
                     <li>
-                        <a href="<?= site_url('admin/vendor/account/password') ?>" class="<?= strpos((string) uri_string(), 'vendor/account') !== false ? 'active' : '' ?>">
-                            <i class="mdi mdi-shield-lock"></i>
+                        <a href="<?= site_url('admin/vendor/account/password') ?>">
+                            <i data-eva="lock-outline"></i>
                             <span>Change Password</span>
                         </a>
                     </li>
                     <?php endif; ?>
                     <?php endif; ?>
 
-                    <li class="menu-title">Catalog</li>
+                    <?php if ($is_super): ?>
+                    <li class="menu-title">Admin</li>
                     <li>
-                        <a href="<?= site_url('shopkart/products') ?>" class="<?= sk_active($uri,'products') ?>">
-                            <i class="mdi mdi-package-variant"></i>
-                            <span>Products</span>
+                        <a href="<?= site_url('admin/vendors') ?>" class="<?= sk_active($uri, 'vendors') ?>">
+                            <i data-eva="briefcase-outline"></i>
+                            <span>Vendors</span>
                         </a>
                     </li>
                     <li>
-                        <a href="<?= site_url('shopkart/inventory') ?>" class="<?= sk_active($uri,'inventory') ?>">
-                            <i class="mdi mdi-clipboard-list"></i>
-                            <span>Inventory</span>
+                        <a href="<?= site_url('admin/reports') ?>" class="<?= sk_active($uri, 'reports') ?>">
+                            <i data-eva="bar-chart-outline"></i>
+                            <span>Reports</span>
                         </a>
                     </li>
                     <li>
-                        <a href="<?= site_url('shopkart/categories') ?>" class="<?= sk_active($uri,'categories') ?>">
-                            <i class="mdi mdi-sitemap"></i>
-                            <span>Categories</span>
+                        <a href="<?= site_url('admin/saas-billing') ?>" class="<?= sk_active($uri, 'saas-billing') ?>">
+                            <i data-eva="credit-card-outline"></i>
+                            <span>SaaS Billing</span>
                         </a>
                     </li>
                     <li>
-                        <a href="<?= site_url('shopkart/brands') ?>" class="<?= sk_active($uri,'brands') ?>">
-                            <i class="mdi mdi-tag"></i>
-                            <span>Brands</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="<?= site_url('shopkart/variant-units') ?>" class="<?= sk_active($uri,'variant-units') ?>">
-                            <i class="mdi mdi-ruler"></i>
-                            <span>Variant Units</span>
-                        </a>
-                    </li>
-
-                    <li class="menu-title">Orders & Content</li>
-                    <li>
-                        <a href="<?= site_url('shopkart/orders') ?>" class="<?= sk_active($uri,'orders') ?>">
-                            <i class="mdi mdi-cart"></i>
-                            <span>Orders</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="<?= site_url('shopkart/banners') ?>" class="<?= sk_active($uri,'banners') ?>">
-                            <i class="mdi mdi-image-multiple"></i>
-                            <span>Banners</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="<?= site_url('shopkart/promos') ?>" class="<?= sk_active($uri,'promos') ?>">
-                            <i class="mdi mdi-ticket-percent"></i>
-                            <span>Promo Codes</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="<?= site_url('shopkart/customers') ?>" class="<?= sk_active($uri,'customers') ?>">
-                            <i class="mdi mdi-account-group"></i>
-                            <span>Customers</span>
-                        </a>
-                    </li>
-
-                    <?php if (empty($impersonating) && empty($vendor_logged_in) && ($admin['role'] ?? '') === 'superadmin'): ?>
-                    <li class="menu-title">Settings</li>
-                    <li>
-                        <a href="<?= site_url('shopkart/settings') ?>" class="<?= sk_active($uri,'settings') ?>">
-                            <i class="mdi mdi-cog"></i>
-                            <span>Site Settings</span>
+                        <a href="<?= site_url('admin/settings') ?>" class="<?= sk_active($uri, 'settings') ?>">
+                            <i data-eva="settings-outline"></i>
+                            <span>Settings</span>
                         </a>
                     </li>
                     <?php endif; ?>
                 </ul>
             </div>
-            <!-- Sidebar -->
         </div>
     </div>
-    <!-- End Sidebar -->
 
-    <!-- ============================================================== -->
-    <!-- Start right Content here -->
-    <!-- ============================================================== -->
     <div class="main-content">
         <div class="page-content">
             <div class="container-fluid">
-                
-                <!-- Flash Messages -->
-                <div class="sk-flash-area mb-3">
                 <?php if ($this->session->flashdata('success')): ?>
-                <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-                    <i class="mdi mdi-check-circle me-1"></i> <?= $this->session->flashdata('success') ?>
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <?= $this->session->flashdata('success') ?>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
                 <?php endif; ?>
                 <?php if ($this->session->flashdata('error')): ?>
-                <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-                    <i class="mdi mdi-alert-circle me-1"></i> <?= $this->session->flashdata('error') ?>
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <?= $this->session->flashdata('error') ?>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
                 <?php endif; ?>
-                </div>

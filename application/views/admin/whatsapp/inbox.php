@@ -1,12 +1,11 @@
-<link rel="stylesheet" href="<?= base_url('assets/admin/css/whatsapp-cloud.css') ?>">
-<div class="sk-page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-  <h5 class="sk-page-title mb-0"><i class="bi bi-whatsapp me-2 text-success"></i>WhatsApp Inbox</h5>
-  <div class="d-flex gap-2">
-    <a href="<?= site_url('shopkart/whatsapp/templates') ?>" class="btn btn-sm btn-outline-success">Templates</a>
-    <a href="<?= site_url('shopkart/whatsapp/campaigns') ?>" class="btn btn-sm btn-outline-success">Campaigns</a>
-    <a href="<?= site_url('admin/settings?tab=wacloud') ?>" class="btn btn-sm btn-outline-secondary">Meta API</a>
-  </div>
-</div>
+<?php
+$page_title = 'Chat';
+$breadcrumb = [
+    ['label' => 'Apps', 'url' => site_url('admin/whatsapp')],
+    'Chat',
+];
+$this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb'));
+?>
 
 <?php if (empty($ready)): ?>
 <div class="alert alert-warning">
@@ -15,55 +14,87 @@
 </div>
 <?php endif; ?>
 
-<div class="wa-app" id="waApp"
+<div class="d-flex flex-wrap gap-2 justify-content-end mb-3">
+  <a href="<?= site_url('admin/whatsapp/templates') ?>" class="btn btn-sm btn-light">Templates</a>
+  <a href="<?= site_url('admin/whatsapp/campaigns') ?>" class="btn btn-sm btn-light">Campaigns</a>
+  <a href="<?= site_url('admin/meta/agent') ?>" class="btn btn-sm btn-success">Meta Business Agent</a>
+</div>
+
+<div class="d-flex flex-wrap flex-xl-nowrap gap-xl-4 main-chat-content" id="waApp"
      data-conv-url="<?= site_url('admin/whatsapp/conversations') ?>"
      data-thread-url="<?= site_url('admin/whatsapp/thread') ?>"
      data-send-url="<?= site_url('admin/whatsapp/send') ?>"
-     data-start-url="<?= site_url('admin/whatsapp/start') ?>">
-  <aside class="wa-side">
-    <div class="wa-side-head">
-      <h6>Chats</h6>
-      <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#waStartModal">
-        <i class="bi bi-plus-lg"></i>
-      </button>
-    </div>
-    <div class="wa-search">
-      <input type="search" id="waSearch" class="form-control form-control-sm" placeholder="Search name or number">
-    </div>
-    <div class="wa-list" id="waList"></div>
-  </aside>
-  <section class="wa-main">
-    <div class="wa-main-head" id="waHead">
-      <div class="wa-avatar">WA</div>
-      <div>
-        <div class="fw-semibold" id="waHeadName">Select a chat</div>
-        <div class="small text-muted" id="waHeadPhone"></div>
+     data-start-url="<?= site_url('admin/whatsapp/start') ?>"
+     data-control-url="<?= site_url('admin/whatsapp/thread_control') ?>">
+  <div class="chat-contact flex-grow-0">
+    <div class="card chat-wrapper overflow-hidden">
+      <div class="d-flex gap-3 p-4">
+        <div class="app-search w-100">
+          <div class="position-relative">
+            <input type="search" id="waSearch" class="form-control" placeholder="Search Here..">
+            <i data-eva="search-outline" class="align-middle"></i>
+          </div>
+        </div>
+        <div class="flex-shrink-0">
+          <button type="button" class="btn btn-outline-light btn-icon" data-bs-toggle="modal" data-bs-target="#waStartModal" aria-label="New chat">
+            <i class="mdi mdi-plus"></i>
+          </button>
+        </div>
       </div>
+      <h6 class="text-muted fw-normal mb-3 px-4 mt-1">Chats</h6>
+      <div class="rich-list rounded-0 rich-list-action" id="waList" data-simplebar style="max-height: 560px;"></div>
     </div>
-    <div class="wa-thread" id="waThread">
-      <div class="wa-empty">Choose a conversation or start a new chat.</div>
+  </div>
+
+  <div class="w-100 chat-area">
+    <div class="card chat-wrapper overflow-hidden">
+      <div class="p-4 d-flex flex-wrap gap-2 align-items-center justify-content-between border-bottom" id="waHead">
+        <div class="d-flex align-items-end gap-3">
+          <div class="avatar-xs avatar avatar-circle bg-primary-subtle text-primary fw-semibold d-flex align-items-center justify-content-center" id="waHeadInitial">WA</div>
+          <div>
+            <span class="mb-0 text-body d-block lh-1 fw-semibold" id="waHeadName">Select a chat</span>
+            <small class="text-muted" id="waHeadPhone"></small>
+            <small class="d-block mt-1" id="waThreadOwner"></small>
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-1" id="waControlBtns">
+          <button type="button" class="btn btn-sm btn-outline-primary" id="waTakeBtn" disabled>Take control</button>
+          <button type="button" class="btn btn-sm btn-outline-success" id="waReleaseBtn" disabled>Release to AI</button>
+        </div>
+      </div>
+      <div class="chat-conversation" data-simplebar style="max-height: 480px;">
+        <div class="p-4 h-100">
+          <div class="chat" id="waThread">
+            <div class="text-center text-muted py-5">Choose a conversation or start a new chat.</div>
+          </div>
+        </div>
+      </div>
+      <form id="waComposer" enctype="multipart/form-data">
+        <input type="hidden" name="conversation_id" id="waConvId" value="">
+        <input type="hidden" name="type" id="waType" value="text">
+        <div class="px-4 pt-3">
+          <select id="waTemplate" class="form-select form-select-sm">
+            <option value="">Send approved template…</option>
+            <?php foreach (($templates ?? []) as $t): ?>
+              <option value="<?= (int) $t['id'] ?>"><?= htmlspecialchars($t['name']) ?> (<?= htmlspecialchars($t['kind']) ?> · <?= htmlspecialchars($t['status']) ?>)</option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="px-5 py-4 bg-body-secondary position-relative border-top d-flex">
+          <div class="position-relative d-flex align-items-center gap-3 w-100">
+            <textarea name="body" id="waBody" class="form-control" placeholder="Type a message..." rows="1"></textarea>
+            <label class="text-muted position-relative mb-0" title="Attach File">
+              <i class="mdi mdi-paperclip fs-20"></i>
+              <input type="file" name="media" id="waMedia" class="position-absolute top-0 start-0 w-100 h-100 opacity-0" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" title="Attach">
+            </label>
+            <button type="submit" class="btn btn-primary btn-icon" <?= empty($ready) ? 'disabled' : '' ?> aria-label="Send">
+              <i class="mdi mdi-send"></i>
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
-    <div class="wa-tpl-bar">
-      <select id="waTemplate" class="form-select form-select-sm">
-        <option value="">Send approved template…</option>
-        <?php foreach (($templates ?? []) as $t): ?>
-          <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars($t['name']) ?> (<?= htmlspecialchars($t['kind']) ?> · <?= htmlspecialchars($t['status']) ?>)</option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <form class="wa-composer" id="waComposer" enctype="multipart/form-data">
-      <input type="hidden" name="conversation_id" id="waConvId" value="">
-      <input type="hidden" name="type" id="waType" value="text">
-      <label class="btn btn-light btn-sm mb-0" title="Image, video, audio or file">
-        <i class="bi bi-paperclip"></i>
-        <input type="file" name="media" id="waMedia" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" hidden>
-      </label>
-      <textarea name="body" id="waBody" placeholder="Type a message" rows="1"></textarea>
-      <button type="submit" class="btn btn-wa" <?= empty($ready) ? 'disabled' : '' ?>>
-        <i class="bi bi-send-fill"></i>
-      </button>
-    </form>
-  </section>
+  </div>
 </div>
 
 <div class="modal fade" id="waStartModal" tabindex="-1">
@@ -80,7 +111,7 @@
         <input type="text" name="name" class="form-control">
       </div>
       <div class="modal-footer">
-        <button type="submit" class="btn btn-success">Open chat</button>
+        <button type="submit" class="btn btn-primary">Open chat</button>
       </div>
     </form>
   </div>
@@ -94,8 +125,39 @@
   var threadUrl = app.dataset.threadUrl;
   var sendUrl = app.dataset.sendUrl;
   var startUrl = app.dataset.startUrl;
+  var controlUrl = app.dataset.controlUrl;
   var activeId = 0;
   var lastMsgId = 0;
+
+  function setThreadOwner(owner) {
+    var el = document.getElementById('waThreadOwner');
+    var take = document.getElementById('waTakeBtn');
+    var release = document.getElementById('waReleaseBtn');
+    var label = owner || 'meta_agent';
+    var map = { meta_agent: 'Owner: Meta Business Agent', app: 'Owner: App / teammate', human: 'Owner: Human handoff' };
+    if (el) {
+      el.textContent = map[label] || ('Owner: ' + label);
+      el.className = 'd-block mt-1 small ' + (label === 'meta_agent' ? 'text-success' : 'text-primary');
+    }
+    if (take) take.disabled = !activeId || label === 'app' || label === 'human';
+    if (release) release.disabled = !activeId || label === 'meta_agent';
+  }
+  function threadControl(action) {
+    if (!activeId || !controlUrl) return;
+    var fd = new FormData();
+    fd.append('conversation_id', String(activeId));
+    fd.append('action', action);
+    fetch(controlUrl, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.success) { alert(d.message || 'Thread control failed'); return; }
+        setThreadOwner(d.thread_owner || (action === 'release' ? 'meta_agent' : 'app'));
+      });
+  }
+  var takeBtn = document.getElementById('waTakeBtn');
+  var releaseBtn = document.getElementById('waReleaseBtn');
+  if (takeBtn) takeBtn.addEventListener('click', function () { threadControl('take'); });
+  if (releaseBtn) releaseBtn.addEventListener('click', function () { threadControl('release'); });
 
   function esc(s) {
     return String(s || '').replace(/[&<>"']/g, function (c) {
@@ -120,67 +182,69 @@
   }
   function renderList(rows) {
     var box = document.getElementById('waList');
+    var target = box.querySelector('.simplebar-content') || box;
     if (!rows.length) {
-      box.innerHTML = '<div class="p-3 text-muted small">No chats yet.</div>';
+      target.innerHTML = '<div class="p-4 text-muted">No chats yet.</div>';
       return;
     }
-    box.innerHTML = rows.map(function (r) {
+    target.innerHTML = rows.map(function (r) {
       var unread = Number(r.unread || 0);
-      return '<div class="wa-item' + (Number(r.id) === activeId ? ' active' : '') + '" data-id="' + r.id + '">'
-        + '<div class="wa-avatar">' + esc(initials(r.name, r.phone)) + '</div>'
-        + '<div class="wa-item-body"><div class="wa-item-top"><span class="wa-item-name">'
-        + esc(r.name || r.phone) + '</span><span class="wa-item-time">'
-        + esc(clock(r.last_at)) + '</span></div>'
-        + '<div class="wa-item-preview">' + esc(r.last_message || '') + '</div></div>'
-        + (unread ? '<span class="wa-unread">' + unread + '</span>' : '')
-        + '</div>';
+      return '<a href="#" class="rich-list-item px-4 border-bottom align-items-start' + (Number(r.id) === activeId ? ' active' : '') + '" data-id="' + r.id + '">'
+        + '<div class="rich-list-prepend"><div class="avatar-xs avatar avatar-circle bg-primary-subtle text-primary fw-semibold d-flex align-items-center justify-content-center">'
+        + esc(initials(r.name, r.phone)) + '</div></div>'
+        + '<div class="rich-list-content"><h6 class="rich-list-title">' + esc(r.name || r.phone) + '</h6>'
+        + '<span class="rich-list-subtitle">' + esc(r.last_message || '') + '</span></div>'
+        + '<div class="rich-list-append gap-1 flex-column align-items-end"><small class="text-muted">' + esc(clock(r.last_at)) + '</small>'
+        + (unread ? '<span class="badge badge-primary rounded-pill message-badge fs-11">' + unread + '</span>' : '')
+        + '</div></a>';
     }).join('');
-    box.querySelectorAll('.wa-item').forEach(function (el) {
-      el.addEventListener('click', function () { openThread(Number(el.dataset.id)); });
+    target.querySelectorAll('[data-id]').forEach(function (el) {
+      el.addEventListener('click', function (e) { e.preventDefault(); openThread(Number(el.dataset.id)); });
     });
   }
   function bubbleHtml(m) {
-    var cls = m.direction === 'out' ? 'out' : 'in';
+    var end = m.direction === 'out';
     var url = String(m.media_url || '');
     var http = url.indexOf('http') === 0;
     var media = '';
     var type = String(m.type || '');
     if (http && (type === 'image' || type === 'sticker')) {
-      media = '<img src="' + esc(url) + '" alt="">';
+      media = '<img src="' + esc(url) + '" alt="" class="rounded mb-2" style="max-width:220px;">';
     } else if (http && type === 'video') {
-      media = '<video src="' + esc(url) + '" controls playsinline></video>';
+      media = '<video src="' + esc(url) + '" controls playsinline class="rounded mb-2" style="max-width:220px;"></video>';
     } else if (http && type === 'audio') {
-      media = '<audio src="' + esc(url) + '" controls></audio>';
+      media = '<audio src="' + esc(url) + '" controls class="mb-2"></audio>';
     } else if (http && type === 'document') {
-      media = '<a class="wa-doc" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(m.body || 'Open file') + '</a>';
-    } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'document' || type === 'sticker') {
-      media = '<div class="wa-file">' + esc(type) + '</div>';
+      media = '<a class="d-block mb-2" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(m.body || 'Open file') + '</a>';
     }
     var label = String(m.body || '');
     var skipText = media && (label === '' || label.toLowerCase() === type || type === 'document');
-    return '<div class="wa-bubble ' + cls + '" data-mid="' + m.id + '">'
-      + media
-      + (skipText ? '' : (label ? '<div>' + esc(label).replace(/\n/g, '<br>') + '</div>' : ''))
-      + '<div class="wa-meta">' + esc(m.status || '') + ' · ' + esc(clock(m.created_at)) + ' IST</div>'
-      + '</div>';
+    return '<div class="chat-item ' + (end ? 'chat-item-end' : 'chat-item-start') + '" data-mid="' + m.id + '">'
+      + '<div class="chat-content">' + media
+      + (skipText ? '' : (label ? '<p class="chat-bubble">' + esc(label).replace(/\n/g, '<br>') + '</p>' : ''))
+      + '<span class="chat-time text-muted fs-12">' + esc(clock(m.created_at)) + (m.status ? ' · ' + esc(m.status) : '') + '</span>'
+      + '</div></div>';
   }
   function renderThread(payload, append) {
     var thread = document.getElementById('waThread');
     var msgs = payload.messages || [];
     if (!append) {
-      thread.innerHTML = msgs.length ? msgs.map(bubbleHtml).join('') : '<div class="wa-empty">No messages yet.</div>';
+      thread.innerHTML = msgs.length ? msgs.map(bubbleHtml).join('') : '<div class="text-center text-muted py-5">No messages yet.</div>';
       lastMsgId = msgs.length ? Number(msgs[msgs.length - 1].id) : 0;
-      thread.scrollTop = thread.scrollHeight;
     } else if (msgs.length) {
-      var empty = thread.querySelector('.wa-empty');
-      if (empty) empty.remove();
+      var empty = thread.querySelector('.text-muted');
+      if (empty && !msgs.length) empty.remove();
       msgs.forEach(function (m) { thread.insertAdjacentHTML('beforeend', bubbleHtml(m)); lastMsgId = Number(m.id); });
-      thread.scrollTop = thread.scrollHeight;
     }
+    var scroller = thread.closest('.simplebar-content-wrapper') || thread.parentElement;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
     if (payload.conversation) {
-      document.getElementById('waHeadName').textContent = payload.conversation.name || payload.conversation.phone;
+      var name = payload.conversation.name || payload.conversation.phone;
+      document.getElementById('waHeadName').textContent = name;
       document.getElementById('waHeadPhone').textContent = payload.conversation.phone;
+      document.getElementById('waHeadInitial').textContent = initials(payload.conversation.name, payload.conversation.phone);
       document.getElementById('waConvId').value = payload.conversation.id;
+      setThreadOwner(payload.thread_owner || payload.conversation.thread_owner || 'meta_agent');
     }
   }
   function loadList() {

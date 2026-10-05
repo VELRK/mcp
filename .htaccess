@@ -1,6 +1,16 @@
 Options -MultiViews
 DirectoryIndex index.php index.html
 
+# Block secret / env files from HTTP access
+<FilesMatch "^(\.env|\.env\..*|composer\.(json|lock)|package(-lock)?\.json)$">
+    Require all denied
+</FilesMatch>
+<IfModule mod_authz_core.c>
+    <Files ".env">
+        Require all denied
+    </Files>
+</IfModule>
+
 RewriteEngine On
 # Do not set RewriteBase / — that sends /mcp/ rewrites to htdocs root.
 # Relative [R=301] on Windows Apache becomes C:/xampp/htdocs/... (403 Forbidden).
@@ -20,7 +30,7 @@ RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 <IfModule mod_headers.c>
     Header always set Access-Control-Allow-Origin "*"
     Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Auth-Token, X-Requested-With, X-Session-ID"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Auth-Token, X-Requested-With, X-Session-ID, X-Api-Key, X-MCP-Token"
 </IfModule>
 
 RewriteCond %{REQUEST_METHOD} OPTIONS

@@ -3,13 +3,19 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 require_once APPPATH . 'controllers/api/Sk_Base_Api.php';
 
+/**
+ * Meta WhatsApp Cloud webhook.
+ * With Meta Business Agent enabled, this app is standby: store history only;
+ * Meta Agent is the automatic responder. Handovers update thread ownership.
+ */
 class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
     public function __construct() {
         parent::__construct();
-        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp_mcp', 'sk_mcp_tool', 'sk_wa_ai']);
-        $this->load->model(['Sk_Whatsapp_cloud_model', 'Sk_Admin_model']);
+        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp_mcp', 'sk_meta_business_agent']);
+        $this->load->model(['Sk_Whatsapp_cloud_model', 'Sk_Admin_model', 'Sk_Vendor_meta_agent_model']);
         sk_wa_cloud_ensure_schema();
+        $this->Sk_Vendor_meta_agent_model->ensure_schema();
     }
 
     /** GET verify + POST incoming (Meta Cloud). */
@@ -19,56 +25,6 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return $this->_verify();
         }
         return $this->_ingest();
-    }
-
-    /**
-     * MCP push: convert structured MCP JSON to WhatsApp and send.
-     * POST /shopkart-api/whatsapp/mcp
-     * Header: Authorization: Bearer {wa_mcp_token}  or  X-MCP-Token
-     * Body: { "to": "60...", "messages": [ { "type": "list"|"buttons"|"text"|"cta"|"image", ... } ] }
-     */
-    public function mcp() {
-        $settings = $this->Sk_Admin_model->get_settings();
-        $cfg = sk_wa_mcp_config($settings);
-        $token = $this->_mcp_request_token();
-        if ($cfg['token'] !== '' && !hash_equals($cfg['token'], $token)) {
-            $this->error('Invalid MCP token.', 403);
-            return;
-        }
-        $raw = json_decode((string)$this->input->raw_input_stream, true);
-        if (!is_array($raw)) {
-            $raw = $this->input->post() ?: [];
-        }
-        $to = sk_wa_cloud_normalize_phone((string)($raw['to'] ?? $raw['phone'] ?? ''));
-        if (strlen($to) < 8) {
-            $this->error('Provide to / phone with country code.');
-            return;
-        }
-        if (!sk_wa_cloud_is_ready($settings)) {
-            $this->error('WhatsApp Cloud API is not connected.');
-            return;
-        }
-        $specs = sk_wa_mcp_normalize_messages($raw);
-        if (!$specs) {
-            $this->error('No sendable WhatsApp messages in MCP payload.');
-            return;
-        }
-        $name = trim((string)($raw['name'] ?? ''));
-        $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation($to, $name);
-        $n = sk_wa_mcp_send_specs($to, $specs, $conv, $settings);
-        $this->success(['sent' => $n, 'conversation_id' => (int)$conv['id']], 'Sent.');
-    }
-
-    private function _mcp_request_token(): string {
-        $auth = (string)$this->input->get_request_header('Authorization', true);
-        if (stripos($auth, 'Bearer ') === 0) {
-            return trim(substr($auth, 7));
-        }
-        $hdr = (string)$this->input->get_request_header('X-MCP-Token', true);
-        if ($hdr !== '') {
-            return trim($hdr);
-        }
-        return trim((string)$this->input->get_request_header('X-Api-Key', true));
     }
 
     private function _verify() {
@@ -109,11 +65,12 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 exit;
             }
         }
+
         $payload = json_decode($raw, true);
-        $jobs = [];
         if (is_array($payload)) {
             foreach ((array)($payload['entry'] ?? []) as $entry) {
                 foreach ((array)($entry['changes'] ?? []) as $change) {
+                    $field = (string)($change['field'] ?? '');
                     $value = $change['value'] ?? [];
                     if (!is_array($value)) {
                         continue;
@@ -121,131 +78,96 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                     $phoneNumberId = trim((string)($value['metadata']['phone_number_id'] ?? ''));
                     $vendorMatch = $phoneNumberId !== '' ? sk_wa_cloud_resolve_vendor_from_phone($phoneNumberId, $settings) : null;
                     $vendorId = $vendorMatch ? (int)$vendorMatch['vendor_id'] : 0;
+
+                    if ($field === 'messaging_handovers') {
+                        $this->_store_handovers($value, $vendorId, $phoneNumberId);
+                        continue;
+                    }
+
+                    // messages + standby: same message/status shape; standby means Meta Agent owns the thread.
                     $this->_store_statuses((array)($value['statuses'] ?? []));
-                    $jobs = array_merge(
-                        $jobs,
-                        $this->_store_messages((array)($value['messages'] ?? []), (array)($value['contacts'] ?? []), $vendorId, $phoneNumberId)
+                    $this->_store_messages(
+                        (array)($value['messages'] ?? []),
+                        (array)($value['contacts'] ?? []),
+                        $vendorId,
+                        $phoneNumberId,
+                        $settings,
+                        $field === 'standby' ? 'meta_agent' : null
                     );
                 }
             }
         }
 
-        foreach ($jobs as $job) {
-            $this->_reply_via_mcp($job, $settings, (int)($job['vendor_id'] ?? 0), (string)($job['phone_number_id'] ?? ''));
-        }
-
+        // No local AI / MCP auto-reply — Meta Business Agent is the primary responder.
         http_response_code(200);
         header('Content-Type: application/json');
         echo '{"success":true}';
         exit;
     }
 
-    private function _reply_via_mcp(array $job, array $settings, int $vendorId = 0, string $phoneNumberId = ''): void {
-        $resolvedSettings = $settings;
-        if ($vendorId > 0) {
-            $resolvedSettings['vendor_id'] = $vendorId;
+    private function _store_handovers(array $value, int $vendorId, string $phoneNumberId): void {
+        $events = [];
+        if (!empty($value['message_echoes']) && is_array($value['message_echoes'])) {
+            // ignore echoes here
         }
-        if ($phoneNumberId !== '') {
-            $resolvedSettings['_wa_phone_number_id'] = $phoneNumberId;
-        }
-        $vid = $vendorId > 0 ? $vendorId : null;
-        if (!sk_wa_cloud_is_ready($resolvedSettings, $vid)) {
-            return;
-        }
-        $conv = $job['conversation'] ?? null;
-        $parsed = $job['parsed'] ?? [];
-        if (!$conv || trim((string)($parsed['text'] ?? $parsed['id'] ?? '')) === '') {
-            return;
-        }
-        $wamid = trim((string)($job['wamid'] ?? ''));
-        if ($wamid !== '') {
-            try {
-                require_once APPPATH . 'libraries/Whatsapp_cloud.php';
-                (new Whatsapp_cloud($resolvedSettings))->show_typing($wamid);
-            } catch (Throwable $e) {
-                log_message('error', 'WhatsApp typing: ' . $e->getMessage());
+        foreach (['history', 'messages'] as $k) {
+            if (!empty($value[$k]) && is_array($value[$k])) {
+                $events = array_merge($events, $value[$k]);
             }
         }
-        if (sk_wa_ai_is_ready($resolvedSettings)) {
-            try {
-                $this->_reply_via_ai($job, $resolvedSettings, $vendorId, (string)$conv['phone']);
-            } catch (Throwable $e) {
-                log_message('error', 'WhatsApp AI reply: ' . $e->getMessage());
-                sk_wa_mcp_send_specs(
-                    (string)$conv['phone'],
-                    [['type' => 'text', 'text' => 'I got your message. Tell me the product, or send your name and delivery address to continue.']],
-                    $conv,
-                    $resolvedSettings
-                );
-            }
-            return;
+        // Common Cloud handover payload: value.contacts + metadata + new_owner / previous_owner
+        $to = '';
+        if (!empty($value['contacts'][0]['wa_id'])) {
+            $to = sk_wa_cloud_normalize_phone((string)$value['contacts'][0]['wa_id']);
+        } elseif (!empty($value['recipient_id'])) {
+            $to = sk_wa_cloud_normalize_phone((string)$value['recipient_id']);
+        } elseif (!empty($value['from'])) {
+            $to = sk_wa_cloud_normalize_phone((string)$value['from']);
         }
-        if (!sk_wa_mcp_is_ready($resolvedSettings)) {
-            return;
-        }
-        $resolvedCfg = sk_wa_cloud_config($resolvedSettings, $vid);
-        $req = [
-            'channel'          => 'whatsapp',
-            'phone'            => (string)$conv['phone'],
-            'name'             => (string)($conv['name'] ?? ''),
-            'conversation_id'  => (int)$conv['id'],
-            'phone_number_id'  => $phoneNumberId !== '' ? $phoneNumberId : (string)($resolvedCfg['phone_number_id'] ?? ''),
-            'message'          => $parsed,
-        ];
-        $res = sk_wa_mcp_call($req, $resolvedSettings);
-        if (empty($res['success']) && empty($res['data'])) {
-            log_message('error', 'WhatsApp MCP call failed: ' . ($res['message'] ?? 'unknown'));
-            return;
-        }
-        $specs = sk_wa_mcp_normalize_messages($res['data'] ?? []);
-        if (!$specs) {
-            return;
-        }
-        sk_wa_mcp_send_specs((string)$conv['phone'], $specs, $conv, $resolvedSettings);
-    }
 
-    /**
-     * Customer → model (OpenAI or Gemini) → MCP tool / MySQL → natural reply → WhatsApp.
-     */
-    private function _reply_via_ai(array $job, array $settings, int $vendorId, string $to): void {
-        $conv = $job['conversation'];
-        $parsed = $job['parsed'] ?? [];
-        $text = trim((string)($parsed['text'] ?? ''));
-        if ($text === '') {
-            return;
-        }
-        $history = [];
-        $prior = $this->Sk_Whatsapp_cloud_model->list_messages((int)$conv['id']);
-        $prior = array_slice($prior, 0, -1);
-        foreach (array_slice($prior, -8) as $m) {
-            $body = trim((string)($m['body'] ?? ''));
-            if ($body === '') {
-                continue;
+        $newOwnerRaw = strtolower((string)(
+            $value['new_owner']['app_id']
+            ?? $value['new_thread_owner']
+            ?? $value['thread_owner']
+            ?? $value['new_owner']
+            ?? ''
+        ));
+        $owner = 'meta_agent';
+        if ($newOwnerRaw !== '') {
+            if (strpos($newOwnerRaw, 'ai') !== false || strpos($newOwnerRaw, 'agent') !== false) {
+                $owner = 'meta_agent';
+            } else {
+                $owner = 'app';
             }
-            $history[] = [
-                'role'    => (($m['direction'] ?? '') === 'out') ? 'assistant' : 'user',
-                'content' => $body,
-            ];
         }
-        $shopName = 'Shop';
-        if ($vendorId > 0 && $this->db->table_exists('vendors')) {
-            $vendorQuery = $this->db->select('business_name, owner_name')->where('id', $vendorId)->get('vendors');
-            $vendor = $vendorQuery ? (array)$vendorQuery->row_array() : [];
-            $shopName = trim((string)($vendor['business_name'] ?? $vendor['owner_name'] ?? '')) ?: $shopName;
+        if (!empty($value['handover']) || !empty($value['passed_control']) || !empty($value['requested'])) {
+            // If customer requested human / control passed to app
+            if (!empty($value['requested']) || (isset($value['passed_control']['new_owner']['app']) )) {
+                $owner = 'human';
+            }
         }
-        $tenant = [
-            'tenant_id'      => $vendorId > 0 ? $vendorId : 1,
-            'tenant'         => $vendorId > 0 ? (string)$vendorId : '1',
-            'shop_name'      => $shopName,
-            'customer_phone' => $to,
-        ];
-        $chat = sk_wa_ai_chat($text, $tenant, $history, $settings);
-        $reply = sk_wa_ai_clean_text((string)($chat['reply'] ?? ''));
-        if ($reply === '') {
-            log_message('error', 'WhatsApp AI returned an empty reply (' . ($chat['provider'] ?? '') . ').');
-            $reply = 'I got your message. Tell me the product, or send your name and delivery address to continue.';
+
+        if ($to !== '') {
+            $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation(
+                $to,
+                (string)($value['contacts'][0]['profile']['name'] ?? ''),
+                $vendorId > 0 ? $vendorId : null,
+                $phoneNumberId !== '' ? $phoneNumberId : null
+            );
+            $this->Sk_Vendor_meta_agent_model->set_conversation_owner(
+                (int)$conv['id'],
+                $owner,
+                'messaging_handovers'
+            );
         }
-        sk_wa_mcp_send_specs($to, [['type' => 'text', 'text' => $reply]], $conv, $settings);
+
+        // Persist raw handover for debugging
+        log_message('info', 'WhatsApp messaging_handovers: ' . json_encode([
+            'phone_number_id' => $phoneNumberId,
+            'vendor_id' => $vendorId,
+            'to' => $to,
+            'owner' => $owner,
+        ]));
     }
 
     private function _store_statuses(array $statuses): void {
@@ -263,8 +185,14 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
     }
 
-    /** @return array<int, array{conversation:array,parsed:array,wamid:string,vendor_id:int,phone_number_id:string}> */
-    private function _store_messages(array $messages, array $contacts, int $vendorId = 0, string $phoneNumberId = ''): array {
+    private function _store_messages(
+        array $messages,
+        array $contacts,
+        int $vendorId,
+        string $phoneNumberId,
+        array $settings,
+        ?string $forceOwner = null
+    ): void {
         $names = [];
         foreach ($contacts as $c) {
             $wa = (string)($c['wa_id'] ?? '');
@@ -272,7 +200,6 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 $names[$wa] = (string)($c['profile']['name'] ?? '');
             }
         }
-        $jobs = [];
         foreach ($messages as $m) {
             if (!is_array($m)) {
                 continue;
@@ -312,25 +239,20 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 $phoneNumberId !== '' ? $phoneNumberId : null
             );
             $this->Sk_Whatsapp_cloud_model->add_message((int)$conv['id'], [
-                'vendor_id'    => $vendorId > 0 ? $vendorId : null,
+                'vendor_id'       => $vendorId > 0 ? $vendorId : null,
                 'phone_number_id' => $phoneNumberId !== '' ? $phoneNumberId : null,
-                'wamid'        => $wamid,
-                'direction'    => 'in',
-                'type'         => $storeType,
-                'body'         => $body,
-                'media_url'    => $mediaUrl !== '' ? $mediaUrl : ($mediaId !== '' ? $mediaId : null),
-                'media_id'     => $mediaId !== '' ? $mediaId : null,
-                'status'       => 'received',
-                'raw_json'     => json_encode($m, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            ]);
-            $jobs[] = [
-                'conversation'    => $conv,
-                'parsed'          => $parsed,
                 'wamid'           => $wamid,
-                'vendor_id'       => $vendorId,
-                'phone_number_id' => $phoneNumberId,
-            ];
+                'direction'       => 'in',
+                'type'            => $storeType,
+                'body'            => $body,
+                'media_url'       => $mediaUrl !== '' ? $mediaUrl : ($mediaId !== '' ? $mediaId : null),
+                'media_id'        => $mediaId !== '' ? $mediaId : null,
+                'status'          => 'received',
+                'raw_json'        => json_encode($m, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]);
+            if ($forceOwner !== null) {
+                $this->Sk_Vendor_meta_agent_model->set_conversation_owner((int)$conv['id'], $forceOwner, 'standby');
+            }
         }
-        return $jobs;
     }
 }

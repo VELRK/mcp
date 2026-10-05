@@ -53,7 +53,7 @@
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Site Name</label>
-              <input type="text" name="site_name" class="form-control" value="<?= htmlspecialchars($settings['site_name'] ?? '2DEAL') ?>">
+              <input type="text" name="site_name" class="form-control" value="<?= htmlspecialchars($settings['site_name'] ?? 'Talk AI Pilot') ?>">
             </div>
             <div class="col-md-3">
               <label class="form-label">Currency Symbol</label>
@@ -207,14 +207,14 @@
                      value="<?= htmlspecialchars(site_url('shopkart-api/whatsapp/webhook')) ?>">
               <button type="button" class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('waCloudWebhookUrl').value)">Copy</button>
             </div>
-            Callback field: <code>messages</code>
+            Callback fields: <code>messages</code>, <code>standby</code>, <code>messaging_handovers</code>
             · App ID / secret / connect:
             <a href="<?= site_url('admin/meta') ?>">Facebook / WhatsApp login</a>
           </div>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" name="wa_cloud_enabled" value="1" id="waCloudOn"
               <?= !empty($settings['wa_cloud_enabled']) && $settings['wa_cloud_enabled'] !== '0' ? 'checked' : '' ?>>
-            <label class="form-check-label" for="waCloudOn">Enable webhook inbox + MCP replies</label>
+            <label class="form-check-label" for="waCloudOn">Enable WhatsApp Cloud webhook inbox</label>
           </div>
           <div class="row g-3">
             <div class="col-md-6">
@@ -226,95 +226,17 @@
           </div>
 
           <hr class="my-4">
-          <h6 class="mb-1">AI replies (OpenAI or Gemini)</h6>
-          <?php if (($admin['role'] ?? '') === 'vendor'): ?>
-          <div class="alert alert-info small">
-            Your OpenAI or Gemini key is saved on
-            <a href="<?= site_url('shopkart/whatsapp/ai') ?>">WhatsApp → AI replies</a>.
-            Each vendor uses their own key.
-          </div>
-          <?php else: ?>
+          <h6 class="mb-1">Meta Business Agent</h6>
           <p class="text-muted small mb-3">
-            These keys are only for chats that are not tied to a vendor.
-            Each vendor saves their own OpenAI or Gemini key under
-            <a href="<?= site_url('shopkart/whatsapp/ai') ?>">WhatsApp → AI replies</a>.
+            Customer replies are handled by <strong>Meta Business Agent</strong> (not OpenAI/Gemini or an external MCP server).
+            Configure credentials in <code>.env</code> (<code>META_BA_*</code>) and manage each number under
+            <a href="<?= site_url('admin/meta/agent') ?>">WhatsApp → Meta Business Agent</a>.
+            This app serves authenticated commerce connectors and remains on standby for inbox / handoff.
           </p>
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" name="wa_ai_enabled" value="1" id="waAiOn"
-              <?= !empty($settings['wa_ai_enabled']) && $settings['wa_ai_enabled'] !== '0' ? 'checked' : '' ?>>
-            <label class="form-check-label" for="waAiOn">Answer customers with AI + shop tools</label>
-          </div>
-          <div class="row g-3 mb-2">
-            <div class="col-md-4">
-              <label class="form-label">Provider</label>
-              <select name="wa_ai_provider" class="form-select">
-                <option value="openai" <?= (($settings['wa_ai_provider'] ?? 'openai') === 'openai') ? 'selected' : '' ?>>OpenAI</option>
-                <option value="gemini" <?= (($settings['wa_ai_provider'] ?? '') === 'gemini') ? 'selected' : '' ?>>Gemini</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">OpenAI model</label>
-              <input type="text" name="wa_ai_openai_model" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['wa_ai_openai_model'] ?? 'gpt-4.1-mini') ?>">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Gemini model</label>
-              <input type="text" name="wa_ai_gemini_model" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['wa_ai_gemini_model'] ?? 'gemini-3.8-flash') ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">OpenAI API key</label>
-              <input type="password" name="wa_ai_openai_key" class="form-control font-monospace" autocomplete="new-password"
-                     value="" placeholder="<?= !empty($settings['wa_ai_openai_key']) ? '•••• saved (leave blank to keep)' : 'sk-...' ?>">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Gemini API key</label>
-              <input type="password" name="wa_ai_gemini_key" class="form-control font-monospace" autocomplete="new-password"
-                     value="" placeholder="<?= !empty($settings['wa_ai_gemini_key']) ? '•••• saved (leave blank to keep)' : 'AIza...' ?>">
-            </div>
-          </div>
-          <?php endif; ?>
-
-          <hr class="my-4">
-          <h6 class="mb-1">MCP bot replies</h6>
-          <p class="text-muted small mb-3">
-            Incoming WhatsApp messages are posted to your MCP URL. The JSON reply is converted to WhatsApp
-            <strong>text</strong>, <strong>reply buttons</strong>, <strong>list menu</strong>, or <strong>link button</strong> and sent back.
-            MCP can also push a reply to
-            <code class="user-select-all"><?= site_url('shopkart-api/whatsapp/mcp') ?></code>
-          </p>
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" name="wa_mcp_enabled" value="1" id="waMcpOn"
-              <?= !empty($settings['wa_mcp_enabled']) && $settings['wa_mcp_enabled'] !== '0' ? 'checked' : '' ?>>
-            <label class="form-check-label" for="waMcpOn">Call MCP on inbound WhatsApp messages</label>
-          </div>
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label">MCP webhook URL</label>
-              <input type="url" name="wa_mcp_url" class="form-control font-monospace"
-                     value="<?= htmlspecialchars($settings['wa_mcp_url'] ?? '') ?>"
-                     placeholder="https://your-mcp-host/whatsapp">
-            </div>
-            <div class="col-md-8">
-              <label class="form-label">MCP token (optional)</label>
-              <input type="password" name="wa_mcp_token" class="form-control font-monospace" autocomplete="new-password"
-                     value="" placeholder="<?= !empty($settings['wa_mcp_token']) ? '•••• saved (leave blank to keep)' : 'Bearer / X-MCP-Token' ?>">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Timeout (seconds)</label>
-              <input type="number" name="wa_mcp_timeout" class="form-control" min="5" max="30"
-                     value="<?= htmlspecialchars($settings['wa_mcp_timeout'] ?? '12') ?>">
-            </div>
-          </div>
-          <pre class="small bg-light border rounded p-2 mt-3 mb-0" style="white-space:pre-wrap">MCP reply examples:
-{"type":"text","text":"Hello"}
-{"type":"buttons","body":"How can we help?","buttons":[{"id":"track","title":"Track order"},{"id":"shop","title":"Shop"}]}
-{"type":"list","body":"Pick a category","button":"Categories","sections":[{"title":"Shop","rows":[{"id":"silk","title":"Silk Sarees","description":"Handwoven"}]}]}
-{"type":"cta","body":"Open the store","display_text":"Visit 2DEAL","url":"https://2deal.my/"}
-{"messages":[ ...several of the above... ]}</pre>
           <div class="mt-3">
-            <a href="<?= site_url('shopkart/whatsapp') ?>" class="btn btn-sm btn-success">Open inbox</a>
-            <a href="<?= site_url('shopkart/whatsapp/templates') ?>" class="btn btn-sm btn-outline-success">Templates</a>
+            <a href="<?= site_url('admin/meta/agent') ?>" class="btn btn-sm btn-success">Open Meta Business Agent</a>
+            <a href="<?= site_url('admin/whatsapp') ?>" class="btn btn-sm btn-outline-success">Open inbox</a>
+            <a href="<?= site_url('admin/whatsapp/templates') ?>" class="btn btn-sm btn-outline-success">Templates</a>
           </div>
 
           <hr class="my-4">
@@ -448,7 +370,7 @@
             </div>
             <div class="col-md-3">
               <label class="form-label">From Name</label>
-              <input type="text" name="smtp_from_name" class="form-control" value="<?= htmlspecialchars($settings['smtp_from_name'] ?? '2DEAL') ?>">
+              <input type="text" name="smtp_from_name" class="form-control" value="<?= htmlspecialchars($settings['smtp_from_name'] ?? 'Talk AI Pilot') ?>">
             </div>
             <div class="col-md-6">
               <label class="form-label">SMTP Username</label>

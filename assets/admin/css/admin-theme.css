@@ -1,0 +1,54 @@
+/*
+ * Talk AI Pilot admin theme
+ * Shared across every authenticated admin and vendor-admin page.
+ */
+:root,
+[data-bs-theme="light"],
+[data-bs-theme="dark"] {
+  --bs-primary: #198754;
+  --bs-primary-rgb: 25, 135, 84;
+  --bs-primary-text-emphasis: #0f5132;
+  --bs-primary-bg-subtle: #d1e7dd;
+  --bs-primary-border-subtle: #a3cfbb;
+  --bs-link-color-rgb: 25, 135, 84;
+  --bs-link-hover-color-rgb: 20, 108, 67;
+}
+
+html {
+  font-size: 17px;
+}
+
+body {
+  font-size: 0.9375rem;
+}
+
+.sidebar-left #sidebar-menu ul > li > a {
+  font-size: 14px;
+}
+
+.sidebar-left #sidebar-menu ul > li ul.sub-menu li a {
+  font-size: 14px;
+}
+
+.sidebar-left #sidebar-menu .menu-title {
+  font-size: 12px;
+}
+
+.form-control,
+.form-select,
+.btn,
+.dropdown-menu,
+.table {
+  font-size: 0.875rem;
+}
+
+.page-title-box h4,
+.card-title {
+  letter-spacing: -0.01em;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: rgba(var(--bs-primary-rgb), 0.65);
+  box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.14);
+}
