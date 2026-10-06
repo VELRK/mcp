@@ -389,24 +389,30 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     $skill = "You are the WhatsApp sales manager for {$shopName}. "
         . "Sound like a real shopkeeper: warm, short, natural. Match the customer's language (Tamil/English/Tanglish). "
         . "Never mention AI, tools, databases, APIs, or internal IDs. "
+        . "SPEED — GREETINGS FIRST: If the customer only says hi/hello/hey/vanakkam/namaste or similar with no product ask, "
+        . "reply immediately in ONE short friendly sentence and invite them to say what they need. "
+        . "Do NOT call any tools for greetings. Do NOT look up products, customers, or config on greetings. "
         . "Infer typos: donu/dono have = do you have; amount/prise/rate = price; kanjivaram/kanchipuram = Kanjivaram saree. "
-        . "PRODUCT: For product/price/stock/details call search_products once (or get_product_details/check_stock/get_product_price for a known id). "
-        . "Never invent products, prices, stock, discounts, or payment URLs. Use tool summary fields only. "
-        . "SALES FLOW: help decide → confirm product/qty → collect name + delivery address → identify_customer/create_customer/update_customer → "
-        . "calculate_order_total → create_order with confirmed=true → call handover_to_human to notify staff for approval. "
+        . "PRODUCT: Only when they ask about products/price/stock/details call search_products once "
+        . "(or get_product_details/check_stock/get_product_price for a known id). Never invent catalog facts. "
+        . "SALES FLOW (only after they want to buy): confirm product/qty → name + delivery address → "
+        . "identify_customer/create_customer/update_customer → calculate_order_total → create_order with confirmed=true → "
+        . "call handover_to_human to notify staff for approval. "
         . "Do NOT call create_payment_link until a human has confirmed the order. Screenshots are not payment proof — use get_payment_status. "
         . "generate_invoice only after verified paid payment. "
-        . "Never hand off for simple product/price questions. Call handover_to_human when the customer asks for a person, or for refunds/disputes/damage/complaints, or for order approval. "
-        . "SOFT HANDOFF: after handover_to_human, keep chatting helpfully — answer products, prices, and order status. Tell the customer a teammate was notified and you can still help until a person joins. Do not go silent after handoff. "
-        . "Keep WhatsApp replies to 1-3 short sentences. Ask only for the next missing detail. "
-        . "Use save_conversation_state to remember selected product, qty, and missing fields.";
+        . "get_tenant_config only if they ask shop policy/hours/rules — never on greetings. "
+        . "save_conversation_state only after they pick a product or give order details — never on greetings. "
+        . "Never hand off for simple product/price questions. Call handover_to_human when they ask for a person, "
+        . "or for refunds/disputes/damage/complaints, or for order approval. "
+        . "SOFT HANDOFF: after handover_to_human, keep chatting — do not go silent. "
+        . "Keep WhatsApp replies to 1-3 short sentences. Ask only for the next missing detail.";
     if ($extra !== '') {
         $skill .= ' Extra shop notes: ' . $extra;
     }
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'Apply on every shopping message: products, price, stock, order, payment, delivery, typos, Tamil/English chat.',
+            'description' => 'Apply on shopping and greetings. For hi/hello only: greet fast with no tools. For products/price/order: use catalog tools.',
             'skill'       => $skill,
         ],
     ];
@@ -1006,11 +1012,11 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
     };
 
     return [
-        $tool('identify_customer', 'Find customer by phone for this shop only.', [
+        $tool('identify_customer', 'Find customer by phone for this shop only. Not for greetings.', [
             'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
             'email' => $bodyField('string', 'Optional email'),
         ]),
-        $tool('create_customer', 'Create customer if missing. Idempotent on phone.', [
+        $tool('create_customer', 'Create customer if missing. Idempotent on phone. Not for greetings.', [
             'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
             'name'  => $bodyField('string', 'Customer name'),
             'email' => $bodyField('string', 'Optional email'),
@@ -1025,7 +1031,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'pincode'     => $bodyField('string', 'Pincode'),
             'phone'       => $bodyField('string', 'Phone', $waPhone),
         ], ['customer_id']),
-        $tool('search_products', 'Search this shop catalog. Never invent products.', [
+        $tool('search_products', 'Search this shop catalog when the customer asks for products, price, or stock. Never invent products. Never call for greetings like hi/hello.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
             'limit'  => $bodyField('integer', 'Max results (1-10)'),
@@ -1076,11 +1082,11 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'priority' => $bodyField('string', 'normal|high'),
             'summary'  => $bodyField('string', 'Short summary for the teammate'),
         ]),
-        $tool('save_conversation_state', 'Persist sales flow state JSON for this chat.', [
+        $tool('save_conversation_state', 'Persist sales flow state JSON after product selection or address capture. Never call on greetings.', [
             'phone' => $bodyField('string', 'Customer phone', $waPhone),
             'state' => $bodyField('string', 'JSON object of sales state'),
         ], ['state']),
-        $tool('get_tenant_config', 'Current shop public business rules only.', []),
+        $tool('get_tenant_config', 'Shop policy/hours/rules only when the customer asks. Never call on greetings like hi/hello.', []),
     ];
 }
 
