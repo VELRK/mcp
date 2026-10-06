@@ -108,6 +108,8 @@ function sk_meta_ba_http(string $method, string $url, $body = null, string $toke
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER     => $headers,
         CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_CONNECTTIMEOUT => min(15, max(5, (int)$timeout)),
+        CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
         CURLOPT_CUSTOMREQUEST  => strtoupper($method),
     ];
     if ($body !== null) {
@@ -275,7 +277,7 @@ function sk_meta_ba_agent_test(string $phoneNumberId, string $message, ?string $
     if ($conversationId) {
         $body['conversation_id'] = $conversationId;
     }
-    return sk_meta_ba_http('POST', sk_meta_ba_entity_url($phoneNumberId, 'agent_test'), $body, $token);
+    return sk_meta_ba_http('POST', sk_meta_ba_entity_url($phoneNumberId, 'agent_test'), $body, $token, 90);
 }
 
 /**

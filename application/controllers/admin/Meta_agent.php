@@ -167,6 +167,7 @@ class Meta_agent extends Sk_Base {
                     ], $res['ok'] ? 200 : 400);
 
                 case 'test':
+                    @set_time_limit(120);
                     $message = trim((string)$this->input->post('message', TRUE));
                     if ($message === '') {
                         $message = 'Hi, what products do you have?';
@@ -174,7 +175,9 @@ class Meta_agent extends Sk_Base {
                     $res = sk_meta_ba_agent_test($phoneNumberId, $message, null, $settings);
                     return $this->json([
                         'success' => !empty($res['ok']),
-                        'message' => $res['ok'] ? 'Test message sent to Meta Agent.' : ($res['error'] ?? 'Test failed'),
+                        'message' => $res['ok']
+                            ? trim((string)($res['data']['agent_response'] ?? 'Test message sent to Meta Agent.'))
+                            : ($res['error'] ?? 'Test failed'),
                         'data'    => $res['data'],
                     ], $res['ok'] ? 200 : 400);
 

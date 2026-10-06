@@ -520,10 +520,12 @@ $config['csrf_token_name'] = 'csrf_token';
 $config['csrf_cookie_name'] = 'csrf_cookie';
 $config['csrf_expire'] = 7200;
 $config['csrf_regenerate'] = TRUE;
-// Exclude external webhooks from CSRF checks
+// Exclude external webhooks / APIs from CSRF checks (no browser session cookie).
 $config['csrf_exclude_uris'] = array(
-    'Conversations/Whatsapp/.*', // Allow Meta/WhatsApp API
-    'AiAgent/.*',                // Allow external AI APIs
+    'Conversations/Whatsapp/.*',
+    'AiAgent/.*',
+    'shopkart-api/.*',
+    'api/.*',
 );
 
 /*
