@@ -132,6 +132,7 @@ $webhook = $webhook_uri ?? '';
                   <button type="button" class="btn btn-sm btn-outline-primary mba-op" data-op="eligibility">Eligibility</button>
                   <button type="button" class="btn btn-sm btn-outline-primary mba-op" data-op="onboard">Onboard</button>
                   <button type="button" class="btn btn-sm btn-outline-success mba-op" data-op="sync">Sync tools</button>
+                  <button type="button" class="btn btn-sm btn-outline-info mba-op" data-op="sync_skills">Sync skills</button>
                   <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="test">Test</button>
                   <button type="button" class="btn btn-sm btn-success mba-op" data-op="enable_allowlist">Enable allowlist</button>
                   <button type="button" class="btn btn-sm btn-warning mba-op" data-op="enable_live">Enable live</button>
@@ -148,6 +149,7 @@ $webhook = $webhook_uri ?? '';
 </div>
 
 <div id="mbaResult" class="alert alert-secondary mt-3 d-none small" style="white-space:pre-wrap"></div>
+<p class="small text-muted mt-2 mb-0">Responses stay here until you refresh the page to update the table.</p>
 
 <script>
 (function () {
@@ -157,6 +159,13 @@ $webhook = $webhook_uri ?? '';
   function csrfFromCookie() {
     var m = document.cookie.match(/(?:^|; )csrf_cookie=([^;]*)/);
     return m ? decodeURIComponent(m[1]) : csrfHash;
+  }
+  function rememberCsrf(j) {
+    if (j && j.csrf_hash) {
+      csrfHash = j.csrf_hash;
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta) meta.setAttribute('content', j.csrf_hash);
+    }
   }
   function show(ok, msg, data) {
     result.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-secondary');
@@ -175,7 +184,7 @@ $webhook = $webhook_uri ?? '';
       body.append('phone_number_id', phone);
       body.append('op', op);
       if (op === 'test') {
-        var msg = window.prompt('Test message', 'Hi, what products do you have?');
+        var msg = window.prompt('Test message', 'Hi');
         if (msg === null) { btn.disabled = false; return; }
         body.append('message', msg);
       }
@@ -188,15 +197,22 @@ $webhook = $webhook_uri ?? '';
         return r.text().then(function (t) {
           var j = null;
           try { j = JSON.parse(t); } catch (e) {}
-          return { ok: r.ok, j: j, raw: t };
+          return { ok: r.ok, status: r.status, j: j, raw: t };
         });
       }).then(function (x) {
+        if (x.j) rememberCsrf(x.j);
         if (!x.j) {
-          show(false, x.ok ? 'Unexpected response' : 'Request blocked (refresh the page and try again)');
+          var blocked = !x.ok || x.status === 403 || /not allowed/i.test(x.raw || '');
+          show(false, blocked
+            ? 'CSRF blocked this request. Refresh the page, then try again.'
+            : (x.ok ? 'Unexpected response' : 'Request failed'));
           return;
         }
-        show(!!x.j.success, x.j.message || 'Done', x.j.data);
-        if (x.j.success) setTimeout(function () { location.reload(); }, 900);
+        var detail = x.j.data;
+        if (x.j.op) {
+          detail = Object.assign({ op: x.j.op }, detail && typeof detail === 'object' ? detail : {});
+        }
+        show(!!x.j.success, x.j.message || 'Done', detail);
       })
         .catch(function (e) { show(false, e.message || 'Request failed'); })
         .finally(function () { btn.disabled = false; });

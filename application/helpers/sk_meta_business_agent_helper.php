@@ -151,13 +151,45 @@ function sk_meta_ba_http(string $method, string $url, $body = null, string $toke
             $error = 'HTTP ' . $code;
         }
     }
+    $data = is_array($decoded) ? $decoded : null;
     return [
         'ok'    => $ok,
         'http'  => $code,
         'error' => $error,
-        'data'  => is_array($decoded) ? $decoded : null,
+        'data'  => $data,
         'raw'   => (string)$raw,
     ];
+}
+
+/** User-facing message for a failed sk_meta_ba_http() response. */
+function sk_meta_ba_human_error(array $res): string {
+    $code = (int)($res['http'] ?? 0);
+    $err = trim((string)($res['error'] ?? ''));
+    if ($err !== '' && $err !== 'HTTP ' . $code) {
+        return $code > 0 ? "Meta API (HTTP {$code}): {$err}" : $err;
+    }
+    $raw = trim((string)($res['raw'] ?? ''));
+    if ($raw !== '' && $raw[0] !== '<') {
+        $excerpt = mb_substr($raw, 0, 400);
+        return "Meta API HTTP {$code}: {$excerpt}";
+    }
+    if ($code >= 500) {
+        return "Meta API HTTP {$code} (server error). Wait a minute and retry; for Test with product questions, run Sync tools first.";
+    }
+    return "Meta API HTTP {$code}.";
+}
+
+/** Extra context for admin JSON when Meta calls fail. */
+function sk_meta_ba_error_data(array $res): array {
+    $out = [
+        'meta_http' => (int)($res['http'] ?? 0),
+    ];
+    if (is_array($res['data'] ?? null)) {
+        $out['meta'] = $res['data'];
+    } elseif (trim((string)($res['raw'] ?? '')) !== '') {
+        $out['meta_raw'] = mb_substr((string)$res['raw'], 0, 2000);
+    }
+    return $out;
 }
 
 function sk_meta_ba_entity_url(string $phoneNumberId, string $path = ''): string {
@@ -212,17 +244,116 @@ function sk_meta_ba_upsert_business_info(string $phoneNumberId, array $info, ?ar
     return sk_meta_ba_http('POST', sk_meta_ba_entity_url($phoneNumberId, 'agent_knowledge/business_info'), $info, $token);
 }
 
-function sk_meta_ba_upsert_instructions(string $phoneNumberId, string $instructions, ?array $settings = null): array {
+function sk_meta_ba_list_skills(string $phoneNumberId, ?array $settings = null): array {
     $token = sk_meta_ba_access_token($phoneNumberId, $settings);
     if ($token === '' || $phoneNumberId === '') {
         return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
     }
-    return sk_meta_ba_http(
-        'POST',
-        sk_meta_ba_entity_url($phoneNumberId, 'agent_instructions'),
-        ['instructions' => $instructions],
-        $token
-    );
+    return sk_meta_ba_http('GET', sk_meta_ba_entity_url($phoneNumberId, 'agent_config/skills'), null, $token);
+}
+
+function sk_meta_ba_create_skill(string $phoneNumberId, array $body, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '') {
+        return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
+    }
+    return sk_meta_ba_http('POST', sk_meta_ba_entity_url($phoneNumberId, 'agent_config/skills'), $body, $token);
+}
+
+function sk_meta_ba_update_skill(string $phoneNumberId, string $skillId, array $body, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $skillId === '') {
+        return ['ok' => false, 'error' => 'Missing skill context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_config/skills/' . rawurlencode($skillId));
+    return sk_meta_ba_http('PUT', $url, $body, $token);
+}
+
+/**
+ * Push / refresh behavioral skills (Meta no longer uses agent_instructions for this).
+ * @see https://developers.facebook.com/documentation/meta-business-agent/reference/configure/agent-skills
+ */
+function sk_meta_ba_upsert_instructions(string $phoneNumberId, string $instructions, ?array $settings = null): array {
+    return sk_meta_ba_sync_sales_skills($phoneNumberId, $instructions, $settings);
+}
+
+function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions = ''): array {
+    $shopName = trim($shopName) !== '' ? trim($shopName) : 'our shop';
+    $extra = trim($extraInstructions);
+    $extraBit = $extra !== '' ? (' Extra shop notes: ' . $extra) : '';
+    // One consolidated skill — Meta warns conflicting multi-skills cause bad replies.
+    return [
+        [
+            'title'       => 'shop-sales-assistant',
+            'description' => 'Apply on every customer message about products, sarees, stock, price, amount, rate, colors, sizes, ordering, delivery, or messy/typo WhatsApp typing. Also apply for general shopping chat.',
+            'skill'       => "You are a friendly human salesperson for {$shopName} on WhatsApp — not a formal bot. "
+                . "Write short, warm, natural replies like a real shopkeeper. Tamil/English mix is fine; match the customer's language. "
+                . "Spelling and messy typing: always infer intent. "
+                . '"donu have" / "do nu have" / "dono have" means "do you have"; '
+                . '"amount" / "prise" / "rate" / "cost" means price; '
+                . '"kanjivaram" / "kanchipuram" / "kanjeevarm" means Kanjivaram saree. '
+                . "Never ask them to retype for small typos. Never hand off only because the message is unclear or misspelled. "
+                . "When they ask about a product, availability, or price: "
+                . "(1) Call search_products with the product keywords from their message. "
+                . "(2) Reply with the product name, price in ₹, and whether it is available, in one short message. "
+                . "(3) Offer one helpful next step (color, blouse, order). "
+                . "Never invent prices or stock — only use tool results. "
+                . "NEVER call human_handoff for product, catalog, availability, or price questions. "
+                . "Only call human_handoff when the customer clearly asks for a human/person, or for payment disputes, refunds, damage, or complaints you cannot resolve with tools."
+                . $extraBit,
+        ],
+    ];
+}
+
+function sk_meta_ba_sync_sales_skills(string $phoneNumberId, string $shopOrInstructions = '', ?array $settings = null): array {
+    $shopName = $shopOrInstructions;
+    // If a long instruction string was passed (legacy callers), treat it as shop name fallback + note.
+    if (strlen($shopOrInstructions) > 80) {
+        $shopName = 'our shop';
+    }
+    $defs = sk_meta_ba_sales_skill_defs($shopName, strlen($shopOrInstructions) > 80 ? $shopOrInstructions : '');
+    $listed = sk_meta_ba_list_skills($phoneNumberId, $settings);
+    $byTitle = [];
+    if (!empty($listed['ok']) && is_array($listed['data'])) {
+        $items = $listed['data'];
+        if (isset($items['data']) && is_array($items['data'])) {
+            $items = $items['data'];
+        }
+        foreach ($items as $item) {
+            if (!is_array($item) || empty($item['title'])) {
+                continue;
+            }
+            $byTitle[strtolower((string)$item['title'])] = $item;
+        }
+    }
+
+    $results = [];
+    $failed = [];
+    foreach ($defs as $def) {
+        $key = strtolower($def['title']);
+        $existing = $byTitle[$key] ?? null;
+        if ($existing && !empty($existing['id'])) {
+            $res = sk_meta_ba_update_skill($phoneNumberId, (string)$existing['id'], $def, $settings);
+        } else {
+            $res = sk_meta_ba_create_skill($phoneNumberId, $def, $settings);
+        }
+        $results[] = [
+            'title' => $def['title'],
+            'ok'    => !empty($res['ok']),
+            'error' => $res['error'] ?? '',
+            'http'  => $res['http'] ?? null,
+            'data'  => $res['data'] ?? null,
+        ];
+        if (empty($res['ok'])) {
+            $failed[] = $def['title'] . ': ' . ($res['error'] ?? 'failed');
+        }
+    }
+
+    return [
+        'ok'    => !$failed,
+        'error' => $failed ? ('Skill sync failed — ' . implode('; ', $failed)) : '',
+        'data'  => ['skills' => $results],
+    ];
 }
 
 function sk_meta_ba_list_connectors(string $phoneNumberId, ?array $settings = null): array {
@@ -289,19 +420,50 @@ function sk_meta_ba_thread_control(string $phoneNumberId, string $to, string $ac
         return ['ok' => false, 'error' => 'Invalid thread control action.', 'data' => null];
     }
     $token = sk_meta_ba_access_token($phoneNumberId, $settings);
-    if ($token === '' || $phoneNumberId === '' || trim($to) === '') {
+    $toDigits = preg_replace('/\D+/', '', $to) ?? '';
+    if ($token === '' || $phoneNumberId === '' || $toDigits === '') {
         return ['ok' => false, 'error' => 'Missing phone_number_id, access token, or consumer phone.', 'data' => null];
     }
     $cfg = sk_meta_ba_config_array();
-    // Prefer documented Cloud-style path; fall back to entity-relative if needed by callers.
+    // Cloud thread_control is Graph-style — do NOT send X-API-Version (Meta rejects 2.0.0 there).
     $url = rtrim($cfg['api_base'], '/') . '/business/whatsapp/phone_numbers/'
         . rawurlencode($phoneNumberId) . '/thread_control';
     $body = [
         'messaging_product' => 'whatsapp',
-        'action'            => $action,
-        'to'                => preg_replace('/\D+/', '', $to),
+        'action'            => $action === 'pass' ? 'release' : $action,
+        'to'                => $toDigits,
     ];
-    return sk_meta_ba_http('POST', $url, $body, $token);
+    $headers = [
+        'Accept: application/json',
+        'Content-Type: application/json',
+        'Authorization: Bearer ' . $token,
+    ];
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_CUSTOMREQUEST  => 'POST',
+        CURLOPT_POSTFIELDS     => json_encode($body, JSON_UNESCAPED_UNICODE),
+    ]);
+    $raw = curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $cerr = curl_error($ch);
+    curl_close($ch);
+    $data = json_decode((string)$raw, true);
+    if ($cerr !== '') {
+        return ['ok' => false, 'error' => $cerr, 'http' => $http, 'data' => $data];
+    }
+    $ok = $http >= 200 && $http < 300;
+    $err = '';
+    if (!$ok) {
+        if (is_array($data)) {
+            $err = (string)($data['error']['message'] ?? $data['detail'] ?? $data['title'] ?? 'Thread control failed');
+        } else {
+            $err = 'Thread control HTTP ' . $http;
+        }
+    }
+    return ['ok' => $ok, 'error' => $err, 'http' => $http, 'data' => $data];
 }
 
 function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
@@ -549,8 +711,5 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
 
 function sk_meta_ba_default_instructions(string $shopName = 'our shop'): string {
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'our shop';
-    return "You are the WhatsApp sales assistant for {$shopName}. "
-        . "Be concise, friendly, and accurate. Use connector tools for products, stock, orders, and delivery. "
-        . "Never invent prices or stock. If the customer asks for a human, call human_handoff. "
-        . "Respond in the customer's language.";
+    return $shopName;
 }

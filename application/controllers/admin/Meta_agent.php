@@ -91,6 +91,13 @@ class Meta_agent extends Sk_Base {
             $shopName = trim((string)($v['business_name'] ?? $v['owner_name'] ?? 'Shop')) ?: 'Shop';
         }
 
+        $metaFail = static function (array $res, string $fallback = 'Request failed'): array {
+            return [
+                'message' => sk_meta_ba_human_error($res) ?: $fallback,
+                'data'    => sk_meta_ba_error_data($res),
+            ];
+        };
+
         try {
             switch ($op) {
                 case 'eligibility':
@@ -113,11 +120,13 @@ class Meta_agent extends Sk_Base {
                         'last_error'       => $res['ok'] ? '' : ($res['error'] ?? 'Eligibility failed'),
                         'last_synced_at'   => date('Y-m-d H:i:s'),
                     ]);
+                    $fail = $metaFail($res, 'Eligibility failed');
                     return $this->json([
                         'success'  => !empty($res['ok']),
-                        'message'  => $res['ok'] ? ($eligible ? 'Number is eligible.' : 'Eligibility response received.') : ($res['error'] ?? 'Failed'),
+                        'message'  => $res['ok'] ? ($eligible ? 'Number is eligible.' : 'Eligibility response received.') : $fail['message'],
                         'eligible' => $eligible,
-                        'data'     => $res['data'],
+                        'op'       => $op,
+                        'data'     => $res['ok'] ? $res['data'] : $fail['data'],
                     ], $res['ok'] ? 200 : 400);
 
                 case 'onboard':
@@ -137,22 +146,38 @@ class Meta_agent extends Sk_Base {
                         'last_error'     => $res['ok'] ? '' : ($res['error'] ?? 'Onboard failed'),
                         'last_synced_at' => date('Y-m-d H:i:s'),
                     ]);
+                    $setupNotes = [];
                     if ($res['ok']) {
-                        sk_meta_ba_upsert_instructions(
+                        $ins = sk_meta_ba_upsert_instructions(
                             $phoneNumberId,
                             sk_meta_ba_default_instructions($shopName),
                             $settings
                         );
-                        sk_meta_ba_upsert_business_info($phoneNumberId, [
+                        if (empty($ins['ok'])) {
+                            $setupNotes[] = 'instructions: ' . sk_meta_ba_human_error($ins);
+                        }
+                        $biz = sk_meta_ba_upsert_business_info($phoneNumberId, [
                             'business_name' => $shopName,
                             'description'   => $shopName . ' WhatsApp commerce assistant powered by Talk AI Pilot.',
                         ], $settings);
+                        if (empty($biz['ok'])) {
+                            $setupNotes[] = 'business_info: ' . sk_meta_ba_human_error($biz);
+                        }
+                    }
+                    $fail = $metaFail($res, 'Onboard failed');
+                    $payload = $res['ok'] ? ($res['data'] ?? []) : $fail['data'];
+                    if ($setupNotes) {
+                        $payload = is_array($payload) ? $payload : [];
+                        $payload['setup_warnings'] = $setupNotes;
                     }
                     return $this->json([
                         'success'  => !empty($res['ok']),
-                        'message'  => $res['ok'] ? 'Agent onboarded.' : ($res['error'] ?? 'Onboard failed'),
+                        'message'  => $res['ok']
+                            ? ('Agent onboarded.' . ($setupNotes ? ' Some optional setup steps failed — see data.setup_warnings.' : ''))
+                            : $fail['message'],
                         'agent_id' => $agentId,
-                        'data'     => $res['data'],
+                        'op'       => $op,
+                        'data'     => $payload,
                     ], $res['ok'] ? 200 : 400);
 
                 case 'sync':
@@ -160,10 +185,26 @@ class Meta_agent extends Sk_Base {
                     if (!$res['ok']) {
                         $this->Sk_Vendor_meta_agent_model->set_error($phoneNumberId, $res['error'] ?? 'Sync failed');
                     }
+                    $fail = $metaFail($res, 'Sync failed');
                     return $this->json([
                         'success' => !empty($res['ok']),
-                        'message' => $res['ok'] ? 'Connector and tools synced.' : ($res['error'] ?? 'Sync failed'),
-                        'data'    => $res['data'],
+                        'message' => $res['ok'] ? 'Connector and tools synced.' : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : array_merge($fail['data'], is_array($res['data']) ? $res['data'] : []),
+                    ], $res['ok'] ? 200 : 400);
+
+                case 'sync_skills':
+                    $res = sk_meta_ba_sync_sales_skills(
+                        $phoneNumberId,
+                        sk_meta_ba_default_instructions($shopName),
+                        $settings
+                    );
+                    $fail = $metaFail($res, 'Skill sync failed');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok'] ? 'Sales skills synced (typos + product/price answers).' : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
                     ], $res['ok'] ? 200 : 400);
 
                 case 'test':
@@ -173,12 +214,18 @@ class Meta_agent extends Sk_Base {
                         $message = 'Hi, what products do you have?';
                     }
                     $res = sk_meta_ba_agent_test($phoneNumberId, $message, null, $settings);
+                    $fail = $metaFail($res, 'Test failed');
+                    $msg = $res['ok']
+                        ? trim((string)($res['data']['agent_response'] ?? 'Test message sent to Meta Agent.'))
+                        : $fail['message'];
+                    if (!$res['ok'] && (int)($res['http'] ?? 0) >= 500) {
+                        $msg .= ' Tip: try Test with just "Hi" first. Product questions call connectors — Sync tools, then retry.';
+                    }
                     return $this->json([
                         'success' => !empty($res['ok']),
-                        'message' => $res['ok']
-                            ? trim((string)($res['data']['agent_response'] ?? 'Test message sent to Meta Agent.'))
-                            : ($res['error'] ?? 'Test failed'),
-                        'data'    => $res['data'],
+                        'message' => $msg,
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
                     ], $res['ok'] ? 200 : 400);
 
                 case 'enable_allowlist':
@@ -188,7 +235,6 @@ class Meta_agent extends Sk_Base {
                     if ($op === 'disable') {
                         $body = [
                             'rollout' => ['enabled' => false],
-                            'agent_enabled' => false,
                         ];
                         $audience = null;
                         $enabled = 0;
@@ -196,7 +242,6 @@ class Meta_agent extends Sk_Base {
                         $body = [
                             'ai_audience' => 'ALLOWLISTED_ONLY',
                             'rollout' => ['enabled' => true],
-                            'agent_enabled' => true,
                             'handoff' => [
                                 'enabled' => true,
                                 'message_selection' => 'CUSTOM',
@@ -209,7 +254,6 @@ class Meta_agent extends Sk_Base {
                         $body = [
                             'ai_audience' => 'EVERYONE',
                             'rollout' => ['enabled' => true],
-                            'agent_enabled' => true,
                             'handoff' => [
                                 'enabled' => true,
                                 'message_selection' => 'CUSTOM',
@@ -220,6 +264,7 @@ class Meta_agent extends Sk_Base {
                         $enabled = 1;
                     }
                     $res = sk_meta_ba_put_settings($phoneNumberId, $body, $settings);
+                    $skillNote = '';
                     if ($res['ok']) {
                         $upd = [
                             'vendor_id'      => $vendorId,
@@ -232,13 +277,25 @@ class Meta_agent extends Sk_Base {
                             $upd['ai_audience'] = $audience;
                         }
                         $this->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, $upd);
+                        if ($enabled) {
+                            $skills = sk_meta_ba_sync_sales_skills(
+                                $phoneNumberId,
+                                sk_meta_ba_default_instructions($shopName),
+                                $settings
+                            );
+                            if (empty($skills['ok'])) {
+                                $skillNote = ' Skills warning: ' . sk_meta_ba_human_error($skills);
+                            }
+                        }
                     } else {
                         $this->Sk_Vendor_meta_agent_model->set_error($phoneNumberId, $res['error'] ?? 'Settings update failed');
                     }
+                    $fail = $metaFail($res, 'Settings update failed');
                     return $this->json([
                         'success' => !empty($res['ok']),
-                        'message' => $res['ok'] ? 'Agent settings updated.' : ($res['error'] ?? 'Failed'),
-                        'data'    => $res['data'],
+                        'message' => $res['ok'] ? ('Agent settings updated.' . $skillNote) : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
                     ], $res['ok'] ? 200 : 400);
 
                 case 'release':
@@ -258,10 +315,12 @@ class Meta_agent extends Sk_Base {
                         $owner = $op === 'release' ? 'meta_agent' : 'app';
                         $this->Sk_Vendor_meta_agent_model->set_conversation_owner($conversationId, $owner, $op);
                     }
+                    $fail = $metaFail($res, 'Thread control failed');
                     return $this->json([
                         'success' => !empty($res['ok']),
-                        'message' => $res['ok'] ? ('Thread control: ' . $op) : ($res['error'] ?? 'Failed'),
-                        'data'    => $res['data'],
+                        'message' => $res['ok'] ? ('Thread control: ' . $op) : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
                     ], $res['ok'] ? 200 : 400);
 
                 default:
