@@ -196,6 +196,7 @@ class Meta_agent extends Sk_Base {
                             'agent_enabled' => true,
                             'handoff' => [
                                 'enabled' => true,
+                                'message_selection' => 'CUSTOM',
                                 'message' => $cfg['handoff_message'],
                             ],
                         ];
@@ -208,6 +209,7 @@ class Meta_agent extends Sk_Base {
                             'agent_enabled' => true,
                             'handoff' => [
                                 'enabled' => true,
+                                'message_selection' => 'CUSTOM',
                                 'message' => $cfg['handoff_message'],
                             ],
                         ];

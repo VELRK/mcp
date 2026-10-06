@@ -94,7 +94,7 @@ function sk_meta_ba_access_token(string $phoneNumberId = '', ?array $settings = 
     return trim((string)($cloud['access_token'] ?? ''));
 }
 
-function sk_meta_ba_http(string $method, string $url, array $body = null, string $token = '', int $timeout = 30): array {
+function sk_meta_ba_http(string $method, string $url, $body = null, string $token = '', int $timeout = 30): array {
     $headers = [
         'Accept: application/json',
         'Content-Type: application/json',
@@ -111,7 +111,14 @@ function sk_meta_ba_http(string $method, string $url, array $body = null, string
         CURLOPT_CUSTOMREQUEST  => strtoupper($method),
     ];
     if ($body !== null) {
-        $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        // Meta schemas expect a JSON object (or null). PHP json_encode([]) is "[]", which fails.
+        if (is_array($body) && $body === []) {
+            $opts[CURLOPT_POSTFIELDS] = '{}';
+        } elseif (is_object($body) && $body instanceof stdClass && get_object_vars($body) === []) {
+            $opts[CURLOPT_POSTFIELDS] = '{}';
+        } else {
+            $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
     }
     curl_setopt_array($ch, $opts);
     $raw = curl_exec($ch);
@@ -126,7 +133,17 @@ function sk_meta_ba_http(string $method, string $url, array $body = null, string
     $error = '';
     if (!$ok) {
         if (is_array($decoded)) {
-            $error = (string)($decoded['error']['message'] ?? $decoded['message'] ?? $decoded['error'] ?? '');
+            $error = (string)(
+                $decoded['error']['message']
+                ?? $decoded['detail']
+                ?? $decoded['title']
+                ?? $decoded['message']
+                ?? $decoded['error']
+                ?? ''
+            );
+            if (is_array($decoded['error'] ?? null) && $error === '') {
+                $error = (string)($decoded['error']['error_user_msg'] ?? $decoded['error']['type'] ?? '');
+            }
         }
         if ($error === '') {
             $error = 'HTTP ' . $code;
@@ -161,7 +178,8 @@ function sk_meta_ba_onboard(string $phoneNumberId, ?array $settings = null): arr
     if ($token === '' || $phoneNumberId === '') {
         return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
     }
-    return sk_meta_ba_http('POST', sk_meta_ba_entity_url($phoneNumberId, 'agent_onboarding'), [], $token);
+    // WhatsApp onboarding expects an empty JSON object "{}", not "[]".
+    return sk_meta_ba_http('POST', sk_meta_ba_entity_url($phoneNumberId, 'agent_onboarding'), new stdClass(), $token);
 }
 
 function sk_meta_ba_get_settings(string $phoneNumberId, ?string $agentId = null, ?array $settings = null): array {
@@ -253,7 +271,7 @@ function sk_meta_ba_agent_test(string $phoneNumberId, string $message, ?string $
     if ($token === '' || $phoneNumberId === '') {
         return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
     }
-    $body = ['message' => $message];
+    $body = ['user_msg' => $message];
     if ($conversationId) {
         $body['conversation_id'] = $conversationId;
     }
