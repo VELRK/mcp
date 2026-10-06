@@ -303,22 +303,22 @@ function sk_meta_ba_thread_control(string $phoneNumberId, string $to, string $ac
 }
 
 function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
-    $cfg = sk_meta_ba_config_array();
-    $base = rtrim($cfg['connector_base_url'], '/') . '/shopkart-api/meta-agent/connectors/' . rawurlencode($phoneNumberId);
-    $stringParam = static function (string $desc, bool $required = true): array {
-        return [
-            'type'        => 'string',
+    // Paths are relative to the connector base_url.
+    unset($phoneNumberId);
+    $bodyField = static function (string $type, string $desc, ?array $binding = null): array {
+        $node = [
+            'type'        => $type,
             'description' => $desc,
-            'required'    => $required,
         ];
+        if ($binding !== null) {
+            $node['binding'] = $binding;
+        }
+        return $node;
     };
-    $intParam = static function (string $desc, bool $required = true): array {
-        return [
-            'type'        => 'integer',
-            'description' => $desc,
-            'required'    => $required,
-        ];
-    };
+    $waPhone = [
+        'kind'  => 'macro',
+        'macro' => 'WHATSAPP_PHONE_NUMBER',
+    ];
 
     return [
         [
@@ -327,11 +327,13 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'user_auth_required' => false,
             'request_definition' => [
                 'method' => 'POST',
-                'path'   => $base . '/search_products',
+                'path'   => '/search_products',
                 'body'   => [
+                    'content_type' => 'application/json',
                     'params' => [
-                        'query' => $stringParam('Customer words describing the product'),
+                        'query' => $bodyField('string', 'Customer words describing the product'),
                     ],
+                    'required' => ['query'],
                 ],
             ],
         ],
@@ -341,12 +343,14 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'user_auth_required' => false,
             'request_definition' => [
                 'method' => 'POST',
-                'path'   => $base . '/check_stock',
+                'path'   => '/check_stock',
                 'body'   => [
+                    'content_type' => 'application/json',
                     'params' => [
-                        'product_id' => $intParam('Product id from search_products'),
-                        'variant_id' => $intParam('Optional variant id', false),
+                        'product_id' => $bodyField('integer', 'Product id from search_products'),
+                        'variant_id' => $bodyField('integer', 'Optional variant id'),
                     ],
+                    'required' => ['product_id'],
                 ],
             ],
         ],
@@ -356,11 +360,13 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'user_auth_required' => false,
             'request_definition' => [
                 'method' => 'POST',
-                'path'   => $base . '/get_order_status',
+                'path'   => '/get_order_status',
                 'body'   => [
+                    'content_type' => 'application/json',
                     'params' => [
-                        'order_id' => $intParam('Numeric order id'),
+                        'order_id' => $bodyField('integer', 'Numeric order id'),
                     ],
+                    'required' => ['order_id'],
                 ],
             ],
         ],
@@ -370,11 +376,13 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'user_auth_required' => false,
             'request_definition' => [
                 'method' => 'POST',
-                'path'   => $base . '/get_delivery_status',
+                'path'   => '/get_delivery_status',
                 'body'   => [
+                    'content_type' => 'application/json',
                     'params' => [
-                        'order_id' => $intParam('Numeric order id'),
+                        'order_id' => $bodyField('integer', 'Numeric order id'),
                     ],
+                    'required' => ['order_id'],
                 ],
             ],
         ],
@@ -384,12 +392,14 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'user_auth_required' => false,
             'request_definition' => [
                 'method' => 'POST',
-                'path'   => $base . '/human_handoff',
+                'path'   => '/human_handoff',
                 'body'   => [
+                    'content_type' => 'application/json',
                     'params' => [
-                        'phone'  => $stringParam('Customer WhatsApp phone with country code'),
-                        'reason' => $stringParam('Why handoff is needed', false),
+                        'phone'  => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
+                        'reason' => $bodyField('string', 'Why handoff is needed'),
                     ],
+                    'required' => ['phone'],
                 ],
             ],
         ],
@@ -404,17 +414,33 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
     if (!sk_meta_ba_is_platform_ready()) {
         return ['ok' => false, 'error' => 'Meta Business Agent is not configured (.env META_BA_*).', 'data' => null];
     }
+    if (trim((string)$cfg['connector_api_key']) === '') {
+        return ['ok' => false, 'error' => 'META_BA_CONNECTOR_API_KEY is missing.', 'data' => null];
+    }
     $CI =& get_instance();
     $CI->load->model('Sk_Vendor_meta_agent_model');
     $row = $CI->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
     $connectorId = trim((string)($row['connector_id'] ?? ''));
+    $baseUrl = rtrim($cfg['connector_base_url'], '/') . '/shopkart-api/meta-agent/connectors/' . $phoneNumberId;
 
     if ($connectorId === '') {
         $create = sk_meta_ba_create_connector($phoneNumberId, [
-            'name'        => 'Talk AI Pilot Commerce',
+            'name'        => 'talk_ai_pilot_commerce',
             'description' => 'Shop catalog, stock, order status, delivery, and human handoff for this WhatsApp number.',
-            'base_url'    => rtrim($cfg['connector_base_url'], '/') . '/shopkart-api/meta-agent/connectors/' . $phoneNumberId,
+            'base_url'    => $baseUrl,
             'auth_type'   => 'API_KEY',
+            'auth_config' => [
+                'api_key' => [
+                    'headers' => [
+                        [
+                            'field_name' => 'X-Api-Key',
+                            'value'      => $cfg['connector_api_key'],
+                            'prefix'     => '',
+                        ],
+                    ],
+                ],
+            ],
+            'requires_certificate' => false,
         ], $settings);
         if (!$create['ok']) {
             return $create;
@@ -433,7 +459,8 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
                         if (!is_array($item)) {
                             continue;
                         }
-                        if (stripos((string)($item['name'] ?? ''), 'Talk AI Pilot') !== false) {
+                        $n = strtolower((string)($item['name'] ?? ''));
+                        if (strpos($n, 'talk_ai_pilot') !== false || strpos($n, 'talk ai pilot') !== false) {
                             $connectorId = (string)($item['id'] ?? $item['connector_id'] ?? '');
                             break;
                         }
@@ -444,6 +471,7 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
         if ($connectorId === '') {
             return ['ok' => false, 'error' => 'Connector created but no connector_id returned.', 'data' => $create['data']];
         }
+        // Keep API key registration in sync with Meta (auth_config was already set at create).
         sk_meta_ba_upsert_connector_api_key($phoneNumberId, $connectorId, $cfg['connector_api_key'], $settings);
     }
 
@@ -461,31 +489,56 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
     }
 
     $createdTools = [];
+    $failed = [];
     foreach (sk_meta_ba_connector_tool_defs($phoneNumberId) as $tool) {
         $name = strtolower((string)$tool['name']);
         if (isset($existingNames[$name])) {
+            $createdTools[] = ['name' => $tool['name'], 'ok' => true, 'error' => 'exists'];
             continue;
         }
         $res = sk_meta_ba_create_connector_tool($phoneNumberId, $connectorId, $tool, $settings);
         $createdTools[] = [
-            'name' => $tool['name'],
-            'ok'   => !empty($res['ok']),
-            'error'=> $res['error'] ?? '',
+            'name'  => $tool['name'],
+            'ok'    => !empty($res['ok']),
+            'error' => $res['error'] ?? '',
+            'data'  => $res['data'] ?? null,
+        ];
+        if (empty($res['ok'])) {
+            $failed[] = $tool['name'] . ': ' . ($res['error'] ?? 'failed');
+        }
+    }
+
+    if ($failed) {
+        $err = 'Tool sync failed — ' . implode('; ', $failed);
+        $CI->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
+            'vendor_id'      => $vendorId,
+            'connector_id'   => $connectorId,
+            'sync_status'    => 'error',
+            'last_error'     => $err,
+            'last_synced_at' => date('Y-m-d H:i:s'),
+        ]);
+        return [
+            'ok'    => false,
+            'error' => $err,
+            'data'  => [
+                'connector_id'  => $connectorId,
+                'tools_created' => $createdTools,
+            ],
         ];
     }
 
     $CI->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
-        'vendor_id'    => $vendorId,
-        'connector_id' => $connectorId,
-        'sync_status'  => 'synced',
-        'last_error'   => '',
+        'vendor_id'      => $vendorId,
+        'connector_id'   => $connectorId,
+        'sync_status'    => 'synced',
+        'last_error'     => '',
         'last_synced_at' => date('Y-m-d H:i:s'),
     ]);
 
     return [
-        'ok'   => true,
-        'error'=> '',
-        'data' => [
+        'ok'    => true,
+        'error' => '',
+        'data'  => [
             'connector_id'  => $connectorId,
             'tools_created' => $createdTools,
         ],
