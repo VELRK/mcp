@@ -111,21 +111,13 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         if ($query === '') {
             $this->error('query is required.', 400);
         }
-        $result = sk_mcp_tool_find_products($query, ['tenant' => $tenant['vendor_id']], 5);
+        $result = sk_mcp_tool_find_products($query, ['tenant' => $tenant['vendor_id']], 3);
         $products = $this->_meta_safe_products($result['results'] ?? []);
-        if (!$products) {
-            foreach (['saree', 'silk', 'dress'] as $fallbackQ) {
-                $fallback = sk_mcp_tool_find_products($fallbackQ, ['tenant' => $tenant['vendor_id']], 5);
-                $products = $this->_meta_safe_products($fallback['results'] ?? []);
-                if ($products) {
-                    break;
-                }
-            }
-        }
+        // One fast catalog fallback only — avoid multi-query delays that push Meta past 10s.
         if (!$products) {
             $listed = $this->Sk_Product_model->get_all(
                 ['status' => 'active', 'vendor_id' => $tenant['vendor_id'], 'sort' => 'newest'],
-                5,
+                3,
                 0
             );
             foreach (($listed['data'] ?? []) as $product) {
