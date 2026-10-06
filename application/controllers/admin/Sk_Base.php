@@ -178,9 +178,16 @@ class Sk_Base extends CI_Controller {
         while (ob_get_level() > 0) {
             @ob_end_clean();
         }
+        if (is_array($data) && !array_key_exists('csrf_hash', $data) && isset($this->security)) {
+            $data['csrf_hash'] = $this->security->get_csrf_hash();
+            $data['csrf_token_name'] = $this->security->get_csrf_token_name();
+        }
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, no-cache, must-revalidate');
+        if (isset($this->security) && is_array($data) && !empty($data['csrf_hash'])) {
+            header('X-CSRF-TOKEN: ' . $data['csrf_hash']);
+        }
         $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
         if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
             $flags |= JSON_INVALID_UTF8_SUBSTITUTE;

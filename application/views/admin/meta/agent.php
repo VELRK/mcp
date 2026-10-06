@@ -62,12 +62,11 @@ $webhook = $webhook_uri ?? '';
         <h6 class="mb-2">Rollout order</h6>
         <ol class="small mb-0 ps-3">
           <li>Connect WhatsApp number</li>
-          <li>Check eligibility</li>
-          <li>Onboard agent</li>
-          <li>Sync commerce connector</li>
-          <li>Test (Agent Test API)</li>
-          <li>Enable allowlisted</li>
-          <li>Enable live (EVERYONE) when billing ready</li>
+          <li>Eligibility + onboard run automatically</li>
+          <li>Sync tools / Sync skills (click)</li>
+          <li>Test (click)</li>
+          <li>Enable allowlist (click)</li>
+          <li>Enable live when billing ready (click)</li>
         </ol>
       </div>
     </div>
@@ -100,7 +99,7 @@ $webhook = $webhook_uri ?? '';
               $display = trim((string)($acct['display_phone'] ?? '')) ?: $phoneId;
               $shop = trim((string)($vendor['business_name'] ?? $vendor['owner_name'] ?? '')) ?: ('Vendor #' . (int)($acct['vendor_id'] ?? 0));
           ?>
-            <tr data-phone="<?= htmlspecialchars($phoneId) ?>">
+            <tr data-phone="<?= htmlspecialchars($phoneId) ?>" data-needs-prepare="<?= !empty($row['needs_prepare']) ? '1' : '0' ?>">
               <td>
                 <div class="fw-semibold"><?= htmlspecialchars($display) ?></div>
                 <div class="small text-muted font-monospace"><?= htmlspecialchars($phoneId) ?></div>
@@ -124,7 +123,7 @@ $webhook = $webhook_uri ?? '';
                   if (!empty($agent['agent_enabled'])) $bits[] = 'enabled';
                   if (!empty($agent['ai_audience'])) $bits[] = (string)$agent['ai_audience'];
                   if (!empty($agent['sync_status'])) $bits[] = (string)$agent['sync_status'];
-                  echo $bits ? htmlspecialchars(implode(' · ', $bits)) : '<span class="text-muted">pending</span>';
+                  echo $bits ? htmlspecialchars(implode(' · ', $bits)) : '<span class="text-muted">auto-preparing…</span>';
                   if (!empty($agent['last_error'])):
                 ?>
                   <div class="text-danger"><?= htmlspecialchars((string)$agent['last_error']) ?></div>
@@ -132,8 +131,6 @@ $webhook = $webhook_uri ?? '';
               </td>
               <td>
                 <div class="d-flex flex-wrap gap-1">
-                  <button type="button" class="btn btn-sm btn-outline-primary mba-op" data-op="eligibility">Eligibility</button>
-                  <button type="button" class="btn btn-sm btn-outline-primary mba-op" data-op="onboard">Onboard</button>
                   <button type="button" class="btn btn-sm btn-outline-success mba-op" data-op="sync">Sync tools</button>
                   <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="list_connectors">Connectors</button>
                   <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="connector_logs">Conn. logs</button>
@@ -164,23 +161,73 @@ $webhook = $webhook_uri ?? '';
 (function () {
   var result = document.getElementById('mbaResult');
   var csrfName = <?= json_encode($this->security->get_csrf_token_name()) ?>;
-  var csrfHash = <?= json_encode($this->security->get_csrf_hash()) ?>;
-  function csrfFromCookie() {
-    var m = document.cookie.match(/(?:^|; )csrf_cookie=([^;]*)/);
-    return m ? decodeURIComponent(m[1]) : csrfHash;
-  }
-  function rememberCsrf(j) {
-    if (j && j.csrf_hash) {
-      csrfHash = j.csrf_hash;
-      var meta = document.querySelector('meta[name="csrf-token"]');
-      if (meta) meta.setAttribute('content', j.csrf_hash);
+  var actionUrl = <?= json_encode(site_url('admin/meta/agent/action')) ?>;
+  var platformReady = <?= $platform_ready ? 'true' : 'false' ?>;
+
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.getAttribute('content')) {
+      return meta.getAttribute('content');
     }
+    return <?= json_encode($this->security->get_csrf_hash()) ?>;
   }
+
+  function rememberCsrf(j, res) {
+    var next = '';
+    if (j && j.csrf_hash) next = j.csrf_hash;
+    if (!next && res && res.headers) next = res.headers.get('X-CSRF-TOKEN') || '';
+    if (!next) return;
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta) meta.setAttribute('content', next);
+  }
+
   function show(ok, msg, data) {
+    if (!result) return;
     result.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-secondary');
     result.classList.add(ok ? 'alert-success' : 'alert-danger');
     result.textContent = msg + (data ? '\n' + JSON.stringify(data, null, 2) : '');
   }
+
+  function postOp(phone, op, extra) {
+    var body = new FormData();
+    body.append(csrfName, csrfToken());
+    body.append('phone_number_id', phone);
+    body.append('op', op);
+    if (extra) {
+      Object.keys(extra).forEach(function (k) {
+        if (extra[k] !== undefined && extra[k] !== null) body.append(k, extra[k]);
+      });
+    }
+    return fetch(actionUrl, {
+      method: 'POST',
+      body: body,
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null;
+        try { j = JSON.parse(t); } catch (e) {}
+        rememberCsrf(j, r);
+        return { ok: r.ok, status: r.status, j: j, raw: t };
+      });
+    });
+  }
+
+  function handleResult(x) {
+    if (!x.j) {
+      var blocked = !x.ok || x.status === 403 || /not allowed/i.test(x.raw || '');
+      show(false, blocked
+        ? 'CSRF blocked this request. Refresh the page, then try again.'
+        : (x.ok ? 'Unexpected response' : 'Request failed'));
+      return;
+    }
+    var detail = x.j.data;
+    if (x.j.op) {
+      detail = Object.assign({ op: x.j.op }, detail && typeof detail === 'object' ? detail : {});
+    }
+    show(!!x.j.success, x.j.message || 'Done', detail);
+  }
+
   document.querySelectorAll('.mba-op').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var tr = btn.closest('tr');
@@ -188,49 +235,51 @@ $webhook = $webhook_uri ?? '';
       var op = btn.getAttribute('data-op');
       if (!phone || !op) return;
       btn.disabled = true;
-      var body = new FormData();
-      body.append(csrfName, csrfFromCookie());
-      body.append('phone_number_id', phone);
-      body.append('op', op);
+      var extra = {};
       if (op === 'test') {
         var msg = window.prompt('Test message', 'Hi');
         if (msg === null) { btn.disabled = false; return; }
-        body.append('message', msg);
+        extra.message = msg;
       }
       if (op === 'release' || op === 'take') {
         var phoneTo = window.prompt('Customer WhatsApp number (with country code)', '');
         if (phoneTo === null || !String(phoneTo).trim()) { btn.disabled = false; return; }
-        body.append('to', String(phoneTo).trim());
+        extra.to = String(phoneTo).trim();
       }
-      fetch('<?= site_url('admin/meta/agent/action') ?>', {
-        method: 'POST',
-        body: body,
-        credentials: 'same-origin',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      }).then(function (r) {
-        return r.text().then(function (t) {
-          var j = null;
-          try { j = JSON.parse(t); } catch (e) {}
-          return { ok: r.ok, status: r.status, j: j, raw: t };
-        });
-      }).then(function (x) {
-        if (x.j) rememberCsrf(x.j);
-        if (!x.j) {
-          var blocked = !x.ok || x.status === 403 || /not allowed/i.test(x.raw || '');
-          show(false, blocked
-            ? 'CSRF blocked this request. Refresh the page, then try again.'
-            : (x.ok ? 'Unexpected response' : 'Request failed'));
-          return;
-        }
-        var detail = x.j.data;
-        if (x.j.op) {
-          detail = Object.assign({ op: x.j.op }, detail && typeof detail === 'object' ? detail : {});
-        }
-        show(!!x.j.success, x.j.message || 'Done', detail);
-      })
+      postOp(phone, op, extra)
+        .then(handleResult)
         .catch(function (e) { show(false, e.message || 'Request failed'); })
         .finally(function () { btn.disabled = false; });
     });
+  });
+
+  // Run after layout CSRF helper is ready. Eligibility/onboard are automatic.
+  window.addEventListener('load', function () {
+    if (!platformReady) return;
+    var queue = [];
+    document.querySelectorAll('tr[data-needs-prepare="1"]').forEach(function (tr) {
+      var phone = tr.getAttribute('data-phone');
+      if (phone) queue.push(phone);
+    });
+    function next() {
+      if (!queue.length) return;
+      var phone = queue.shift();
+      postOp(phone, 'prepare')
+        .then(function (x) {
+          if (x.j && x.j.success) {
+            show(true, (x.j.message || 'Prepared') + ' (' + phone + ')', x.j.data || null);
+            var row = document.querySelector('tr[data-phone="' + phone + '"]');
+            if (row) row.setAttribute('data-needs-prepare', '0');
+          } else if (x.j) {
+            show(false, x.j.message || 'Auto prepare failed', x.j.data || null);
+          } else {
+            handleResult(x);
+          }
+        })
+        .catch(function () {})
+        .finally(next);
+    }
+    next();
   });
 })();
 </script>

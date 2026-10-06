@@ -519,7 +519,10 @@ $config['csrf_protection'] = TRUE; // Enabled CSRF
 $config['csrf_token_name'] = 'csrf_token';
 $config['csrf_cookie_name'] = 'csrf_cookie';
 $config['csrf_expire'] = 7200;
-$config['csrf_regenerate'] = TRUE;
+// Keep FALSE so admin AJAX (fetch/jQuery) can reuse the page CSRF hash.
+// With cookie_httponly=TRUE JS cannot read the regenerated csrf_cookie, so the
+// 2nd POST after a successful action would otherwise get "action not allowed".
+$config['csrf_regenerate'] = FALSE;
 // Exclude external webhooks / APIs from CSRF checks (no browser session cookie).
 $config['csrf_exclude_uris'] = array(
     'Conversations/Whatsapp/.*',

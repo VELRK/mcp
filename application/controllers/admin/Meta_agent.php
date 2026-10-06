@@ -39,9 +39,10 @@ class Meta_agent extends Sk_Base {
                 $vendor = $this->Sk_Vendor_model->get_by_id($vid, false);
             }
             $rows[] = [
-                'account' => $acct,
-                'agent'   => $agent,
-                'vendor'  => $vendor,
+                'account'       => $acct,
+                'agent'         => $agent,
+                'vendor'        => $vendor,
+                'needs_prepare' => empty($agent['eligible']) || empty($agent['onboarded']),
             ];
         }
 
@@ -99,89 +100,144 @@ class Meta_agent extends Sk_Base {
             ];
         };
 
+        $runEligibility = function () use ($phoneNumberId, $vendorId, $settings): array {
+            $res = sk_meta_ba_check_eligibility($phoneNumberId, $settings);
+            $eligible = !empty($res['ok']) && (
+                !empty($res['data']['eligible'])
+                || !empty($res['data']['is_eligible'])
+                || (($res['data']['status'] ?? '') === 'eligible')
+                || !empty($res['data']['data']['eligible'])
+            );
+            if (!empty($res['ok']) && !$eligible && is_array($res['data'])) {
+                $eligible = empty($res['data']['error']);
+            }
+            $this->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
+                'vendor_id'        => $vendorId,
+                'eligible'         => $eligible ? 1 : 0,
+                'eligibility_json' => $res['data'],
+                'sync_status'      => $res['ok'] ? 'checked' : 'error',
+                'last_error'       => $res['ok'] ? '' : ($res['error'] ?? 'Eligibility failed'),
+                'last_synced_at'   => date('Y-m-d H:i:s'),
+            ]);
+            $res['eligible'] = $eligible;
+            return $res;
+        };
+
+        $runOnboard = function () use ($phoneNumberId, $vendorId, $shopName, $settings): array {
+            $res = sk_meta_ba_onboard($phoneNumberId, $settings);
+            $agentId = '';
+            if (is_array($res['data'])) {
+                $agentId = (string)($res['data']['agent_id'] ?? $res['data']['id'] ?? '');
+                if ($agentId === '' && is_array($res['data']['data'] ?? null)) {
+                    $agentId = (string)($res['data']['data']['agent_id'] ?? $res['data']['data']['id'] ?? '');
+                }
+            }
+            $this->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
+                'vendor_id'      => $vendorId,
+                'agent_id'       => $agentId,
+                'onboarded'      => !empty($res['ok']) ? 1 : 0,
+                'sync_status'    => $res['ok'] ? 'onboarded' : 'error',
+                'last_error'     => $res['ok'] ? '' : ($res['error'] ?? 'Onboard failed'),
+                'last_synced_at' => date('Y-m-d H:i:s'),
+            ]);
+            $setupNotes = [];
+            if ($res['ok']) {
+                $ins = sk_meta_ba_upsert_instructions(
+                    $phoneNumberId,
+                    sk_meta_ba_default_instructions($shopName),
+                    $settings
+                );
+                if (empty($ins['ok'])) {
+                    $setupNotes[] = 'instructions: ' . sk_meta_ba_human_error($ins);
+                }
+                $biz = sk_meta_ba_upsert_business_info($phoneNumberId, [
+                    'business_name' => $shopName,
+                    'description'   => $shopName . ' WhatsApp commerce assistant powered by Talk AI Pilot.',
+                ], $settings);
+                if (empty($biz['ok'])) {
+                    $setupNotes[] = 'business_info: ' . sk_meta_ba_human_error($biz);
+                }
+            }
+            $res['agent_id'] = $agentId;
+            $res['setup_notes'] = $setupNotes;
+            return $res;
+        };
+
+        $ensurePrepared = function (bool $force = false) use ($phoneNumberId, $runEligibility, $runOnboard): array {
+            $row = $this->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
+            $needElig = $force || empty($row['eligible']);
+            $needOnboard = $force || empty($row['onboarded']) || trim((string)($row['agent_id'] ?? '')) === '';
+            $out = ['ok' => true, 'error' => '', 'eligible' => !empty($row['eligible']), 'onboarded' => !empty($row['onboarded']), 'steps' => []];
+            if ($needElig) {
+                $elig = $runEligibility();
+                $out['steps']['eligibility'] = [
+                    'ok'       => !empty($elig['ok']),
+                    'eligible' => !empty($elig['eligible']),
+                    'error'    => $elig['error'] ?? '',
+                ];
+                if (empty($elig['ok'])) {
+                    $out['ok'] = false;
+                    $out['error'] = $elig['error'] ?? 'Eligibility failed';
+                    $out['http'] = $elig['http'] ?? null;
+                    $out['raw'] = $elig['raw'] ?? '';
+                    $out['data'] = $elig['data'] ?? null;
+                    return $out;
+                }
+                $out['eligible'] = !empty($elig['eligible']);
+            }
+            if ($needOnboard) {
+                $onb = $runOnboard();
+                $out['steps']['onboard'] = [
+                    'ok'       => !empty($onb['ok']),
+                    'agent_id' => $onb['agent_id'] ?? '',
+                    'error'    => $onb['error'] ?? '',
+                    'notes'    => $onb['setup_notes'] ?? [],
+                ];
+                if (empty($onb['ok'])) {
+                    $out['ok'] = false;
+                    $out['error'] = $onb['error'] ?? 'Onboard failed';
+                    $out['http'] = $onb['http'] ?? null;
+                    $out['raw'] = $onb['raw'] ?? '';
+                    $out['data'] = $onb['data'] ?? null;
+                    return $out;
+                }
+                $out['onboarded'] = true;
+                $out['agent_id'] = $onb['agent_id'] ?? '';
+            }
+            return $out;
+        };
+
         try {
             switch ($op) {
                 case 'eligibility':
-                    $res = sk_meta_ba_check_eligibility($phoneNumberId, $settings);
-                    $eligible = !empty($res['ok']) && (
-                        !empty($res['data']['eligible'])
-                        || !empty($res['data']['is_eligible'])
-                        || (($res['data']['status'] ?? '') === 'eligible')
-                        || !empty($res['data']['data']['eligible'])
-                    );
-                    // If API returns 200 without explicit flag, treat as check completed.
-                    if (!empty($res['ok']) && !$eligible && is_array($res['data'])) {
-                        $eligible = empty($res['data']['error']);
-                    }
-                    $this->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
-                        'vendor_id'        => $vendorId,
-                        'eligible'         => $eligible ? 1 : 0,
-                        'eligibility_json' => $res['data'],
-                        'sync_status'      => $res['ok'] ? 'checked' : 'error',
-                        'last_error'       => $res['ok'] ? '' : ($res['error'] ?? 'Eligibility failed'),
-                        'last_synced_at'   => date('Y-m-d H:i:s'),
-                    ]);
-                    $fail = $metaFail($res, 'Eligibility failed');
-                    return $this->json([
-                        'success'  => !empty($res['ok']),
-                        'message'  => $res['ok'] ? ($eligible ? 'Number is eligible.' : 'Eligibility response received.') : $fail['message'],
-                        'eligible' => $eligible,
-                        'op'       => $op,
-                        'data'     => $res['ok'] ? $res['data'] : $fail['data'],
-                    ], $res['ok'] ? 200 : 400);
-
                 case 'onboard':
-                    $res = sk_meta_ba_onboard($phoneNumberId, $settings);
-                    $agentId = '';
-                    if (is_array($res['data'])) {
-                        $agentId = (string)($res['data']['agent_id'] ?? $res['data']['id'] ?? '');
-                        if ($agentId === '' && is_array($res['data']['data'] ?? null)) {
-                            $agentId = (string)($res['data']['data']['agent_id'] ?? $res['data']['data']['id'] ?? '');
-                        }
-                    }
-                    $this->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
-                        'vendor_id'      => $vendorId,
-                        'agent_id'       => $agentId,
-                        'onboarded'      => !empty($res['ok']) ? 1 : 0,
-                        'sync_status'    => $res['ok'] ? 'onboarded' : 'error',
-                        'last_error'     => $res['ok'] ? '' : ($res['error'] ?? 'Onboard failed'),
-                        'last_synced_at' => date('Y-m-d H:i:s'),
-                    ]);
-                    $setupNotes = [];
-                    if ($res['ok']) {
-                        $ins = sk_meta_ba_upsert_instructions(
-                            $phoneNumberId,
-                            sk_meta_ba_default_instructions($shopName),
-                            $settings
-                        );
-                        if (empty($ins['ok'])) {
-                            $setupNotes[] = 'instructions: ' . sk_meta_ba_human_error($ins);
-                        }
-                        $biz = sk_meta_ba_upsert_business_info($phoneNumberId, [
-                            'business_name' => $shopName,
-                            'description'   => $shopName . ' WhatsApp commerce assistant powered by Talk AI Pilot.',
-                        ], $settings);
-                        if (empty($biz['ok'])) {
-                            $setupNotes[] = 'business_info: ' . sk_meta_ba_human_error($biz);
-                        }
-                    }
-                    $fail = $metaFail($res, 'Onboard failed');
-                    $payload = $res['ok'] ? ($res['data'] ?? []) : $fail['data'];
-                    if ($setupNotes) {
-                        $payload = is_array($payload) ? $payload : [];
-                        $payload['setup_warnings'] = $setupNotes;
-                    }
+                case 'prepare':
+                    // Eligibility + onboard run automatically — no separate clicks needed.
+                    $prep = $ensurePrepared($op === 'prepare' || $op === 'eligibility' || $op === 'onboard');
+                    $fail = $metaFail($prep, 'Prepare failed');
+                    $msg = $prep['ok']
+                        ? ('Ready: eligible' . (!empty($prep['eligible']) ? '' : ' (check Meta)') . ', onboarded.')
+                        : $fail['message'];
                     return $this->json([
-                        'success'  => !empty($res['ok']),
-                        'message'  => $res['ok']
-                            ? ('Agent onboarded.' . ($setupNotes ? ' Some optional setup steps failed — see data.setup_warnings.' : ''))
-                            : $fail['message'],
-                        'agent_id' => $agentId,
-                        'op'       => $op,
-                        'data'     => $payload,
-                    ], $res['ok'] ? 200 : 400);
+                        'success'  => !empty($prep['ok']),
+                        'message'  => $msg,
+                        'eligible' => !empty($prep['eligible']),
+                        'agent_id' => (string)($prep['agent_id'] ?? ''),
+                        'op'       => 'prepare',
+                        'data'     => $prep['ok'] ? $prep : $fail['data'],
+                    ], $prep['ok'] ? 200 : 400);
 
                 case 'sync':
+                    $prep = $ensurePrepared(false);
+                    if (empty($prep['ok'])) {
+                        $fail = $metaFail($prep, 'Eligibility/onboard required before sync');
+                        return $this->json([
+                            'success' => false,
+                            'message' => $fail['message'],
+                            'op'      => $op,
+                            'data'    => array_merge($fail['data'], ['prepare' => $prep]),
+                        ], 400);
+                    }
                     $res = sk_meta_ba_sync_connector_for_phone($phoneNumberId, $vendorId, $settings);
                     if (!$res['ok']) {
                         $this->Sk_Vendor_meta_agent_model->set_error($phoneNumberId, $res['error'] ?? 'Sync failed');
@@ -191,7 +247,7 @@ class Meta_agent extends Sk_Base {
                         'success' => !empty($res['ok']),
                         'message' => $res['ok'] ? 'Connector and tools synced.' : $fail['message'],
                         'op'      => $op,
-                        'data'    => $res['ok'] ? $res['data'] : array_merge($fail['data'], is_array($res['data']) ? $res['data'] : []),
+                        'data'    => $res['ok'] ? array_merge((array)$res['data'], ['prepare' => $prep]) : array_merge($fail['data'], is_array($res['data']) ? $res['data'] : []),
                     ], $res['ok'] ? 200 : 400);
 
                 case 'list_skills':
@@ -251,6 +307,11 @@ class Meta_agent extends Sk_Base {
                     ], $res['ok'] ? 200 : 400);
 
                 case 'sync_ui_skills':
+                    $prep = $ensurePrepared(false);
+                    if (empty($prep['ok'])) {
+                        $fail = $metaFail($prep, 'Eligibility/onboard required first');
+                        return $this->json(['success' => false, 'message' => $fail['message'], 'op' => $op, 'data' => $fail['data']], 400);
+                    }
                     $catalogUrl = trim((string)$this->input->post('catalog_url', TRUE));
                     if ($catalogUrl === '' && $vendorId > 0) {
                         $v = $this->Sk_Vendor_model->get_by_id($vendorId, false);
@@ -272,6 +333,11 @@ class Meta_agent extends Sk_Base {
                     ], $res['ok'] ? 200 : 400);
 
                 case 'sync_skills':
+                    $prep = $ensurePrepared(false);
+                    if (empty($prep['ok'])) {
+                        $fail = $metaFail($prep, 'Eligibility/onboard required first');
+                        return $this->json(['success' => false, 'message' => $fail['message'], 'op' => $op, 'data' => $fail['data']], 400);
+                    }
                     $res = sk_meta_ba_sync_sales_skills(
                         $phoneNumberId,
                         sk_meta_ba_default_instructions($shopName),
@@ -290,6 +356,11 @@ class Meta_agent extends Sk_Base {
                     ], $res['ok'] ? 200 : 400);
 
                 case 'test':
+                    $prep = $ensurePrepared(false);
+                    if (empty($prep['ok'])) {
+                        $fail = $metaFail($prep, 'Eligibility/onboard required first');
+                        return $this->json(['success' => false, 'message' => $fail['message'], 'op' => $op, 'data' => $fail['data']], 400);
+                    }
                     @set_time_limit(120);
                     $message = trim((string)$this->input->post('message', TRUE));
                     if ($message === '') {
@@ -313,6 +384,13 @@ class Meta_agent extends Sk_Base {
                 case 'enable_allowlist':
                 case 'enable_live':
                 case 'disable':
+                    if ($op !== 'disable') {
+                        $prep = $ensurePrepared(false);
+                        if (empty($prep['ok'])) {
+                            $fail = $metaFail($prep, 'Eligibility/onboard required first');
+                            return $this->json(['success' => false, 'message' => $fail['message'], 'op' => $op, 'data' => $fail['data']], 400);
+                        }
+                    }
                     $cfg = sk_meta_ba_config_array();
                     if ($op === 'disable') {
                         $body = [

@@ -46,8 +46,21 @@ document.querySelectorAll('.sk-datatable').forEach(t => {
   var csrfHash = hashMeta ? hashMeta.getAttribute('content') : '';
 
   function csrfToken() {
+    // Prefer meta (updated after AJAX). Cookie is HttpOnly so JS usually cannot read it.
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta) {
+      var fromMeta = meta.getAttribute('content') || '';
+      if (fromMeta) {
+        csrfHash = fromMeta;
+        return fromMeta;
+      }
+    }
     var m = document.cookie.match(/(?:^|; )csrf_cookie=([^;]*)/);
-    return m ? decodeURIComponent(m[1]) : csrfHash;
+    if (m) {
+      csrfHash = decodeURIComponent(m[1]);
+      return csrfHash;
+    }
+    return csrfHash;
   }
 
   function injectForm(form) {
@@ -101,11 +114,20 @@ document.querySelectorAll('.sk-datatable').forEach(t => {
       }
     }
     return origFetch.call(this, input, init).then(function (res) {
-      var next = csrfToken();
-      if (next && hashMeta) hashMeta.setAttribute('content', next);
-      csrfHash = next || csrfHash;
-      injectAllForms();
-      return res;
+      return res.clone().text().then(function (t) {
+        try {
+          var j = JSON.parse(t);
+          if (j && j.csrf_hash) {
+            csrfHash = j.csrf_hash;
+            if (hashMeta) hashMeta.setAttribute('content', j.csrf_hash);
+          }
+        } catch (e) {}
+        var next = csrfToken();
+        if (next && hashMeta) hashMeta.setAttribute('content', next);
+        csrfHash = next || csrfHash;
+        injectAllForms();
+        return res;
+      });
     });
   };
 
