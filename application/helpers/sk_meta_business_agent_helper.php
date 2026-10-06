@@ -389,32 +389,20 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     $skill = "You are the WhatsApp sales manager for {$shopName}. "
         . "Sound like a real shopkeeper: warm, short, natural. Match the customer's language (Tamil/English/Tanglish). "
         . "Never mention AI, tools, databases, APIs, or internal IDs. "
-        . "SPEED — GREETINGS FIRST: If the customer only says hi/hello/hey/vanakkam/namaste or similar with no product ask, "
-        . "reply immediately in ONE short friendly sentence and invite them to say what they need. "
-        . "Do NOT call any tools for greetings. Do NOT look up products, customers, or config on greetings. "
-        . "SPEED — PRODUCT ASKS: Call search_products exactly once, then answer from its summary (name + price + stock). "
-        . "Do NOT call get_product_price, get_product_details, or check_stock in the same turn unless the customer asks a follow-up. "
-        . "Target a short reply; never chain tools for a simple price/product question. "
-        . "Infer typos: donu/dono have = do you have; amount/prise/rate = price; kanjivaram/kanchipuram = Kanjivaram saree. "
-        . "PRODUCT: Only when they ask about products/price/stock/details call search_products once. Never invent catalog facts. "
-        . "SALES FLOW (only after they want to buy): confirm product/qty → name + delivery address → "
-        . "identify_customer/create_customer/update_customer → calculate_order_total → create_order with confirmed=true → "
-        . "call handover_to_human to notify staff for approval. "
-        . "Do NOT call create_payment_link until a human has confirmed the order. Screenshots are not payment proof — use get_payment_status. "
-        . "generate_invoice only after verified paid payment. "
-        . "get_tenant_config only if they ask shop policy/hours/rules — never on greetings. "
-        . "save_conversation_state only after they pick a product or give order details — never on greetings. "
-        . "Never hand off for simple product/price questions. Call handover_to_human when they ask for a person, "
-        . "or for refunds/disputes/damage/complaints, or for order approval. "
-        . "SOFT HANDOFF: after handover_to_human, keep chatting — do not go silent. "
-        . "Keep WhatsApp replies to 1-3 short sentences. Ask only for the next missing detail.";
+        . "GREETINGS: If they only say hi/hello/hey/vanakkam with no product ask, reply in ONE short sentence. Call NO tools. "
+        . "PRODUCT/PRICE: Call search_products exactly once, then answer immediately from the summary (name + ₹ price + stock). "
+        . "Never invent catalog facts. Infer typos: donu have = do you have; amount/prise = price; kanjivaram = Kanjivaram saree. "
+        . "BUYING: confirm product/qty → name + address → identify_customer or create_customer → update_customer → "
+        . "calculate_order_total → create_order with confirmed=true → handover_to_human for staff approval. "
+        . "Do not create_payment_link until staff confirms. Never hand off for simple product/price questions. "
+        . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
         $skill .= ' Extra shop notes: ' . $extra;
     }
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'Apply on shopping and greetings. For hi/hello only: greet fast with no tools. For products/price/order: use catalog tools.',
+            'description' => 'Greet with no tools. Product/price: search_products once. Orders use customer/order tools then soft handoff.',
             'skill'       => $skill,
         ],
     ];
@@ -1013,17 +1001,23 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
         ];
     };
 
+    // Keep this list SMALL — Meta latency grows with tool count (19 tools was ~19s; 9 tools ~14s).
     return [
-        $tool('identify_customer', 'Find customer by phone for this shop only. Not for greetings.', [
+        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Summary has name+price+stock.', [
+            'query'  => $bodyField('string', 'Customer words describing the product'),
+            'search' => $bodyField('string', 'Alias for query'),
+            'limit'  => $bodyField('integer', 'Max results (1-3)'),
+        ]),
+        $tool('identify_customer', 'Find customer by phone when starting an order. Not for greetings.', [
             'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
             'email' => $bodyField('string', 'Optional email'),
         ]),
-        $tool('create_customer', 'Create customer if missing. Idempotent on phone. Not for greetings.', [
+        $tool('create_customer', 'Create customer if missing when placing an order.', [
             'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
             'name'  => $bodyField('string', 'Customer name'),
             'email' => $bodyField('string', 'Optional email'),
         ], ['phone']),
-        $tool('update_customer', 'Update current-shop customer fields / delivery address.', [
+        $tool('update_customer', 'Update delivery address before create_order.', [
             'customer_id' => $bodyField('integer', 'Customer id'),
             'name'        => $bodyField('string', 'Customer name'),
             'email'       => $bodyField('string', 'Email'),
@@ -1033,25 +1027,10 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'pincode'     => $bodyField('string', 'Pincode'),
             'phone'       => $bodyField('string', 'Phone', $waPhone),
         ], ['customer_id']),
-        $tool('search_products', 'Search this shop catalog when the customer asks for products, price, or stock. Never invent products. Never call for greetings like hi/hello.', [
-            'query'  => $bodyField('string', 'Customer words describing the product'),
-            'search' => $bodyField('string', 'Alias for query'),
-            'limit'  => $bodyField('integer', 'Max results (1-10)'),
-        ]),
-        $tool('get_product_details', 'Full product details from catalog for a known product_id.', [
-            'product_id' => $bodyField('string', 'Product id from search_products'),
-        ], ['product_id']),
-        $tool('get_product_price', 'Current selling price from catalog.', [
-            'product_id' => $bodyField('string', 'Product id'),
-        ], ['product_id']),
-        $tool('check_stock', 'Current stock/availability for a product.', [
-            'product_id' => $bodyField('string', 'Product id'),
-            'quantity'   => $bodyField('integer', 'Desired quantity'),
-        ], ['product_id']),
-        $tool('calculate_order_total', 'Compute totals from real product prices.', [
+        $tool('calculate_order_total', 'Compute totals from real product prices before create_order.', [
             'items' => $bodyField('string', 'JSON array of {product_id, quantity}'),
         ], ['items']),
-        $tool('create_order', 'Create order only after customer confirmation. confirmed must be true. Pending human approval.', [
+        $tool('create_order', 'Create order only after customer confirmation. confirmed must be true.', [
             'confirmed'        => $bodyField('boolean', 'Must be true'),
             'items'            => $bodyField('string', 'JSON array of {product_id, quantity}'),
             'customer_id'      => $bodyField('integer', 'Customer id if known'),
@@ -1067,28 +1046,15 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'order_id'     => $bodyField('integer', 'Order id'),
             'order_number' => $bodyField('string', 'Order number'),
         ]),
-        $tool('create_payment_link', 'Create/return a real payment link for an approved order. Never invent URLs.', [
+        $tool('create_payment_link', 'Payment link only after human-approved order. Never invent URLs.', [
             'order_id' => $bodyField('integer', 'Order id'),
         ], ['order_id']),
-        $tool('get_payment_status', 'Provider/DB payment status. Screenshots are not proof.', [
-            'order_id'   => $bodyField('integer', 'Order id'),
-            'payment_id' => $bodyField('integer', 'Payment id'),
-        ]),
-        $tool('generate_invoice', 'Invoice only after verified paid payment.', [
-            'order_id'   => $bodyField('integer', 'Order id'),
-            'payment_id' => $bodyField('integer', 'Optional payment id'),
-        ], ['order_id']),
-        $tool('handover_to_human', 'Notify the human inbox (soft handoff). Does not stop the AI — keep chatting with the customer after calling this.', [
+        $tool('handover_to_human', 'Notify inbox (soft handoff). Keep chatting after. Not for greetings or product asks.', [
             'phone'    => $bodyField('string', 'Customer phone', $waPhone),
             'reason'   => $bodyField('string', 'Why handoff is needed'),
             'priority' => $bodyField('string', 'normal|high'),
             'summary'  => $bodyField('string', 'Short summary for the teammate'),
         ]),
-        $tool('save_conversation_state', 'Persist sales flow state JSON after product selection or address capture. Never call on greetings.', [
-            'phone' => $bodyField('string', 'Customer phone', $waPhone),
-            'state' => $bodyField('string', 'JSON object of sales state'),
-        ], ['state']),
-        $tool('get_tenant_config', 'Shop policy/hours/rules only when the customer asks. Never call on greetings like hi/hello.', []),
     ];
 }
 
@@ -1184,8 +1150,10 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
 
     $createdTools = [];
     $failed = [];
+    $desiredNames = [];
     foreach (sk_meta_ba_connector_tool_defs($phoneNumberId) as $tool) {
         $name = strtolower((string)$tool['name']);
+        $desiredNames[$name] = true;
         $existing = $existingByName[$name] ?? null;
         if ($existing && !empty($existing['id'])) {
             $res = sk_meta_ba_update_connector_tool(
@@ -1217,6 +1185,20 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
         }
     }
 
+    // Remove extra tools left on Meta — large tool lists slow agent replies.
+    $deletedTools = [];
+    foreach ($existingByName as $name => $row) {
+        if (isset($desiredNames[$name]) || empty($row['id'])) {
+            continue;
+        }
+        $del = sk_meta_ba_delete_connector_tool($phoneNumberId, $connectorId, (string)$row['id'], $settings);
+        $deletedTools[] = [
+            'name' => $name,
+            'ok'   => !empty($del['ok']),
+            'error'=> $del['error'] ?? '',
+        ];
+    }
+
     if ($failed) {
         $err = 'Tool sync failed — ' . implode('; ', $failed);
         $CI->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
@@ -1232,6 +1214,7 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
             'data'  => [
                 'connector_id'  => $connectorId,
                 'tools_created' => $createdTools,
+                'tools_deleted' => $deletedTools,
             ],
         ];
     }
@@ -1250,6 +1233,7 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
         'data'  => [
             'connector_id'  => $connectorId,
             'tools_created' => $createdTools,
+            'tools_deleted' => $deletedTools,
         ],
     ];
 }

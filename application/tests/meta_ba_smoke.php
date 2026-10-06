@@ -96,6 +96,8 @@ assert_true(in_array('search_products', $names, true), 'tool search_products def
 assert_true(in_array('create_order', $names, true), 'tool create_order defined');
 assert_true(in_array('handover_to_human', $names, true), 'tool handover_to_human defined');
 assert_true(in_array('create_payment_link', $names, true), 'tool create_payment_link defined');
+assert_true(!in_array('get_product_price', $names, true), 'extra get_product_price removed from Meta tool list');
+assert_true(count($names) <= 12, 'Meta tool list kept small for speed');
 
 $list = sk_meta_ba_normalize_skill_items([['id' => 'a', 'title' => 'x', 'skill' => 'y']]);
 assert_true(count($list) === 1 && ($list[0]['id'] ?? '') === 'a', 'normalize_skill_items accepts top-level array');
