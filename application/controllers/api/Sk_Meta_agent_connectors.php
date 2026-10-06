@@ -46,17 +46,73 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         return is_array($payload) ? $payload : [];
     }
 
+    /**
+     * Slim JSON for Meta BA — avoid image paths / huge nested blobs.
+     */
+    private function _slim_success(array $result, string $okMessage = 'OK'): void {
+        if (empty($result['success'])) {
+            $err = is_array($result['error'] ?? null) ? $result['error'] : [];
+            $this->error(
+                (string)($err['message'] ?? 'Tool failed.'),
+                400,
+                [
+                    'code' => (string)($err['code'] ?? 'TOOL_ERROR'),
+                    'data' => $result['data'] ?? null,
+                ]
+            );
+        }
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        // Prefer a short summary string when present for faster Meta replies.
+        $this->success($data, $okMessage);
+    }
+
+    private function _run_tool(string $phoneNumberId, string $tool): void {
+        $this->_require_connector_auth();
+        $tenant = $this->_resolve_tenant($phoneNumberId);
+        $payload = $this->_payload();
+        $payload['phone_number_id'] = $tenant['phone_number_id'];
+        if (empty($payload['phone']) && empty($payload['customer_phone'])) {
+            // Meta may bind WHATSAPP_PHONE_NUMBER into phone.
+        }
+        $result = sk_ai_mcp_execute_tool($tool, $payload, [
+            'tenant_id' => $tenant['vendor_id'],
+            'tenant' => $tenant['vendor_id'],
+        ]);
+        $this->_slim_success($result, $tool . ' completed.');
+    }
+
+    // Explicit methods so Meta path sync stays stable.
+    public function identify_customer($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'identify_customer'); }
+    public function create_customer($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'create_customer'); }
+    public function update_customer($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'update_customer'); }
+    public function get_customer($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_customer'); }
+    public function get_product($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_product'); }
+    public function get_product_details($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_product_details'); }
+    public function get_product_price($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_product_price'); }
+    public function check_stock($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'check_stock'); }
+    public function calculate_order_total($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'calculate_order_total'); }
+    public function create_order($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'create_order'); }
+    public function get_order($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_order'); }
+    public function create_payment_link($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'create_payment_link'); }
+    public function get_payment_status($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_payment_status'); }
+    public function generate_invoice($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'generate_invoice'); }
+    public function handover_to_human($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'handover_to_human'); }
+    public function human_handoff($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'human_handoff'); }
+    public function get_tenant_config($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_tenant_config'); }
+    public function save_conversation_state($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'save_conversation_state'); }
+    public function get_order_status($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_order_status'); }
+    public function get_delivery_status($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_delivery_status'); }
+
     public function search_products($phoneNumberId = '') {
         $this->_require_connector_auth();
         $tenant = $this->_resolve_tenant((string)$phoneNumberId);
         $payload = $this->_payload();
-        $query = trim((string)($payload['query'] ?? $payload['message'] ?? $payload['text'] ?? ''));
+        $query = trim((string)($payload['query'] ?? $payload['search'] ?? $payload['message'] ?? $payload['text'] ?? ''));
         if ($query === '') {
             $this->error('query is required.', 400);
         }
         $result = sk_mcp_tool_find_products($query, ['tenant' => $tenant['vendor_id']], 5);
         $products = $this->_meta_safe_products($result['results'] ?? []);
-        // Vague catalog questions often parse to stop-words and return nothing; give Meta a sample.
         if (!$products) {
             foreach (['saree', 'silk', 'dress'] as $fallbackQ) {
                 $fallback = sk_mcp_tool_find_products($fallbackQ, ['tenant' => $tenant['vendor_id']], 5);
@@ -74,15 +130,18 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             );
             foreach (($listed['data'] ?? []) as $product) {
                 $products[] = [
-                    'id'        => (int)($product['id'] ?? 0),
-                    'name'      => (string)($product['name'] ?? ''),
-                    'sku'       => (string)($product['sku'] ?? ''),
-                    'color'     => trim((string)($product['color'] ?? '')),
-                    'available' => ((int)($product['stock'] ?? 0)) > 0,
-                    'stock'     => (int)($product['stock'] ?? 0),
-                    'price'     => (float)($product['effective_price'] ?? $product['price'] ?? 0),
-                    'mrp'       => (float)($product['price'] ?? 0),
-                    'currency'  => 'INR',
+                    'id'               => (int)($product['id'] ?? 0),
+                    'name'             => (string)($product['name'] ?? ''),
+                    'sku'              => (string)($product['sku'] ?? ''),
+                    'color'            => trim((string)($product['color'] ?? '')),
+                    'length'           => trim((string)($product['saree_length'] ?? '')),
+                    'blouse_included'  => !empty($product['blouse_included']),
+                    'pack_of'          => trim((string)($product['pack_of'] ?? '')),
+                    'available'        => ((int)($product['stock'] ?? 0)) > 0,
+                    'stock'            => (int)($product['stock'] ?? 0),
+                    'price'            => (float)($product['effective_price'] ?? $product['price'] ?? 0),
+                    'mrp'              => (float)($product['price'] ?? 0),
+                    'currency'         => 'INR',
                 ];
             }
         }
@@ -116,9 +175,6 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         ], 'Product search completed.');
     }
 
-    /**
-     * Flatten product rows for Meta Business Agent (avoid image paths / nested junk that can 500 agent_test).
-     */
     private function _meta_safe_products(array $rows): array {
         $out = [];
         foreach ($rows as $row) {
@@ -141,114 +197,5 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             ];
         }
         return $out;
-    }
-
-    public function check_stock($phoneNumberId = '') {
-        $this->_require_connector_auth();
-        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
-        $payload = $this->_payload();
-        $productId = (int)($payload['product_id'] ?? 0);
-        if ($productId <= 0) {
-            $this->error('product_id is required.', 400);
-        }
-        $result = sk_ai_mcp_execute_tool(
-            'check_stock',
-            [
-                'product_id' => $productId,
-                'variant_id' => (int)($payload['variant_id'] ?? 0),
-            ],
-            ['tenant_id' => $tenant['vendor_id']]
-        );
-        if (empty($result['success'])) {
-            $this->error($result['error']['message'] ?? 'Stock lookup failed.', 400, ['vendor_id' => $tenant['vendor_id']]);
-        }
-        $this->success([
-            'vendor_id' => $tenant['vendor_id'],
-            'stock'     => $result['data'],
-        ], 'Stock check completed.');
-    }
-
-    public function get_order_status($phoneNumberId = '') {
-        $this->_require_connector_auth();
-        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
-        $payload = $this->_payload();
-        $orderId = (int)($payload['order_id'] ?? $payload['id'] ?? 0);
-        if ($orderId <= 0) {
-            $this->error('order_id is required.', 400);
-        }
-        $result = sk_ai_mcp_execute_tool(
-            'get_order_status',
-            ['order_id' => $orderId],
-            ['tenant_id' => $tenant['vendor_id']]
-        );
-        if (empty($result['success'])) {
-            $this->error($result['error']['message'] ?? 'Order not found.', 404, ['vendor_id' => $tenant['vendor_id']]);
-        }
-        $this->success([
-            'vendor_id' => $tenant['vendor_id'],
-            'order'     => $result['data'],
-        ], 'Order status retrieved.');
-    }
-
-    public function get_delivery_status($phoneNumberId = '') {
-        $this->_require_connector_auth();
-        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
-        $payload = $this->_payload();
-        $orderId = (int)($payload['order_id'] ?? $payload['id'] ?? 0);
-        if ($orderId <= 0) {
-            $this->error('order_id is required.', 400);
-        }
-        $result = sk_ai_mcp_execute_tool(
-            'get_delivery_status',
-            ['order_id' => $orderId],
-            ['tenant_id' => $tenant['vendor_id']]
-        );
-        if (empty($result['success'])) {
-            $this->error($result['error']['message'] ?? 'Delivery status not found.', 404, ['vendor_id' => $tenant['vendor_id']]);
-        }
-        $this->success([
-            'vendor_id' => $tenant['vendor_id'],
-            'delivery'  => $result['data'],
-        ], 'Delivery status retrieved.');
-    }
-
-    public function human_handoff($phoneNumberId = '') {
-        $this->_require_connector_auth();
-        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
-        $payload = $this->_payload();
-        $phone = trim((string)($payload['phone'] ?? $payload['customer_phone'] ?? ''));
-        $reason = trim((string)($payload['reason'] ?? 'Customer requested human support.'));
-        if ($phone === '') {
-            $this->error('phone is required.', 400);
-        }
-        $phone = function_exists('sk_wa_cloud_normalize_phone')
-            ? sk_wa_cloud_normalize_phone($phone)
-            : preg_replace('/\D+/', '', $phone);
-
-        $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation(
-            $phone,
-            '',
-            $tenant['vendor_id'],
-            $tenant['phone_number_id']
-        );
-        $this->Sk_Vendor_meta_agent_model->set_conversation_owner((int)$conv['id'], 'human', $reason);
-
-        // Bump unread so inbox surfaces the handoff.
-        $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
-            'unread'       => (int)($conv['unread'] ?? 0) + 1,
-            'last_message' => 'Handoff: ' . mb_substr($reason, 0, 180),
-            'last_direction' => 'in',
-            'last_at'      => date('Y-m-d H:i:s'),
-            'updated_at'   => date('Y-m-d H:i:s'),
-        ]);
-
-        $this->success([
-            'vendor_id'       => $tenant['vendor_id'],
-            'conversation_id' => (int)$conv['id'],
-            'phone'           => $phone,
-            'thread_owner'    => 'human',
-            'reason'          => $reason,
-            'message'         => 'Customer handed off to the Talk AI Pilot inbox.',
-        ], 'Handoff recorded.');
     }
 }

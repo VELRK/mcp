@@ -16,7 +16,7 @@ class Sk_Order_model extends CI_Model {
         }
     }
 
-    public function create($data, $items) {
+    public function create($data, $items, bool $reduceStock = true) {
         $data['created_at'] = date('Y-m-d H:i:s');
         // Temporary unique value until we have insert_id for G2D10001-style number.
         $data['order_number'] = 'TMP' . strtoupper(substr(md5(uniqid((string)mt_rand(), true)), 0, 12));
@@ -29,12 +29,14 @@ class Sk_Order_model extends CI_Model {
         foreach ($items as $item) {
             $item['order_id'] = $order_id;
             $this->db->insert('order_items', $item);
-            $this->load->model('Sk_Product_model');
-            $this->Sk_Product_model->reduce_stock(
-                $item['product_id'],
-                $item['quantity'],
-                !empty($item['variant_id']) ? (int)$item['variant_id'] : null
-            );
+            if ($reduceStock) {
+                $this->load->model('Sk_Product_model');
+                $this->Sk_Product_model->reduce_stock(
+                    $item['product_id'],
+                    $item['quantity'],
+                    !empty($item['variant_id']) ? (int)$item['variant_id'] : null
+                );
+            }
         }
         return $order_id;
     }

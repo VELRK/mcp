@@ -93,8 +93,9 @@ assert_true(sk_meta_ba_connector_auth_ok('') === false, 'connector auth rejects 
 $tools = sk_meta_ba_connector_tool_defs('PHONE123');
 $names = array_map(static function ($t) { return $t['name']; }, $tools);
 assert_true(in_array('search_products', $names, true), 'tool search_products defined');
-assert_true(in_array('human_handoff', $names, true), 'tool human_handoff defined');
-assert_true(!in_array('create_order', $names, true), 'unfinished create_order tool not exposed');
+assert_true(in_array('create_order', $names, true), 'tool create_order defined');
+assert_true(in_array('handover_to_human', $names, true), 'tool handover_to_human defined');
+assert_true(in_array('create_payment_link', $names, true), 'tool create_payment_link defined');
 
 echo $failures === 0 ? "\nAll smoke checks passed.\n" : "\n{$failures} check(s) failed.\n";
 exit($failures === 0 ? 0 : 1);

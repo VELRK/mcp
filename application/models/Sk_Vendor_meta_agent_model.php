@@ -53,6 +53,10 @@ class Sk_Vendor_meta_agent_model extends CI_Model {
                 $this->db->query("ALTER TABLE `wa_cloud_conversations`
                     ADD COLUMN `handoff_reason` VARCHAR(500) NULL AFTER `handoff_at`");
             }
+            if (!$this->db->field_exists('agent_state', 'wa_cloud_conversations')) {
+                $this->db->query("ALTER TABLE `wa_cloud_conversations`
+                    ADD COLUMN `agent_state` MEDIUMTEXT NULL AFTER `handoff_reason`");
+            }
         }
     }
 

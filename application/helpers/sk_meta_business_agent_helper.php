@@ -280,21 +280,26 @@ function sk_meta_ba_upsert_instructions(string $phoneNumberId, string $instructi
 function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions = ''): array {
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'our shop';
     $extra = trim($extraInstructions);
-    $skill = "You are a friendly WhatsApp salesperson for {$shopName}. "
-        . "Reply in 1-2 short sentences, like a real shopkeeper. Match the customer's language (Tamil/English mix is fine). "
+    $skill = "You are the WhatsApp sales manager for {$shopName}. "
+        . "Sound like a real shopkeeper: warm, short, natural. Match the customer's language (Tamil/English/Tanglish). "
+        . "Never mention AI, tools, databases, APIs, or internal IDs. "
         . "Infer typos: donu/dono have = do you have; amount/prise/rate = price; kanjivaram/kanchipuram = Kanjivaram saree. "
-        . "For product or price questions: call search_products once, then answer immediately from the tool summary "
-        . "(name, ₹ price, color, stock). Do not call extra tools. Do not invent prices. "
-        . "Never hand off for product, catalog, availability, or price questions. "
-        . "Only hand off if the customer clearly asks for a human, or for refunds/payment disputes/damage.";
+        . "PRODUCT: For product/price/stock/details call search_products once (or get_product_details/check_stock/get_product_price for a known id). "
+        . "Never invent products, prices, stock, discounts, or payment URLs. Use tool summary fields only. "
+        . "SALES FLOW: help decide → confirm product/qty → collect name + delivery address → identify_customer/create_customer/update_customer → "
+        . "calculate_order_total → create_order with confirmed=true → handover_to_human for approval. "
+        . "Do NOT call create_payment_link until a human has confirmed the order. Screenshots are not payment proof — use get_payment_status. "
+        . "generate_invoice only after verified paid payment. "
+        . "Never hand off for simple product/price questions. Hand off when the customer asks for a human, or for refunds/disputes/damage/complaints. "
+        . "Keep WhatsApp replies to 1-3 short sentences. Ask only for the next missing detail. "
+        . "Use save_conversation_state to remember selected product, qty, and missing fields.";
     if ($extra !== '') {
         $skill .= ' Extra shop notes: ' . $extra;
     }
-    // One consolidated skill — Meta warns conflicting multi-skills cause bad replies.
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'Apply on every customer message about products, sarees, stock, price, amount, rate, colors, sizes, ordering, delivery, or messy/typo WhatsApp typing. Also apply for general shopping chat.',
+            'description' => 'Apply on every shopping message: products, price, stock, order, payment, delivery, typos, Tamil/English chat.',
             'skill'       => $skill,
         ],
     ];
@@ -478,90 +483,103 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
         'kind'  => 'macro',
         'macro' => 'WHATSAPP_PHONE_NUMBER',
     ];
+    $tool = static function (string $name, string $description, array $params, array $required = []) use ($bodyField): array {
+        $paramsNode = $params;
+        if ($paramsNode === []) {
+            $paramsNode = new stdClass();
+        }
+        return [
+            'name' => $name,
+            'description' => $description,
+            'user_auth_required' => false,
+            'request_definition' => [
+                'method' => 'POST',
+                'path'   => '/' . $name,
+                'body'   => [
+                    'content_type' => 'application/json',
+                    'params' => $paramsNode,
+                    'required' => $required,
+                ],
+            ],
+        ];
+    };
 
     return [
-        [
-            'name'        => 'search_products',
-            'description' => 'Search this shop catalog by product name, color, or size when a customer asks what is available.',
-            'user_auth_required' => false,
-            'request_definition' => [
-                'method' => 'POST',
-                'path'   => '/search_products',
-                'body'   => [
-                    'content_type' => 'application/json',
-                    'params' => [
-                        'query' => $bodyField('string', 'Customer words describing the product'),
-                    ],
-                    'required' => ['query'],
-                ],
-            ],
-        ],
-        [
-            'name'        => 'check_stock',
-            'description' => 'Check whether a known product_id is in stock for this shop.',
-            'user_auth_required' => false,
-            'request_definition' => [
-                'method' => 'POST',
-                'path'   => '/check_stock',
-                'body'   => [
-                    'content_type' => 'application/json',
-                    'params' => [
-                        'product_id' => $bodyField('integer', 'Product id from search_products'),
-                        'variant_id' => $bodyField('integer', 'Optional variant id'),
-                    ],
-                    'required' => ['product_id'],
-                ],
-            ],
-        ],
-        [
-            'name'        => 'get_order_status',
-            'description' => 'Look up order status by order_id for this shop.',
-            'user_auth_required' => false,
-            'request_definition' => [
-                'method' => 'POST',
-                'path'   => '/get_order_status',
-                'body'   => [
-                    'content_type' => 'application/json',
-                    'params' => [
-                        'order_id' => $bodyField('integer', 'Numeric order id'),
-                    ],
-                    'required' => ['order_id'],
-                ],
-            ],
-        ],
-        [
-            'name'        => 'get_delivery_status',
-            'description' => 'Look up delivery/shipment status by order_id for this shop.',
-            'user_auth_required' => false,
-            'request_definition' => [
-                'method' => 'POST',
-                'path'   => '/get_delivery_status',
-                'body'   => [
-                    'content_type' => 'application/json',
-                    'params' => [
-                        'order_id' => $bodyField('integer', 'Numeric order id'),
-                    ],
-                    'required' => ['order_id'],
-                ],
-            ],
-        ],
-        [
-            'name'        => 'human_handoff',
-            'description' => 'Hand the WhatsApp conversation to a human teammate in the Talk AI Pilot inbox.',
-            'user_auth_required' => false,
-            'request_definition' => [
-                'method' => 'POST',
-                'path'   => '/human_handoff',
-                'body'   => [
-                    'content_type' => 'application/json',
-                    'params' => [
-                        'phone'  => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
-                        'reason' => $bodyField('string', 'Why handoff is needed'),
-                    ],
-                    'required' => ['phone'],
-                ],
-            ],
-        ],
+        $tool('identify_customer', 'Find customer by phone for this shop only.', [
+            'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
+            'email' => $bodyField('string', 'Optional email'),
+        ]),
+        $tool('create_customer', 'Create customer if missing. Idempotent on phone.', [
+            'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
+            'name'  => $bodyField('string', 'Customer name'),
+            'email' => $bodyField('string', 'Optional email'),
+        ], ['phone']),
+        $tool('update_customer', 'Update current-shop customer fields / delivery address.', [
+            'customer_id' => $bodyField('integer', 'Customer id'),
+            'name'        => $bodyField('string', 'Customer name'),
+            'email'       => $bodyField('string', 'Email'),
+            'address'     => $bodyField('string', 'Delivery address line'),
+            'city'        => $bodyField('string', 'City'),
+            'state'       => $bodyField('string', 'State'),
+            'pincode'     => $bodyField('string', 'Pincode'),
+            'phone'       => $bodyField('string', 'Phone', $waPhone),
+        ], ['customer_id']),
+        $tool('search_products', 'Search this shop catalog. Never invent products.', [
+            'query'  => $bodyField('string', 'Customer words describing the product'),
+            'search' => $bodyField('string', 'Alias for query'),
+            'limit'  => $bodyField('integer', 'Max results (1-10)'),
+        ]),
+        $tool('get_product_details', 'Full product details from catalog for a known product_id.', [
+            'product_id' => $bodyField('string', 'Product id from search_products'),
+        ], ['product_id']),
+        $tool('get_product_price', 'Current selling price from catalog.', [
+            'product_id' => $bodyField('string', 'Product id'),
+        ], ['product_id']),
+        $tool('check_stock', 'Current stock/availability for a product.', [
+            'product_id' => $bodyField('string', 'Product id'),
+            'quantity'   => $bodyField('integer', 'Desired quantity'),
+        ], ['product_id']),
+        $tool('calculate_order_total', 'Compute totals from real product prices.', [
+            'items' => $bodyField('string', 'JSON array of {product_id, quantity}'),
+        ], ['items']),
+        $tool('create_order', 'Create order only after customer confirmation. confirmed must be true. Pending human approval.', [
+            'confirmed'        => $bodyField('boolean', 'Must be true'),
+            'items'            => $bodyField('string', 'JSON array of {product_id, quantity}'),
+            'customer_id'      => $bodyField('integer', 'Customer id if known'),
+            'phone'            => $bodyField('string', 'Customer phone', $waPhone),
+            'name'             => $bodyField('string', 'Customer name'),
+            'address'          => $bodyField('string', 'Delivery address'),
+            'city'             => $bodyField('string', 'City'),
+            'state'            => $bodyField('string', 'State'),
+            'pincode'          => $bodyField('string', 'Pincode'),
+            'idempotency_key'  => $bodyField('string', 'Optional idempotency key'),
+        ], ['confirmed', 'items']),
+        $tool('get_order', 'Get order by id or order_number.', [
+            'order_id'     => $bodyField('integer', 'Order id'),
+            'order_number' => $bodyField('string', 'Order number'),
+        ]),
+        $tool('create_payment_link', 'Create/return a real payment link for an approved order. Never invent URLs.', [
+            'order_id' => $bodyField('integer', 'Order id'),
+        ], ['order_id']),
+        $tool('get_payment_status', 'Provider/DB payment status. Screenshots are not proof.', [
+            'order_id'   => $bodyField('integer', 'Order id'),
+            'payment_id' => $bodyField('integer', 'Payment id'),
+        ]),
+        $tool('generate_invoice', 'Invoice only after verified paid payment.', [
+            'order_id'   => $bodyField('integer', 'Order id'),
+            'payment_id' => $bodyField('integer', 'Optional payment id'),
+        ], ['order_id']),
+        $tool('handover_to_human', 'Create human handover / route chat to inbox.', [
+            'phone'    => $bodyField('string', 'Customer phone', $waPhone),
+            'reason'   => $bodyField('string', 'Why handoff is needed'),
+            'priority' => $bodyField('string', 'normal|high'),
+            'summary'  => $bodyField('string', 'Short summary for the teammate'),
+        ]),
+        $tool('save_conversation_state', 'Persist sales flow state JSON for this chat.', [
+            'phone' => $bodyField('string', 'Customer phone', $waPhone),
+            'state' => $bodyField('string', 'JSON object of sales state'),
+        ], ['state']),
+        $tool('get_tenant_config', 'Current shop public business rules only.', []),
     ];
 }
 
@@ -585,7 +603,7 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
     if ($connectorId === '') {
         $create = sk_meta_ba_create_connector($phoneNumberId, [
             'name'        => 'talk_ai_pilot_commerce',
-            'description' => 'Shop catalog, stock, order status, delivery, and human handoff for this WhatsApp number.',
+            'description' => 'Shop catalog, customers, orders, payment links, and human handoff for this WhatsApp number.',
             'base_url'    => $baseUrl,
             'auth_type'   => 'API_KEY',
             'auth_config' => [
