@@ -164,6 +164,9 @@ function sk_meta_ba_http(string $method, string $url, $body = null, string $toke
 /** User-facing message for a failed sk_meta_ba_http() response. */
 function sk_meta_ba_human_error(array $res): string {
     $code = (int)($res['http'] ?? 0);
+    if ($code === 429) {
+        return 'Meta Business Agent API rate limit (1000 requests/hour per resource on this number). Wait for the hour to reset, then retry.';
+    }
     $err = trim((string)($res['error'] ?? ''));
     if ($err !== '' && $err !== 'HTTP ' . $code) {
         return $code > 0 ? "Meta API (HTTP {$code}): {$err}" : $err;
@@ -244,12 +247,105 @@ function sk_meta_ba_upsert_business_info(string $phoneNumberId, array $info, ?ar
     return sk_meta_ba_http('POST', sk_meta_ba_entity_url($phoneNumberId, 'agent_knowledge/business_info'), $info, $token);
 }
 
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function sk_meta_ba_normalize_skill_items($decoded): array {
+    if (!is_array($decoded)) {
+        return [];
+    }
+    if (isset($decoded[0]) && is_array($decoded[0])) {
+        return array_values($decoded);
+    }
+    foreach (['data', 'skills', 'items'] as $key) {
+        if (isset($decoded[$key]) && is_array($decoded[$key])) {
+            $inner = $decoded[$key];
+            if (isset($inner[0]) || array_key_exists(0, $inner)) {
+                return array_values($inner);
+            }
+        }
+    }
+    if (isset($decoded['id'], $decoded['skill'])) {
+        return [$decoded];
+    }
+    return [];
+}
+
+function sk_meta_ba_resolve_agent_id(string $phoneNumberId): string {
+    if ($phoneNumberId === '') {
+        return '';
+    }
+    try {
+        $CI =& get_instance();
+        if (!isset($CI->Sk_Vendor_meta_agent_model)) {
+            $CI->load->model('Sk_Vendor_meta_agent_model');
+        }
+        $row = $CI->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
+        return trim((string)($row['agent_id'] ?? ''));
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
+function sk_meta_ba_skills_url(string $phoneNumberId, string $skillId = '', ?string $agentId = null): string {
+    $path = 'agent_config/skills';
+    if ($skillId !== '') {
+        $path .= '/' . rawurlencode($skillId);
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, $path);
+    $agentId = $agentId ?? sk_meta_ba_resolve_agent_id($phoneNumberId);
+    if ($agentId !== '') {
+        $url .= (strpos($url, '?') !== false ? '&' : '?') . 'agent_id=' . rawurlencode($agentId);
+    }
+    return $url;
+}
+
+/** Prepare title/description/skill per Meta BizAIOmniChannelSkillsRequest limits. */
+function sk_meta_ba_prepare_skill_body(array $def): array {
+    $title = strtolower(trim((string)($def['title'] ?? 'shop-sales-assistant')));
+    $title = preg_replace('/[^a-z0-9-]+/', '-', $title) ?? $title;
+    $title = trim($title, '-');
+    if ($title === '') {
+        $title = 'shop-sales-assistant';
+    }
+    if (strlen($title) > 64) {
+        $title = substr($title, 0, 64);
+        $title = rtrim($title, '-');
+    }
+    $description = mb_substr(trim((string)($def['description'] ?? '')), 0, 1024);
+    $skill = mb_substr(trim((string)($def['skill'] ?? '')), 0, 20000);
+    return [
+        'title'       => $title,
+        'description' => $description,
+        'skill'       => $skill,
+    ];
+}
+
 function sk_meta_ba_list_skills(string $phoneNumberId, ?array $settings = null): array {
     $token = sk_meta_ba_access_token($phoneNumberId, $settings);
     if ($token === '' || $phoneNumberId === '') {
         return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
     }
-    return sk_meta_ba_http('GET', sk_meta_ba_entity_url($phoneNumberId, 'agent_config/skills'), null, $token);
+    $res = sk_meta_ba_http('GET', sk_meta_ba_skills_url($phoneNumberId), null, $token);
+    if (!$res['ok']) {
+        return $res;
+    }
+    $items = sk_meta_ba_normalize_skill_items($res['data']);
+    return [
+        'ok'    => true,
+        'http'  => $res['http'],
+        'error' => '',
+        'data'  => ['skills' => $items, 'count' => count($items)],
+        'raw'   => $res['raw'] ?? '',
+    ];
+}
+
+function sk_meta_ba_get_skill(string $phoneNumberId, string $skillId, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $skillId === '') {
+        return ['ok' => false, 'error' => 'Missing skill context.', 'data' => null];
+    }
+    return sk_meta_ba_http('GET', sk_meta_ba_skills_url($phoneNumberId, $skillId), null, $token);
 }
 
 function sk_meta_ba_create_skill(string $phoneNumberId, array $body, ?array $settings = null): array {
@@ -257,7 +353,8 @@ function sk_meta_ba_create_skill(string $phoneNumberId, array $body, ?array $set
     if ($token === '' || $phoneNumberId === '') {
         return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
     }
-    return sk_meta_ba_http('POST', sk_meta_ba_entity_url($phoneNumberId, 'agent_config/skills'), $body, $token);
+    $body = sk_meta_ba_prepare_skill_body($body);
+    return sk_meta_ba_http('POST', sk_meta_ba_skills_url($phoneNumberId), $body, $token);
 }
 
 function sk_meta_ba_update_skill(string $phoneNumberId, string $skillId, array $body, ?array $settings = null): array {
@@ -265,8 +362,16 @@ function sk_meta_ba_update_skill(string $phoneNumberId, string $skillId, array $
     if ($token === '' || $phoneNumberId === '' || $skillId === '') {
         return ['ok' => false, 'error' => 'Missing skill context.', 'data' => null];
     }
-    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_config/skills/' . rawurlencode($skillId));
-    return sk_meta_ba_http('PUT', $url, $body, $token);
+    $body = sk_meta_ba_prepare_skill_body($body);
+    return sk_meta_ba_http('PUT', sk_meta_ba_skills_url($phoneNumberId, $skillId), $body, $token);
+}
+
+function sk_meta_ba_delete_skill(string $phoneNumberId, string $skillId, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $skillId === '') {
+        return ['ok' => false, 'error' => 'Missing skill context.', 'data' => null];
+    }
+    return sk_meta_ba_http('DELETE', sk_meta_ba_skills_url($phoneNumberId, $skillId), null, $token);
 }
 
 /**
@@ -312,47 +417,124 @@ function sk_meta_ba_sync_sales_skills(string $phoneNumberId, string $shopOrInstr
         $shopName = 'our shop';
     }
     $defs = sk_meta_ba_sales_skill_defs($shopName, strlen($shopOrInstructions) > 80 ? $shopOrInstructions : '');
+    $managedTitles = [];
+    foreach ($defs as $def) {
+        $managedTitles[strtolower((string)$def['title'])] = true;
+    }
+
     $listed = sk_meta_ba_list_skills($phoneNumberId, $settings);
-    $byTitle = [];
+    $items = [];
     if (!empty($listed['ok']) && is_array($listed['data'])) {
-        $items = $listed['data'];
-        if (isset($items['data']) && is_array($items['data'])) {
-            $items = $items['data'];
+        $items = $listed['data']['skills'] ?? sk_meta_ba_normalize_skill_items($listed['data']);
+    }
+    $byTitle = [];
+    $extraSkills = [];
+    foreach ($items as $item) {
+        if (!is_array($item) || empty($item['title'])) {
+            continue;
         }
-        foreach ($items as $item) {
-            if (!is_array($item) || empty($item['title'])) {
-                continue;
-            }
-            $byTitle[strtolower((string)$item['title'])] = $item;
+        $t = strtolower((string)$item['title']);
+        if (!isset($byTitle[$t])) {
+            $byTitle[$t] = $item;
+        }
+        if (!isset($managedTitles[$t])) {
+            $extraSkills[] = [
+                'id'     => (string)($item['id'] ?? ''),
+                'title'  => (string)$item['title'],
+                'status' => (string)($item['status'] ?? ''),
+            ];
         }
     }
 
     $results = [];
     $failed = [];
+    $warnings = [];
+    if ($extraSkills) {
+        $warnings[] = count($extraSkills) . ' other skill(s) on this number — Meta may apply conflicting rules. Prefer one consolidated shop-sales-assistant skill.';
+    }
     foreach ($defs as $def) {
-        $key = strtolower($def['title']);
+        $key = strtolower((string)$def['title']);
         $existing = $byTitle[$key] ?? null;
         if ($existing && !empty($existing['id'])) {
             $res = sk_meta_ba_update_skill($phoneNumberId, (string)$existing['id'], $def, $settings);
         } else {
             $res = sk_meta_ba_create_skill($phoneNumberId, $def, $settings);
         }
+        $status = '';
+        if (!empty($res['data']) && is_array($res['data'])) {
+            $status = (string)($res['data']['status'] ?? '');
+        }
+        if ($status === 'blocked') {
+            $warnings[] = $def['title'] . ' is blocked by Meta review — edit skill text (avoid sensitive PII) and sync again.';
+        } elseif ($status === 'pending_review') {
+            $warnings[] = $def['title'] . ' is pending_review — agent may not apply it until Meta approves.';
+        }
         $results[] = [
-            'title' => $def['title'],
-            'ok'    => !empty($res['ok']),
-            'error' => $res['error'] ?? '',
-            'http'  => $res['http'] ?? null,
-            'data'  => $res['data'] ?? null,
+            'title'  => $def['title'],
+            'ok'     => !empty($res['ok']),
+            'status' => $status,
+            'error'  => $res['error'] ?? '',
+            'http'   => $res['http'] ?? null,
+            'data'   => $res['data'] ?? null,
         ];
         if (empty($res['ok'])) {
             $failed[] = $def['title'] . ': ' . ($res['error'] ?? 'failed');
         }
     }
 
+    $payload = ['skills' => $results, 'listed_count' => count($items)];
+    if ($extraSkills) {
+        $payload['other_skills'] = $extraSkills;
+    }
+    if ($warnings) {
+        $payload['warnings'] = $warnings;
+    }
+
     return [
         'ok'    => !$failed,
         'error' => $failed ? ('Skill sync failed — ' . implode('; ', $failed)) : '',
-        'data'  => ['skills' => $results],
+        'data'  => $payload,
+    ];
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function sk_meta_ba_normalize_connector_items($decoded): array {
+    if (!is_array($decoded)) {
+        return [];
+    }
+    if (isset($decoded[0]) && is_array($decoded[0])) {
+        return array_values($decoded);
+    }
+    if (isset($decoded['data']) && is_array($decoded['data'])) {
+        $inner = $decoded['data'];
+        if (isset($inner[0]) || array_key_exists(0, $inner)) {
+            return array_values($inner);
+        }
+    }
+    if (isset($decoded['id'], $decoded['name'])) {
+        return [$decoded];
+    }
+    return [];
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function sk_meta_ba_normalize_connector_tool_items($decoded): array {
+    return sk_meta_ba_normalize_connector_items($decoded);
+}
+
+function sk_meta_ba_connector_api_key_config(string $apiKey): array {
+    return [
+        'headers' => [
+            [
+                'field_name' => 'X-Api-Key',
+                'value'      => $apiKey,
+                'prefix'     => '',
+            ],
+        ],
     ];
 }
 
@@ -361,7 +543,45 @@ function sk_meta_ba_list_connectors(string $phoneNumberId, ?array $settings = nu
     if ($token === '' || $phoneNumberId === '') {
         return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
     }
-    return sk_meta_ba_http('GET', sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors'), null, $token);
+    $res = sk_meta_ba_http('GET', sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors'), null, $token);
+    if (!$res['ok']) {
+        return $res;
+    }
+    $items = sk_meta_ba_normalize_connector_items($res['data']);
+    return [
+        'ok'    => true,
+        'http'  => $res['http'],
+        'error' => '',
+        'data'  => ['connectors' => $items, 'count' => count($items)],
+        'raw'   => $res['raw'] ?? '',
+    ];
+}
+
+function sk_meta_ba_get_connector(string $phoneNumberId, string $connectorId, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $connectorId === '') {
+        return ['ok' => false, 'error' => 'Missing connector context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId));
+    return sk_meta_ba_http('GET', $url, null, $token);
+}
+
+function sk_meta_ba_update_connector(string $phoneNumberId, string $connectorId, array $body, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $connectorId === '') {
+        return ['ok' => false, 'error' => 'Missing connector context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId));
+    return sk_meta_ba_http('PUT', $url, $body, $token);
+}
+
+function sk_meta_ba_delete_connector(string $phoneNumberId, string $connectorId, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $connectorId === '') {
+        return ['ok' => false, 'error' => 'Missing connector context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId));
+    return sk_meta_ba_http('DELETE', $url, null, $token);
 }
 
 function sk_meta_ba_create_connector(string $phoneNumberId, array $body, ?array $settings = null): array {
@@ -378,7 +598,33 @@ function sk_meta_ba_upsert_connector_api_key(string $phoneNumberId, string $conn
         return ['ok' => false, 'error' => 'Missing connector credentials.', 'data' => null];
     }
     $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId) . '/upsertApiKey');
-    return sk_meta_ba_http('POST', $url, ['api_key' => $apiKey], $token);
+    return sk_meta_ba_http('POST', $url, [
+        'api_key_config' => sk_meta_ba_connector_api_key_config($apiKey),
+    ], $token);
+}
+
+function sk_meta_ba_connector_logs(
+    string $phoneNumberId,
+    string $connectorId,
+    array $query = [],
+    ?array $settings = null
+): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $connectorId === '') {
+        return ['ok' => false, 'error' => 'Missing connector context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId) . '/logs');
+    $allowed = ['start_time', 'end_time', 'limit', 'tool_id', 'include_stats', 'summary_only', 'top_n'];
+    $qs = [];
+    foreach ($allowed as $key) {
+        if (array_key_exists($key, $query) && $query[$key] !== '' && $query[$key] !== null) {
+            $qs[$key] = $query[$key];
+        }
+    }
+    if ($qs) {
+        $url .= '?' . http_build_query($qs);
+    }
+    return sk_meta_ba_http('GET', $url, null, $token);
 }
 
 function sk_meta_ba_create_connector_tool(string $phoneNumberId, string $connectorId, array $tool, ?array $settings = null): array {
@@ -396,7 +642,260 @@ function sk_meta_ba_list_connector_tools(string $phoneNumberId, string $connecto
         return ['ok' => false, 'error' => 'Missing connector context.', 'data' => null];
     }
     $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId) . '/tools');
+    $res = sk_meta_ba_http('GET', $url, null, $token);
+    if (!$res['ok']) {
+        return $res;
+    }
+    $items = sk_meta_ba_normalize_connector_tool_items($res['data']);
+    return [
+        'ok'    => true,
+        'http'  => $res['http'],
+        'error' => '',
+        'data'  => ['tools' => $items, 'count' => count($items)],
+        'raw'   => $res['raw'] ?? '',
+    ];
+}
+
+function sk_meta_ba_get_connector_tool(
+    string $phoneNumberId,
+    string $connectorId,
+    string $toolId,
+    ?array $settings = null
+): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $connectorId === '' || $toolId === '') {
+        return ['ok' => false, 'error' => 'Missing tool context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId) . '/tools/' . rawurlencode($toolId));
     return sk_meta_ba_http('GET', $url, null, $token);
+}
+
+function sk_meta_ba_update_connector_tool(
+    string $phoneNumberId,
+    string $connectorId,
+    string $toolId,
+    array $tool,
+    ?array $settings = null
+): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $connectorId === '' || $toolId === '') {
+        return ['ok' => false, 'error' => 'Missing tool context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId) . '/tools/' . rawurlencode($toolId));
+    return sk_meta_ba_http('PUT', $url, $tool, $token);
+}
+
+function sk_meta_ba_delete_connector_tool(
+    string $phoneNumberId,
+    string $connectorId,
+    string $toolId,
+    ?array $settings = null
+): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $connectorId === '' || $toolId === '') {
+        return ['ok' => false, 'error' => 'Missing tool context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId) . '/tools/' . rawurlencode($toolId));
+    return sk_meta_ba_http('DELETE', $url, null, $token);
+}
+
+function sk_meta_ba_run_connector_tool(
+    string $phoneNumberId,
+    string $connectorId,
+    string $toolId,
+    $input = null,
+    ?array $settings = null
+): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $connectorId === '' || $toolId === '') {
+        return ['ok' => false, 'error' => 'Missing tool context.', 'data' => null];
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, 'agent_connectors/' . rawurlencode($connectorId) . '/tools/' . rawurlencode($toolId) . '/run');
+    $body = ['input' => $input === null ? '{}' : (is_string($input) ? $input : json_encode($input, JSON_UNESCAPED_UNICODE))];
+    return sk_meta_ba_http('POST', $url, $body, $token, 60);
+}
+
+function sk_meta_ba_ui_skills_url(string $phoneNumberId, string $instructionId = '', array $query = []): string {
+    $path = 'agent-ui-skills';
+    if ($instructionId !== '') {
+        $path .= '/' . rawurlencode($instructionId);
+    }
+    $url = sk_meta_ba_entity_url($phoneNumberId, $path);
+    $qs = [];
+    foreach (['before', 'after', 'limit'] as $key) {
+        if (isset($query[$key]) && $query[$key] !== '' && $query[$key] !== null) {
+            $qs[$key] = $query[$key];
+        }
+    }
+    if ($qs) {
+        $url .= '?' . http_build_query($qs);
+    }
+    return $url;
+}
+
+function sk_meta_ba_list_ui_skills_page(string $phoneNumberId, array $query = [], ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '') {
+        return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
+    }
+    return sk_meta_ba_http('GET', sk_meta_ba_ui_skills_url($phoneNumberId, '', $query), null, $token);
+}
+
+function sk_meta_ba_list_all_ui_skills(string $phoneNumberId, ?array $settings = null, int $pageLimit = 100): array {
+    $all = [];
+    $after = null;
+    $paging = null;
+    for ($page = 0; $page < 50; $page++) {
+        $query = ['limit' => max(1, min(100, $pageLimit))];
+        if ($after !== null && $after !== '') {
+            $query['after'] = $after;
+        }
+        $res = sk_meta_ba_list_ui_skills_page($phoneNumberId, $query, $settings);
+        if (!$res['ok']) {
+            if ($all) {
+                return [
+                    'ok'    => true,
+                    'http'  => 200,
+                    'error' => '',
+                    'data'  => ['ui_skills' => $all, 'count' => count($all), 'partial' => true, 'page_error' => $res['error'] ?? ''],
+                    'raw'   => '',
+                ];
+            }
+            return $res;
+        }
+        $chunk = [];
+        if (is_array($res['data'])) {
+            $chunk = $res['data']['data'] ?? [];
+            if (!is_array($chunk)) {
+                $chunk = [];
+            }
+            $paging = $res['data']['paging'] ?? null;
+        }
+        foreach ($chunk as $row) {
+            if (is_array($row)) {
+                $all[] = $row;
+            }
+        }
+        $next = is_array($paging) ? trim((string)($paging['next'] ?? '')) : '';
+        $after = is_array($paging['cursors'] ?? null) ? trim((string)($paging['cursors']['after'] ?? '')) : '';
+        if ($next === '') {
+            break;
+        }
+        if ($chunk === [] && $after === '') {
+            break;
+        }
+    }
+    return [
+        'ok'    => true,
+        'http'  => 200,
+        'error' => '',
+        'data'  => ['ui_skills' => $all, 'count' => count($all)],
+        'raw'   => '',
+    ];
+}
+
+function sk_meta_ba_get_ui_skill(string $phoneNumberId, string $instructionId, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $instructionId === '') {
+        return ['ok' => false, 'error' => 'Missing UI skill context.', 'data' => null];
+    }
+    return sk_meta_ba_http('GET', sk_meta_ba_ui_skills_url($phoneNumberId, $instructionId), null, $token);
+}
+
+function sk_meta_ba_create_ui_skill(string $phoneNumberId, array $body, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '') {
+        return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
+    }
+    return sk_meta_ba_http('POST', sk_meta_ba_ui_skills_url($phoneNumberId), $body, $token);
+}
+
+function sk_meta_ba_update_ui_skill(string $phoneNumberId, string $instructionId, array $body, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $instructionId === '') {
+        return ['ok' => false, 'error' => 'Missing UI skill context.', 'data' => null];
+    }
+    return sk_meta_ba_http('PUT', sk_meta_ba_ui_skills_url($phoneNumberId, $instructionId), $body, $token);
+}
+
+function sk_meta_ba_delete_ui_skill(string $phoneNumberId, string $instructionId, ?array $settings = null): array {
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '' || $phoneNumberId === '' || $instructionId === '') {
+        return ['ok' => false, 'error' => 'Missing UI skill context.', 'data' => null];
+    }
+    return sk_meta_ba_http('DELETE', sk_meta_ba_ui_skills_url($phoneNumberId, $instructionId), null, $token);
+}
+
+/**
+ * Optional rich-message UI skills (CTA catalog link). Empty when no public URL.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''): array {
+    $catalogUrl = trim($catalogUrl);
+    $shopName = trim($shopName) !== '' ? trim($shopName) : 'Shop';
+    if ($catalogUrl === '' || !preg_match('#^https?://#i', $catalogUrl)) {
+        return [];
+    }
+    return [[
+        'title'           => 'shop-catalog-cta',
+        'component_type'  => 'cta_url',
+        'status'          => 'enabled',
+        'instruction'     => 'When the customer asks for the website, online shop, or catalog link, send a CTA URL button with body text "Browse our catalog online", button label text "' . $shopName . '", and URL ' . $catalogUrl,
+    ]];
+}
+
+function sk_meta_ba_sync_shop_ui_skills(string $phoneNumberId, string $shopName, string $catalogUrl = '', ?array $settings = null): array {
+    $defs = sk_meta_ba_shop_ui_skill_defs($shopName, $catalogUrl);
+    if (!$defs) {
+        return [
+            'ok'    => true,
+            'error' => '',
+            'data'  => ['ui_skills' => [], 'skipped' => 'No catalog URL configured for UI CTA skill.'],
+        ];
+    }
+    $listed = sk_meta_ba_list_all_ui_skills($phoneNumberId, $settings);
+    $byTitle = [];
+    if (!empty($listed['ok']) && is_array($listed['data']['ui_skills'] ?? null)) {
+        foreach ($listed['data']['ui_skills'] as $item) {
+            if (!is_array($item) || empty($item['title'])) {
+                continue;
+            }
+            $t = strtolower((string)$item['title']);
+            if (!isset($byTitle[$t])) {
+                $byTitle[$t] = $item;
+            }
+        }
+    }
+    $results = [];
+    $failed = [];
+    foreach ($defs as $def) {
+        $key = strtolower((string)$def['title']);
+        $existing = $byTitle[$key] ?? null;
+        if ($existing && !empty($existing['id'])) {
+            $res = sk_meta_ba_update_ui_skill($phoneNumberId, (string)$existing['id'], [
+                'title'       => $def['title'],
+                'status'      => $def['status'],
+                'instruction' => $def['instruction'],
+            ], $settings);
+        } else {
+            $res = sk_meta_ba_create_ui_skill($phoneNumberId, $def, $settings);
+        }
+        $results[] = [
+            'title' => $def['title'],
+            'ok'    => !empty($res['ok']),
+            'error' => $res['error'] ?? '',
+            'data'  => $res['data'] ?? null,
+        ];
+        if (empty($res['ok'])) {
+            $failed[] = $def['title'] . ': ' . ($res['error'] ?? 'failed');
+        }
+    }
+    return [
+        'ok'    => !$failed,
+        'error' => $failed ? ('UI skill sync failed — ' . implode('; ', $failed)) : '',
+        'data'  => ['ui_skills' => $results],
+    ];
 }
 
 function sk_meta_ba_agent_test(string $phoneNumberId, string $message, ?string $conversationId = null, ?array $settings = null): array {
@@ -607,15 +1106,7 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
             'base_url'    => $baseUrl,
             'auth_type'   => 'API_KEY',
             'auth_config' => [
-                'api_key' => [
-                    'headers' => [
-                        [
-                            'field_name' => 'X-Api-Key',
-                            'value'      => $cfg['connector_api_key'],
-                            'prefix'     => '',
-                        ],
-                    ],
-                ],
+                'api_key' => sk_meta_ba_connector_api_key_config($cfg['connector_api_key']),
             ],
             'requires_certificate' => false,
         ], $settings);
@@ -630,17 +1121,15 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
             // Try list and pick matching name
             $listed = sk_meta_ba_list_connectors($phoneNumberId, $settings);
             if ($listed['ok'] && is_array($listed['data'])) {
-                $items = $listed['data']['data'] ?? $listed['data'];
-                if (is_array($items)) {
-                    foreach ($items as $item) {
-                        if (!is_array($item)) {
-                            continue;
-                        }
-                        $n = strtolower((string)($item['name'] ?? ''));
-                        if (strpos($n, 'talk_ai_pilot') !== false || strpos($n, 'talk ai pilot') !== false) {
-                            $connectorId = (string)($item['id'] ?? $item['connector_id'] ?? '');
-                            break;
-                        }
+                $items = $listed['data']['connectors'] ?? sk_meta_ba_normalize_connector_items($listed['data']);
+                foreach ($items as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+                    $n = strtolower((string)($item['name'] ?? ''));
+                    if (strpos($n, 'talk_ai_pilot') !== false || strpos($n, 'talk ai pilot') !== false) {
+                        $connectorId = (string)($item['id'] ?? $item['connector_id'] ?? '');
+                        break;
                     }
                 }
             }
@@ -648,19 +1137,37 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
         if ($connectorId === '') {
             return ['ok' => false, 'error' => 'Connector created but no connector_id returned.', 'data' => $create['data']];
         }
-        // Keep API key registration in sync with Meta (auth_config was already set at create).
-        sk_meta_ba_upsert_connector_api_key($phoneNumberId, $connectorId, $cfg['connector_api_key'], $settings);
     }
 
-    $existingTools = sk_meta_ba_list_connector_tools($phoneNumberId, $connectorId, $settings);
-    $existingNames = [];
-    if ($existingTools['ok'] && is_array($existingTools['data'])) {
-        $items = $existingTools['data']['data'] ?? $existingTools['data'];
-        if (is_array($items)) {
-            foreach ($items as $t) {
-                if (is_array($t) && !empty($t['name'])) {
-                    $existingNames[strtolower((string)$t['name'])] = true;
+    if ($connectorId === '') {
+        $listed = sk_meta_ba_list_connectors($phoneNumberId, $settings);
+        if ($listed['ok'] && is_array($listed['data'])) {
+            $items = $listed['data']['connectors'] ?? sk_meta_ba_normalize_connector_items($listed['data']);
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
                 }
+                $n = strtolower((string)($item['name'] ?? ''));
+                if (strpos($n, 'talk_ai_pilot') !== false || strpos($n, 'talk ai pilot') !== false) {
+                    $connectorId = (string)($item['id'] ?? $item['connector_id'] ?? '');
+                    break;
+                }
+            }
+        }
+    }
+    if ($connectorId === '') {
+        return ['ok' => false, 'error' => 'No connector_id for this number. Run Sync tools to create the connector.', 'data' => null];
+    }
+
+    sk_meta_ba_upsert_connector_api_key($phoneNumberId, $connectorId, $cfg['connector_api_key'], $settings);
+
+    $existingTools = sk_meta_ba_list_connector_tools($phoneNumberId, $connectorId, $settings);
+    $existingByName = [];
+    if ($existingTools['ok'] && is_array($existingTools['data'])) {
+        $items = $existingTools['data']['tools'] ?? sk_meta_ba_normalize_connector_tool_items($existingTools['data']);
+        foreach ($items as $t) {
+            if (is_array($t) && !empty($t['name'])) {
+                $existingByName[strtolower((string)$t['name'])] = $t;
             }
         }
     }
@@ -669,17 +1176,32 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
     $failed = [];
     foreach (sk_meta_ba_connector_tool_defs($phoneNumberId) as $tool) {
         $name = strtolower((string)$tool['name']);
-        if (isset($existingNames[$name])) {
-            $createdTools[] = ['name' => $tool['name'], 'ok' => true, 'error' => 'exists'];
-            continue;
+        $existing = $existingByName[$name] ?? null;
+        if ($existing && !empty($existing['id'])) {
+            $res = sk_meta_ba_update_connector_tool(
+                $phoneNumberId,
+                $connectorId,
+                (string)$existing['id'],
+                $tool,
+                $settings
+            );
+            $createdTools[] = [
+                'name'   => $tool['name'],
+                'ok'     => !empty($res['ok']),
+                'action' => 'updated',
+                'error'  => $res['error'] ?? '',
+                'data'   => $res['data'] ?? null,
+            ];
+        } else {
+            $res = sk_meta_ba_create_connector_tool($phoneNumberId, $connectorId, $tool, $settings);
+            $createdTools[] = [
+                'name'   => $tool['name'],
+                'ok'     => !empty($res['ok']),
+                'action' => 'created',
+                'error'  => $res['error'] ?? '',
+                'data'   => $res['data'] ?? null,
+            ];
         }
-        $res = sk_meta_ba_create_connector_tool($phoneNumberId, $connectorId, $tool, $settings);
-        $createdTools[] = [
-            'name'  => $tool['name'],
-            'ok'    => !empty($res['ok']),
-            'error' => $res['error'] ?? '',
-            'data'  => $res['data'] ?? null,
-        ];
         if (empty($res['ok'])) {
             $failed[] = $tool['name'] . ': ' . ($res['error'] ?? 'failed');
         }

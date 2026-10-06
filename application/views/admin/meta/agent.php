@@ -132,7 +132,12 @@ $webhook = $webhook_uri ?? '';
                   <button type="button" class="btn btn-sm btn-outline-primary mba-op" data-op="eligibility">Eligibility</button>
                   <button type="button" class="btn btn-sm btn-outline-primary mba-op" data-op="onboard">Onboard</button>
                   <button type="button" class="btn btn-sm btn-outline-success mba-op" data-op="sync">Sync tools</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="list_connectors">Connectors</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="connector_logs">Conn. logs</button>
+                  <button type="button" class="btn btn-sm btn-outline-info mba-op" data-op="list_skills">List skills</button>
                   <button type="button" class="btn btn-sm btn-outline-info mba-op" data-op="sync_skills">Sync skills</button>
+                  <button type="button" class="btn btn-sm btn-outline-info mba-op" data-op="list_ui_skills">UI skills</button>
+                  <button type="button" class="btn btn-sm btn-outline-info mba-op" data-op="sync_ui_skills">Sync UI</button>
                   <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="test">Test</button>
                   <button type="button" class="btn btn-sm btn-success mba-op" data-op="enable_allowlist">Enable allowlist</button>
                   <button type="button" class="btn btn-sm btn-warning mba-op" data-op="enable_live">Enable live</button>

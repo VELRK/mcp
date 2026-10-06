@@ -97,5 +97,18 @@ assert_true(in_array('create_order', $names, true), 'tool create_order defined')
 assert_true(in_array('handover_to_human', $names, true), 'tool handover_to_human defined');
 assert_true(in_array('create_payment_link', $names, true), 'tool create_payment_link defined');
 
+$list = sk_meta_ba_normalize_skill_items([['id' => 'a', 'title' => 'x', 'skill' => 'y']]);
+assert_true(count($list) === 1 && ($list[0]['id'] ?? '') === 'a', 'normalize_skill_items accepts top-level array');
+$list2 = sk_meta_ba_normalize_skill_items(['data' => [['id' => 'b', 'title' => 't', 'skill' => 's']]]);
+assert_true(count($list2) === 1 && ($list2[0]['id'] ?? '') === 'b', 'normalize_skill_items accepts data wrapper');
+
+$prepared = sk_meta_ba_prepare_skill_body(['title' => 'Shop Sales Assistant', 'description' => 'd', 'skill' => 's']);
+assert_true(($prepared['title'] ?? '') === 'shop-sales-assistant', 'prepare_skill_body normalizes title to lowercase-hyphen');
+
+$conn = sk_meta_ba_normalize_connector_items([['id' => 'c1', 'name' => 'test']]);
+assert_true(count($conn) === 1 && ($conn[0]['id'] ?? '') === 'c1', 'normalize_connector_items accepts top-level array');
+$keyCfg = sk_meta_ba_connector_api_key_config('secret');
+assert_true(isset($keyCfg['headers'][0]['field_name']) && $keyCfg['headers'][0]['field_name'] === 'X-Api-Key', 'connector api_key_config shape');
+
 echo $failures === 0 ? "\nAll smoke checks passed.\n" : "\n{$failures} check(s) failed.\n";
 exit($failures === 0 ? 0 : 1);

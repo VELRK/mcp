@@ -193,6 +193,83 @@ class Meta_agent extends Sk_Base {
                         'data'    => $res['ok'] ? $res['data'] : array_merge($fail['data'], is_array($res['data']) ? $res['data'] : []),
                     ], $res['ok'] ? 200 : 400);
 
+                case 'list_skills':
+                    $res = sk_meta_ba_list_skills($phoneNumberId, $settings);
+                    $fail = $metaFail($res, 'List skills failed');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok']
+                            ? ('Found ' . (int)($res['data']['count'] ?? 0) . ' skill(s) on Meta.')
+                            : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
+                    ], $res['ok'] ? 200 : 400);
+
+                case 'list_connectors':
+                    $res = sk_meta_ba_list_connectors($phoneNumberId, $settings);
+                    $fail = $metaFail($res, 'List connectors failed');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok']
+                            ? ('Found ' . (int)($res['data']['count'] ?? 0) . ' connector(s) on Meta.')
+                            : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
+                    ], $res['ok'] ? 200 : 400);
+
+                case 'connector_logs':
+                    $row = $this->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
+                    $connectorId = trim((string)($row['connector_id'] ?? ''));
+                    if ($connectorId === '') {
+                        return $this->json(['success' => false, 'message' => 'No connector_id stored. Run Sync tools first.', 'op' => $op]);
+                    }
+                    $query = [
+                        'limit'         => (int)$this->input->post('limit', TRUE) ?: 50,
+                        'include_stats' => filter_var($this->input->post('include_stats', TRUE), FILTER_VALIDATE_BOOLEAN),
+                        'summary_only'  => filter_var($this->input->post('summary_only', TRUE), FILTER_VALIDATE_BOOLEAN),
+                    ];
+                    $res = sk_meta_ba_connector_logs($phoneNumberId, $connectorId, $query, $settings);
+                    $fail = $metaFail($res, 'Connector logs failed');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok'] ? 'Connector error logs retrieved (last 7 days max).' : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
+                    ], $res['ok'] ? 200 : 400);
+
+                case 'list_ui_skills':
+                    $res = sk_meta_ba_list_all_ui_skills($phoneNumberId, $settings);
+                    $fail = $metaFail($res, 'List UI skills failed');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok']
+                            ? ('Found ' . (int)($res['data']['count'] ?? 0) . ' UI skill(s) on Meta.')
+                            : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
+                    ], $res['ok'] ? 200 : 400);
+
+                case 'sync_ui_skills':
+                    $catalogUrl = trim((string)$this->input->post('catalog_url', TRUE));
+                    if ($catalogUrl === '' && $vendorId > 0) {
+                        $v = $this->Sk_Vendor_model->get_by_id($vendorId, false);
+                        $slug = trim((string)($v['slug'] ?? ''));
+                        if ($slug !== '') {
+                            $catalogUrl = rtrim(sk_meta_ba_config_array()['connector_base_url'], '/') . '/shop/' . rawurlencode($slug);
+                        }
+                    }
+                    $res = sk_meta_ba_sync_shop_ui_skills($phoneNumberId, $shopName, $catalogUrl, $settings);
+                    $fail = $metaFail($res, 'UI skill sync failed');
+                    $msg = $res['ok']
+                        ? (isset($res['data']['skipped']) ? (string)$res['data']['skipped'] : 'Shop UI skills synced.')
+                        : $fail['message'];
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $msg,
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
+                    ], $res['ok'] ? 200 : 400);
+
                 case 'sync_skills':
                     $res = sk_meta_ba_sync_sales_skills(
                         $phoneNumberId,
@@ -200,9 +277,13 @@ class Meta_agent extends Sk_Base {
                         $settings
                     );
                     $fail = $metaFail($res, 'Skill sync failed');
+                    $msg = $res['ok'] ? 'Sales skills synced (typos + product/price answers).' : $fail['message'];
+                    if ($res['ok'] && is_array($res['data']['warnings'] ?? null) && $res['data']['warnings']) {
+                        $msg .= ' Warnings: ' . implode(' ', $res['data']['warnings']);
+                    }
                     return $this->json([
                         'success' => !empty($res['ok']),
-                        'message' => $res['ok'] ? 'Sales skills synced (typos + product/price answers).' : $fail['message'],
+                        'message' => $msg,
                         'op'      => $op,
                         'data'    => $res['ok'] ? $res['data'] : $fail['data'],
                     ], $res['ok'] ? 200 : 400);
