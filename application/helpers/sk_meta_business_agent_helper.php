@@ -21,6 +21,7 @@ function sk_meta_ba_config_array(): array {
         'connector_base_url'  => (string)$CI->config->item('meta_ba_connector_base_url', 'meta_business_agent'),
         'default_audience'    => (string)$CI->config->item('meta_ba_default_audience', 'meta_business_agent'),
         'handoff_message'     => (string)$CI->config->item('meta_ba_handoff_message', 'meta_business_agent'),
+        'handoff_release_control' => (bool)$CI->config->item('meta_ba_handoff_release_control', 'meta_business_agent'),
     ];
     if ($cfg['api_base'] === '') {
         $cfg['api_base'] = 'https://api.facebook.com';
@@ -392,10 +393,11 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "PRODUCT: For product/price/stock/details call search_products once (or get_product_details/check_stock/get_product_price for a known id). "
         . "Never invent products, prices, stock, discounts, or payment URLs. Use tool summary fields only. "
         . "SALES FLOW: help decide → confirm product/qty → collect name + delivery address → identify_customer/create_customer/update_customer → "
-        . "calculate_order_total → create_order with confirmed=true → handover_to_human for approval. "
+        . "calculate_order_total → create_order with confirmed=true → call handover_to_human to notify staff for approval. "
         . "Do NOT call create_payment_link until a human has confirmed the order. Screenshots are not payment proof — use get_payment_status. "
         . "generate_invoice only after verified paid payment. "
-        . "Never hand off for simple product/price questions. Hand off when the customer asks for a human, or for refunds/disputes/damage/complaints. "
+        . "Never hand off for simple product/price questions. Call handover_to_human when the customer asks for a person, or for refunds/disputes/damage/complaints, or for order approval. "
+        . "SOFT HANDOFF: after handover_to_human, keep chatting helpfully — answer products, prices, and order status. Tell the customer a teammate was notified and you can still help until a person joins. Do not go silent after handoff. "
         . "Keep WhatsApp replies to 1-3 short sentences. Ask only for the next missing detail. "
         . "Use save_conversation_state to remember selected product, qty, and missing fields.";
     if ($extra !== '') {
@@ -1068,7 +1070,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'order_id'   => $bodyField('integer', 'Order id'),
             'payment_id' => $bodyField('integer', 'Optional payment id'),
         ], ['order_id']),
-        $tool('handover_to_human', 'Create human handover / route chat to inbox.', [
+        $tool('handover_to_human', 'Notify the human inbox (soft handoff). Does not stop the AI — keep chatting with the customer after calling this.', [
             'phone'    => $bodyField('string', 'Customer phone', $waPhone),
             'reason'   => $bodyField('string', 'Why handoff is needed'),
             'priority' => $bodyField('string', 'normal|high'),

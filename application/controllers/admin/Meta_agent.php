@@ -58,6 +58,7 @@ class Meta_agent extends Sk_Base {
                 'connector_base_url' => $cfg['connector_base_url'],
                 'has_system_token'   => $cfg['system_user_token'] !== '',
                 'has_connector_key'  => $cfg['connector_api_key'] !== '',
+                'soft_handoff'       => empty($cfg['handoff_release_control']),
             ],
             'webhook_uri'     => sk_wa_meta_webhook_uri(),
         ];
@@ -320,11 +321,12 @@ class Meta_agent extends Sk_Base {
                         $audience = null;
                         $enabled = 0;
                     } elseif ($op === 'enable_allowlist') {
+                        // handoff.enabled=false => soft handoff: Meta BA keeps thread control and keeps chatting.
                         $body = [
                             'ai_audience' => 'ALLOWLISTED_ONLY',
                             'rollout' => ['enabled' => true],
                             'handoff' => [
-                                'enabled' => true,
+                                'enabled' => !empty($cfg['handoff_release_control']),
                                 'message_selection' => 'CUSTOM',
                                 'message' => $cfg['handoff_message'],
                             ],
@@ -336,7 +338,7 @@ class Meta_agent extends Sk_Base {
                             'ai_audience' => 'EVERYONE',
                             'rollout' => ['enabled' => true],
                             'handoff' => [
-                                'enabled' => true,
+                                'enabled' => !empty($cfg['handoff_release_control']),
                                 'message_selection' => 'CUSTOM',
                                 'message' => $cfg['handoff_message'],
                             ],

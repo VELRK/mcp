@@ -663,10 +663,13 @@ function sk_ai_human_handoff(array $context = [], ?int $tenantId = null): array 
             );
             $conversationId = (int)($conv['id'] ?? 0);
             if ($conversationId > 0) {
-                $CI->Sk_Vendor_meta_agent_model->set_conversation_owner($conversationId, 'human', $reason);
+                // Soft handoff: flag inbox for staff but keep Meta BA as thread owner so AI keeps chatting.
                 $CI->db->where('id', $conversationId)->update('wa_cloud_conversations', [
+                    'thread_owner'   => 'meta_agent',
+                    'handoff_at'     => date('Y-m-d H:i:s'),
+                    'handoff_reason' => mb_substr($reason, 0, 500),
                     'unread'         => (int)($conv['unread'] ?? 0) + 1,
-                    'last_message'   => 'Handoff: ' . mb_substr($reason, 0, 180),
+                    'last_message'   => 'Handoff (AI still active): ' . mb_substr($reason, 0, 160),
                     'last_direction' => 'in',
                     'last_at'        => date('Y-m-d H:i:s'),
                     'updated_at'     => date('Y-m-d H:i:s'),
@@ -682,11 +685,12 @@ function sk_ai_human_handoff(array $context = [], ?int $tenantId = null): array 
             'tenant_id' => $tenantId ?? 0,
             'conversation_id' => $conversationId,
             'handoff_to' => 'human_agent',
-            'thread_owner' => 'human',
+            'thread_owner' => 'meta_agent',
+            'soft_handoff' => true,
             'reason' => $reason,
             'priority' => trim((string)($data['priority'] ?? 'normal')),
             'customer_phone' => $phone,
-            'message' => 'The customer has been routed to a human support agent.',
+            'message' => 'Staff were notified. Keep chatting with the customer — do not go silent. Tell them a teammate was notified and you can still help until a person joins.',
         ],
         'error' => null,
     ];

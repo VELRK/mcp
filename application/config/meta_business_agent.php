@@ -19,8 +19,11 @@ $config['meta_ba_connector_base_url'] = rtrim(sk_env('META_BA_CONNECTOR_BASE_URL
 $config['meta_ba_default_audience'] = strtoupper(sk_env('META_BA_DEFAULT_AUDIENCE', 'ALLOWLISTED_ONLY')) ?: 'ALLOWLISTED_ONLY';
 $config['meta_ba_handoff_message'] = sk_env(
     'META_BA_HANDOFF_MESSAGE',
-    'A human teammate will continue this chat shortly.'
+    'A teammate has been notified. I can keep helping you here in the meantime.'
 );
+// false = soft handoff: notify humans but Meta BA keeps thread control and keeps chatting.
+// true = hard handoff: agent releases control and stops until staff release the thread.
+$config['meta_ba_handoff_release_control'] = sk_env_bool('META_BA_HANDOFF_RELEASE_CONTROL', false);
 
 if (!in_array($config['meta_ba_default_audience'], ['ALLOWLISTED_ONLY', 'EVERYONE'], true)) {
     $config['meta_ba_default_audience'] = 'ALLOWLISTED_ONLY';

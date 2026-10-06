@@ -24,6 +24,9 @@ $webhook = $webhook_uri ?? '';
         <p class="small text-muted mb-3">
           Meta Business Agent is the primary WhatsApp responder. This app stays on
           <code>standby</code> / <code>messaging_handovers</code> and serves commerce connectors.
+          <?= !empty($cfg['soft_handoff'])
+            ? 'Handoff is <strong>soft</strong>: staff get notified, AI keeps chatting until a human sends a reply (then use Release to give AI back).'
+            : 'Handoff is <strong>hard</strong>: AI releases control and stops until Release.' ?>
         </p>
         <div class="row g-2 small">
           <div class="col-md-4"><strong>Enabled:</strong> <?= !empty($cfg['enabled']) ? 'yes' : 'no' ?></div>
@@ -138,6 +141,7 @@ $webhook = $webhook_uri ?? '';
                   <button type="button" class="btn btn-sm btn-outline-info mba-op" data-op="sync_skills">Sync skills</button>
                   <button type="button" class="btn btn-sm btn-outline-info mba-op" data-op="list_ui_skills">UI skills</button>
                   <button type="button" class="btn btn-sm btn-outline-info mba-op" data-op="sync_ui_skills">Sync UI</button>
+                  <button type="button" class="btn btn-sm btn-outline-warning mba-op" data-op="release">Release AI</button>
                   <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="test">Test</button>
                   <button type="button" class="btn btn-sm btn-success mba-op" data-op="enable_allowlist">Enable allowlist</button>
                   <button type="button" class="btn btn-sm btn-warning mba-op" data-op="enable_live">Enable live</button>
@@ -192,6 +196,11 @@ $webhook = $webhook_uri ?? '';
         var msg = window.prompt('Test message', 'Hi');
         if (msg === null) { btn.disabled = false; return; }
         body.append('message', msg);
+      }
+      if (op === 'release' || op === 'take') {
+        var phoneTo = window.prompt('Customer WhatsApp number (with country code)', '');
+        if (phoneTo === null || !String(phoneTo).trim()) { btn.disabled = false; return; }
+        body.append('to', String(phoneTo).trim());
       }
       fetch('<?= site_url('admin/meta/agent/action') ?>', {
         method: 'POST',
