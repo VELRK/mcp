@@ -12,7 +12,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
     public function __construct() {
         parent::__construct();
         $this->load->helper(['sk_meta_business_agent', 'sk_mcp_tool', 'sk_whatsapp_cloud']);
-        $this->load->model(['Sk_Vendor_whatsapp_account_model', 'Sk_Vendor_meta_agent_model', 'Sk_Whatsapp_cloud_model']);
+        $this->load->model(['Sk_Vendor_whatsapp_account_model', 'Sk_Vendor_meta_agent_model', 'Sk_Whatsapp_cloud_model', 'Sk_Product_model']);
         $this->Sk_Vendor_meta_agent_model->ensure_schema();
     }
 
@@ -55,12 +55,92 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             $this->error('query is required.', 400);
         }
         $result = sk_mcp_tool_find_products($query, ['tenant' => $tenant['vendor_id']], 5);
+        $products = $this->_meta_safe_products($result['results'] ?? []);
+        // Vague catalog questions often parse to stop-words and return nothing; give Meta a sample.
+        if (!$products) {
+            foreach (['saree', 'silk', 'dress'] as $fallbackQ) {
+                $fallback = sk_mcp_tool_find_products($fallbackQ, ['tenant' => $tenant['vendor_id']], 5);
+                $products = $this->_meta_safe_products($fallback['results'] ?? []);
+                if ($products) {
+                    break;
+                }
+            }
+        }
+        if (!$products) {
+            $listed = $this->Sk_Product_model->get_all(
+                ['status' => 'active', 'vendor_id' => $tenant['vendor_id'], 'sort' => 'newest'],
+                5,
+                0
+            );
+            foreach (($listed['data'] ?? []) as $product) {
+                $products[] = [
+                    'id'        => (int)($product['id'] ?? 0),
+                    'name'      => (string)($product['name'] ?? ''),
+                    'sku'       => (string)($product['sku'] ?? ''),
+                    'color'     => trim((string)($product['color'] ?? '')),
+                    'available' => ((int)($product['stock'] ?? 0)) > 0,
+                    'stock'     => (int)($product['stock'] ?? 0),
+                    'price'     => (float)($product['effective_price'] ?? $product['price'] ?? 0),
+                    'mrp'       => (float)($product['price'] ?? 0),
+                    'currency'  => 'INR',
+                ];
+            }
+        }
+        $lines = [];
+        foreach ($products as $p) {
+            $extra = [];
+            if (!empty($p['color'])) {
+                $extra[] = (string)$p['color'];
+            }
+            if (!empty($p['length'])) {
+                $extra[] = (string)$p['length'] . 'm';
+            }
+            if (!empty($p['blouse_included'])) {
+                $extra[] = 'blouse included';
+            }
+            $lines[] = sprintf(
+                '%s — ₹%s%s, stock %d',
+                (string)($p['name'] ?? 'Product'),
+                (string)($p['price'] ?? '0'),
+                $extra ? (', ' . implode(', ', $extra)) : '',
+                (int)($p['stock'] ?? 0)
+            );
+        }
         $this->success([
-            'vendor_id' => $tenant['vendor_id'],
-            'query'     => $query,
-            'products'  => $result['results'] ?? [],
-            'parsed'    => $result['parsed'] ?? [],
+            'query'    => $query,
+            'count'    => count($products),
+            'summary'  => $products
+                ? ("Found " . count($products) . " products:\n- " . implode("\n- ", $lines))
+                : 'No matching products in the catalog.',
+            'products' => $products,
         ], 'Product search completed.');
+    }
+
+    /**
+     * Flatten product rows for Meta Business Agent (avoid image paths / nested junk that can 500 agent_test).
+     */
+    private function _meta_safe_products(array $rows): array {
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $out[] = [
+                'id'               => (int)($row['id'] ?? 0),
+                'name'             => (string)($row['name'] ?? ''),
+                'sku'              => (string)($row['sku'] ?? ''),
+                'color'            => (string)($row['color'] ?? ''),
+                'length'           => (string)($row['length'] ?? $row['saree_length'] ?? ''),
+                'blouse_included'  => !empty($row['blouse_included']),
+                'pack_of'          => (string)($row['pack_of'] ?? ''),
+                'available'        => !empty($row['available']) || ((int)($row['stock'] ?? 0)) > 0,
+                'stock'            => (int)($row['stock'] ?? 0),
+                'price'            => (float)($row['price'] ?? 0),
+                'mrp'              => (float)($row['mrp'] ?? 0),
+                'currency'         => (string)($row['currency'] ?? 'INR'),
+            ];
+        }
+        return $out;
     }
 
     public function check_stock($phoneNumberId = '') {

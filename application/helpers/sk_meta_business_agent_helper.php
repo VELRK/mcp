@@ -280,27 +280,22 @@ function sk_meta_ba_upsert_instructions(string $phoneNumberId, string $instructi
 function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions = ''): array {
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'our shop';
     $extra = trim($extraInstructions);
-    $extraBit = $extra !== '' ? (' Extra shop notes: ' . $extra) : '';
+    $skill = "You are a friendly WhatsApp salesperson for {$shopName}. "
+        . "Reply in 1-2 short sentences, like a real shopkeeper. Match the customer's language (Tamil/English mix is fine). "
+        . "Infer typos: donu/dono have = do you have; amount/prise/rate = price; kanjivaram/kanchipuram = Kanjivaram saree. "
+        . "For product or price questions: call search_products once, then answer immediately from the tool summary "
+        . "(name, ₹ price, color, stock). Do not call extra tools. Do not invent prices. "
+        . "Never hand off for product, catalog, availability, or price questions. "
+        . "Only hand off if the customer clearly asks for a human, or for refunds/payment disputes/damage.";
+    if ($extra !== '') {
+        $skill .= ' Extra shop notes: ' . $extra;
+    }
     // One consolidated skill — Meta warns conflicting multi-skills cause bad replies.
     return [
         [
             'title'       => 'shop-sales-assistant',
             'description' => 'Apply on every customer message about products, sarees, stock, price, amount, rate, colors, sizes, ordering, delivery, or messy/typo WhatsApp typing. Also apply for general shopping chat.',
-            'skill'       => "You are a friendly human salesperson for {$shopName} on WhatsApp — not a formal bot. "
-                . "Write short, warm, natural replies like a real shopkeeper. Tamil/English mix is fine; match the customer's language. "
-                . "Spelling and messy typing: always infer intent. "
-                . '"donu have" / "do nu have" / "dono have" means "do you have"; '
-                . '"amount" / "prise" / "rate" / "cost" means price; '
-                . '"kanjivaram" / "kanchipuram" / "kanjeevarm" means Kanjivaram saree. '
-                . "Never ask them to retype for small typos. Never hand off only because the message is unclear or misspelled. "
-                . "When they ask about a product, availability, or price: "
-                . "(1) Call search_products with the product keywords from their message. "
-                . "(2) Reply with the product name, price in ₹, and whether it is available, in one short message. "
-                . "(3) Offer one helpful next step (color, blouse, order). "
-                . "Never invent prices or stock — only use tool results. "
-                . "NEVER call human_handoff for product, catalog, availability, or price questions. "
-                . "Only call human_handoff when the customer clearly asks for a human/person, or for payment disputes, refunds, damage, or complaints you cannot resolve with tools."
-                . $extraBit,
+            'skill'       => $skill,
         ],
     ];
 }
