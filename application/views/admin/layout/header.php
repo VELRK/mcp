@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <title><?= htmlspecialchars($title ?? 'Talk AI Pilot Admin') ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="csrf-token-name" content="<?= htmlspecialchars($this->security->get_csrf_token_name(), ENT_QUOTES) ?>">
+  <meta name="csrf-token" content="<?= htmlspecialchars($this->security->get_csrf_hash(), ENT_QUOTES) ?>">
   <link rel="shortcut icon" href="<?= base_url('assets/aquiry/images/logo-sm.png') ?>">
   <link rel="stylesheet" href="<?= base_url('assets/aquiry/libs/simplebar/simplebar.min.css') ?>">
   <link href="<?= base_url('assets/aquiry/css/bootstrap.min.css') ?>" id="bootstrap-style" rel="stylesheet" type="text/css">
