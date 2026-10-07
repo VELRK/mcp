@@ -26,6 +26,7 @@
     <?php endif; ?>
 
     <form action="<?= site_url('admin/vendor/forgot-password/submit') ?>" method="POST">
+      <?= sk_csrf_field() ?>
       <div class="mb-4">
         <label class="form-label">Vendor Email</label>
         <div class="input-group">

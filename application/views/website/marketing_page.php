@@ -98,6 +98,7 @@
       <div class="contact-topics"><?php foreach ($contact_topics as $topic): ?><div class="contact-topic"><span><?= htmlspecialchars($topic[0]) ?></span><div><b><?= htmlspecialchars($topic[1]) ?></b><small><?= htmlspecialchars($topic[2]) ?></small></div></div><?php endforeach; ?></div>
       <div class="contact-point"><b>What happens next?</b><br>We review your requirements and contact you with a practical recommendation.</div></div>
       <form class="form" method="post" action="<?= site_url('contact/save') ?>">
+        <?= sk_csrf_field() ?>
         <div class="field"><label for="name">Name</label><input id="name" name="name" required></div>
         <div class="field"><label for="email">Business email</label><input id="email" type="email" name="email" required></div>
         <div class="field"><label for="phone">Phone</label><input id="phone" name="phone"></div>

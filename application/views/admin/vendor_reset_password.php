@@ -26,6 +26,7 @@
     <?php endif; ?>
 
     <form action="<?= site_url('admin/vendor/reset-password/submit') ?>" method="POST">
+      <?= sk_csrf_field() ?>
       <input type="hidden" name="email" value="<?= htmlspecialchars($email ?? '') ?>">
       <div class="mb-3">
         <label class="form-label">Email Code</label>

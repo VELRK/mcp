@@ -1,6 +1,20 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+/**
+ * Hidden CSRF input for public/admin forms that do not use form_open().
+ */
+function sk_csrf_field(): string
+{
+	$CI =& get_instance();
+	if (!isset($CI->security)) {
+		return '';
+	}
+	$name = htmlspecialchars($CI->security->get_csrf_token_name(), ENT_QUOTES, 'UTF-8');
+	$hash = htmlspecialchars($CI->security->get_csrf_hash(), ENT_QUOTES, 'UTF-8');
+	return '<input type="hidden" name="'.$name.'" value="'.$hash.'">';
+}
+
 function site_services()
 {
 	return array(
@@ -1500,7 +1514,7 @@ function site_contact_form_html($type = 'contact')
 		.'</dl></div></aside>'
 		.'<div class="site-page-panel">'
 		.'<h2>Get in touch</h2><p class="site-page-intro">Share your business and what you want the AI to handle.</p>'
-		.'<form class="site-form" method="post" action="'.$action.'">'.$notice
+		.'<form class="site-form" method="post" action="'.$action.'">'.sk_csrf_field().$notice
 		.'<div><label for="site-name">Name</label><input id="site-name" name="name" type="text" required maxlength="150"></div>'
 		.'<div><label for="site-email">Email</label><input id="site-email" name="email" type="email" required maxlength="150"></div>'
 		.'<div class="site-form-full"><label for="site-phone">Phone</label><input id="site-phone" name="phone" type="tel" maxlength="40"></div>'
