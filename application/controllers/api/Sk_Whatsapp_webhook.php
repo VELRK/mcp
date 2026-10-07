@@ -7,6 +7,9 @@ require_once APPPATH . 'controllers/api/Sk_Base_Api.php';
  * Meta WhatsApp Cloud webhook.
  * With Meta Business Agent enabled, this app is standby: store history only;
  * Meta Agent is the automatic responder. Handovers update thread ownership.
+ *
+ * Standby payloads nest under value.standby.messages / value.standby.message_echoes
+ * (AI replies). Those must be persisted for the inbox tenant (phone_number_id → vendor).
  */
 class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
@@ -75,7 +78,15 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                     if (!is_array($value)) {
                         continue;
                     }
-                    $phoneNumberId = trim((string)($value['metadata']['phone_number_id'] ?? ''));
+
+                    // Meta BA standby nests messages/echoes under value.standby.
+                    $value = $this->_normalize_change_value($field, $value);
+
+                    $phoneNumberId = trim((string)(
+                        $value['metadata']['phone_number_id']
+                        ?? $value['recipient']['phone_number_id']
+                        ?? ''
+                    ));
                     $vendorMatch = $phoneNumberId !== '' ? sk_wa_cloud_resolve_vendor_from_phone($phoneNumberId, $settings) : null;
                     $vendorId = $vendorMatch ? (int)$vendorMatch['vendor_id'] : 0;
 
@@ -84,15 +95,27 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                         continue;
                     }
 
-                    // messages + standby: same message/status shape; standby means Meta Agent owns the thread.
                     $this->_store_statuses((array)($value['statuses'] ?? []));
+
+                    $forceOwner = ($field === 'standby') ? 'meta_agent' : null;
                     $this->_store_messages(
                         (array)($value['messages'] ?? []),
                         (array)($value['contacts'] ?? []),
                         $vendorId,
                         $phoneNumberId,
                         $settings,
-                        $field === 'standby' ? 'meta_agent' : null
+                        'in',
+                        $forceOwner
+                    );
+                    // AI / business app outbound echoes (standby.message_echoes, smb_message_echoes).
+                    $this->_store_messages(
+                        (array)($value['message_echoes'] ?? []),
+                        (array)($value['contacts'] ?? []),
+                        $vendorId,
+                        $phoneNumberId,
+                        $settings,
+                        'out',
+                        $forceOwner
                     );
                 }
             }
@@ -105,26 +128,56 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         exit;
     }
 
-    private function _store_handovers(array $value, int $vendorId, string $phoneNumberId): void {
-        $events = [];
-        if (!empty($value['message_echoes']) && is_array($value['message_echoes'])) {
-            // ignore echoes here
-        }
-        foreach (['history', 'messages'] as $k) {
-            if (!empty($value[$k]) && is_array($value[$k])) {
-                $events = array_merge($events, $value[$k]);
+    /**
+     * Flatten field-specific nesting so messages/echoes sit on value.* like Cloud API messages.
+     */
+    private function _normalize_change_value(string $field, array $value): array {
+        if ($field === 'standby' && !empty($value['standby']) && is_array($value['standby'])) {
+            $nested = $value['standby'];
+            foreach (['messages', 'message_echoes', 'contacts', 'statuses'] as $k) {
+                if (empty($nested[$k]) || !is_array($nested[$k])) {
+                    continue;
+                }
+                $existing = isset($value[$k]) && is_array($value[$k]) ? $value[$k] : [];
+                $value[$k] = array_merge($existing, $nested[$k]);
             }
         }
-        // Common Cloud handover payload: value.contacts + metadata + new_owner / previous_owner
+
+        // smb_message_echoes: business-app outbound; treat any messages[] as echoes.
+        if ($field === 'smb_message_echoes'
+            && empty($value['message_echoes'])
+            && !empty($value['messages'])
+            && is_array($value['messages'])
+        ) {
+            $value['message_echoes'] = $value['messages'];
+            unset($value['messages']);
+        }
+
+        return $value;
+    }
+
+    private function _store_handovers(array $value, int $vendorId, string $phoneNumberId): void {
         $to = '';
         if (!empty($value['contacts'][0]['wa_id'])) {
             $to = sk_wa_cloud_normalize_phone((string)$value['contacts'][0]['wa_id']);
+        } elseif (!empty($value['sender']['phone_number'])) {
+            $to = sk_wa_cloud_normalize_phone((string)$value['sender']['phone_number']);
         } elseif (!empty($value['recipient_id'])) {
             $to = sk_wa_cloud_normalize_phone((string)$value['recipient_id']);
         } elseif (!empty($value['from'])) {
             $to = sk_wa_cloud_normalize_phone((string)$value['from']);
         }
 
+        if ($phoneNumberId === '' && !empty($value['recipient']['phone_number_id'])) {
+            $phoneNumberId = trim((string)$value['recipient']['phone_number_id']);
+            if ($vendorId < 1 && $phoneNumberId !== '') {
+                $match = sk_wa_cloud_resolve_vendor_from_phone($phoneNumberId);
+                $vendorId = $match ? (int)$match['vendor_id'] : 0;
+            }
+        }
+
+        $prevRole = strtolower((string)($value['control_passed']['previous_owner_app_role'] ?? ''));
+        $type = strtolower((string)($value['type'] ?? ''));
         $newOwnerRaw = strtolower((string)(
             $value['new_owner']['app_id']
             ?? $value['new_thread_owner']
@@ -132,8 +185,12 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             ?? $value['new_owner']
             ?? ''
         ));
+
         $owner = 'meta_agent';
-        if ($newOwnerRaw !== '') {
+        if ($type === 'control_passed' || $prevRole === 'meta_business_agent') {
+            // Agent passed control to the app / human.
+            $owner = 'app';
+        } elseif ($newOwnerRaw !== '') {
             if (strpos($newOwnerRaw, 'ai') !== false || strpos($newOwnerRaw, 'agent') !== false) {
                 $owner = 'meta_agent';
             } else {
@@ -141,8 +198,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             }
         }
         if (!empty($value['handover']) || !empty($value['passed_control']) || !empty($value['requested'])) {
-            // If customer requested human / control passed to app
-            if (!empty($value['requested']) || (isset($value['passed_control']['new_owner']['app']) )) {
+            if (!empty($value['requested']) || (isset($value['passed_control']['new_owner']['app']))) {
                 $owner = 'human';
             }
         }
@@ -161,7 +217,6 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             );
         }
 
-        // Persist raw handover for debugging
         log_message('info', 'WhatsApp messaging_handovers: ' . json_encode([
             'phone_number_id' => $phoneNumberId,
             'vendor_id' => $vendorId,
@@ -185,30 +240,43 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
     }
 
+    /**
+     * Persist inbound customer messages or outbound AI/business echoes.
+     *
+     * @param string $direction 'in' | 'out'
+     */
     private function _store_messages(
         array $messages,
         array $contacts,
         int $vendorId,
         string $phoneNumberId,
         array $settings,
+        string $direction = 'in',
         ?string $forceOwner = null
     ): void {
         $names = [];
         foreach ($contacts as $c) {
             $wa = (string)($c['wa_id'] ?? '');
             if ($wa !== '') {
-                $names[$wa] = (string)($c['profile']['name'] ?? '');
+                $names[sk_wa_cloud_normalize_phone($wa)] = (string)($c['profile']['name'] ?? '');
             }
         }
-        foreach ($messages as $m) {
-            if (!is_array($m)) {
+
+        foreach ($messages as $raw) {
+            if (!is_array($raw)) {
                 continue;
             }
-            $from = sk_wa_cloud_normalize_phone((string)($m['from'] ?? ''));
+            $m = $this->_normalize_message_item($raw, $direction);
+            if ($m === null) {
+                continue;
+            }
+
+            $peer = sk_wa_cloud_normalize_phone((string)($m['_peer'] ?? ''));
             $wamid = (string)($m['id'] ?? '');
-            if ($from === '' || $this->Sk_Whatsapp_cloud_model->find_by_wamid($wamid)) {
+            if ($peer === '' || $wamid === '' || $this->Sk_Whatsapp_cloud_model->find_by_wamid($wamid)) {
                 continue;
             }
+
             $parsed = sk_wa_mcp_parse_inbound($m);
             $type = (string)($m['type'] ?? 'text');
             $mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
@@ -233,8 +301,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             }
             $storeType = in_array($type, array_merge(['text'], $mediaTypes), true) ? $type : 'text';
             $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation(
-                $from,
-                $names[$from] ?? '',
+                $peer,
+                $names[$peer] ?? '',
                 $vendorId > 0 ? $vendorId : null,
                 $phoneNumberId !== '' ? $phoneNumberId : null
             );
@@ -242,17 +310,68 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'vendor_id'       => $vendorId > 0 ? $vendorId : null,
                 'phone_number_id' => $phoneNumberId !== '' ? $phoneNumberId : null,
                 'wamid'           => $wamid,
-                'direction'       => 'in',
+                'direction'       => $direction === 'out' ? 'out' : 'in',
                 'type'            => $storeType,
                 'body'            => $body,
                 'media_url'       => $mediaUrl !== '' ? $mediaUrl : ($mediaId !== '' ? $mediaId : null),
                 'media_id'        => $mediaId !== '' ? $mediaId : null,
-                'status'          => 'received',
-                'raw_json'        => json_encode($m, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'status'          => $direction === 'out' ? 'sent' : 'received',
+                'raw_json'        => json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             ]);
             if ($forceOwner !== null) {
                 $this->Sk_Vendor_meta_agent_model->set_conversation_owner((int)$conv['id'], $forceOwner, 'standby');
+            } elseif ($direction === 'out' && $this->_is_bizai_echo($raw, $m)) {
+                $this->Sk_Vendor_meta_agent_model->set_conversation_owner((int)$conv['id'], 'meta_agent', 'message_echo');
             }
         }
+    }
+
+    /**
+     * Normalize Cloud messages and nested standby echoes into a common message shape.
+     * Echo shape A: { from, to, id, type, text }
+     * Echo shape B: { id, timestamp, message: { to, type, text, biz_opaque_callback_data } }
+     */
+    private function _normalize_message_item(array $raw, string $direction): ?array {
+        $m = $raw;
+        if (!empty($raw['message']) && is_array($raw['message'])) {
+            $inner = $raw['message'];
+            $m = array_merge($inner, [
+                'id' => (string)($raw['id'] ?? $inner['id'] ?? ''),
+                'timestamp' => (string)($raw['timestamp'] ?? $inner['timestamp'] ?? ''),
+            ]);
+        }
+
+        $wamid = (string)($m['id'] ?? $raw['id'] ?? '');
+        if ($wamid === '') {
+            return null;
+        }
+        $m['id'] = $wamid;
+
+        if ($direction === 'out') {
+            $peer = (string)($m['to'] ?? $raw['to'] ?? $m['recipient'] ?? '');
+        } else {
+            $peer = (string)($m['from'] ?? $raw['from'] ?? '');
+        }
+        $peer = sk_wa_cloud_normalize_phone($peer);
+        if ($peer === '') {
+            return null;
+        }
+        $m['_peer'] = $peer;
+        if (empty($m['type'])) {
+            $m['type'] = 'text';
+        }
+        return $m;
+    }
+
+    private function _is_bizai_echo(array $raw, array $m): bool {
+        $opaque = $m['biz_opaque_callback_data'] ?? $raw['biz_opaque_callback_data'] ?? null;
+        if (is_string($opaque)) {
+            $decoded = json_decode($opaque, true);
+            $opaque = is_array($decoded) ? $decoded : null;
+        }
+        if (is_array($opaque) && strtolower((string)($opaque['originator'] ?? '')) === 'bizai') {
+            return true;
+        }
+        return false;
     }
 }

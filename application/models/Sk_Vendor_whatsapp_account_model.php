@@ -96,14 +96,28 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
         return $this->db->affected_rows() >= 0;
     }
 
-    public function get_by_phone(string $phoneNumberId): ?array {
+    /**
+     * @param bool $includeInactive When true, match any status (active preferred).
+     */
+    public function get_by_phone(string $phoneNumberId, bool $includeInactive = false): ?array {
         $phoneNumberId = trim($phoneNumberId);
         if ($phoneNumberId === '') {
             return null;
         }
         $this->ensure_schema();
-        return $this->db->where('phone_number_id', $phoneNumberId)
+        $active = $this->db->where('phone_number_id', $phoneNumberId)
             ->where('status', 'active')
+            ->get($this->table)
+            ->row_array();
+        if ($active) {
+            return $active;
+        }
+        if (!$includeInactive) {
+            return null;
+        }
+        return $this->db->where('phone_number_id', $phoneNumberId)
+            ->order_by('updated_at', 'DESC')
+            ->limit(1)
             ->get($this->table)
             ->row_array() ?: null;
     }

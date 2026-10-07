@@ -24,7 +24,8 @@ class Whatsapp extends Sk_Base {
 
     public function conversations() {
         $search = trim((string)$this->input->get('q', TRUE));
-        $rows = $this->Sk_Whatsapp_cloud_model->list_conversations($search);
+        $vid = $this->_resolve_ops_vendor_id();
+        $rows = $this->Sk_Whatsapp_cloud_model->list_conversations($search, 80, $vid > 0 ? $vid : null);
         foreach ($rows as &$row) {
             if (!empty($row['last_at'])) {
                 $row['last_at'] = sk_shift_datetime($row['last_at'], 'Asia/Kolkata');
@@ -36,7 +37,8 @@ class Whatsapp extends Sk_Base {
 
     public function thread($id = 0) {
         $id = (int)$id;
-        $conv = $this->Sk_Whatsapp_cloud_model->get_conversation($id);
+        $vid = $this->_resolve_ops_vendor_id();
+        $conv = $this->Sk_Whatsapp_cloud_model->get_conversation($id, $vid > 0 ? $vid : null);
         if (!$conv) {
             return $this->json(['success' => false, 'message' => 'Conversation not found.'], 404);
         }
@@ -66,18 +68,36 @@ class Whatsapp extends Sk_Base {
         if (!preg_match('/^91[6-9]\d{9}$/', $phone)) {
             return $this->json(['success' => false, 'message' => 'Enter a 10-digit Indian mobile number.']);
         }
-        $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation($phone, $name);
+        $vid = $this->_resolve_ops_vendor_id();
+        $phoneNumberId = null;
+        if ($vid > 0) {
+            $this->load->model('Sk_Vendor_whatsapp_account_model');
+            $acc = $this->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vid);
+            if ($acc && !empty($acc['phone_number_id'])) {
+                $phoneNumberId = (string)$acc['phone_number_id'];
+            }
+        }
+        $conv = $this->Sk_Whatsapp_cloud_model->find_or_create_conversation(
+            $phone,
+            $name,
+            $vid > 0 ? $vid : null,
+            $phoneNumberId
+        );
         return $this->json(['success' => true, 'conversation' => $conv]);
     }
 
     public function send() {
         $settings = $this->Sk_Admin_model->get_settings();
         $convId = (int)$this->input->post('conversation_id');
-        $conv = $this->Sk_Whatsapp_cloud_model->get_conversation($convId);
+        $opsVid = $this->_resolve_ops_vendor_id();
+        $conv = $this->Sk_Whatsapp_cloud_model->get_conversation($convId, $opsVid > 0 ? $opsVid : null);
         if (!$conv) {
             return $this->json(['success' => false, 'message' => 'Conversation not found.']);
         }
         $vid = (int)($conv['vendor_id'] ?? 0);
+        if ($vid < 1 && $opsVid > 0) {
+            $vid = $opsVid;
+        }
         if ($vid > 0) {
             $settings['vendor_id'] = $vid;
         }
@@ -152,16 +172,18 @@ class Whatsapp extends Sk_Base {
         }
         $ok = !empty($result['success']);
         $this->Sk_Whatsapp_cloud_model->add_message($convId, [
-            'wamid'         => $wamid ?: null,
-            'direction'     => 'out',
-            'type'          => $type,
-            'body'          => $caption,
-            'media_url'     => $mediaUrl ?: null,
-            'media_id'      => $mediaId ?: null,
-            'template_name' => $tplName ?: null,
-            'status'        => $ok ? 'sent' : 'failed',
-            'error_text'    => $ok ? null : ($result['message'] ?? 'Send failed'),
-            'raw_json'      => json_encode($result['data'] ?? $result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'vendor_id'       => $vid > 0 ? $vid : null,
+            'phone_number_id' => $phoneId !== '' ? $phoneId : null,
+            'wamid'           => $wamid ?: null,
+            'direction'       => 'out',
+            'type'            => $type,
+            'body'            => $caption,
+            'media_url'       => $mediaUrl ?: null,
+            'media_id'        => $mediaId ?: null,
+            'template_name'   => $tplName ?: null,
+            'status'          => $ok ? 'sent' : 'failed',
+            'error_text'      => $ok ? null : ($result['message'] ?? 'Send failed'),
+            'raw_json'        => json_encode($result['data'] ?? $result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ]);
 
         // Sending from the app takes thread control from Meta Business Agent.

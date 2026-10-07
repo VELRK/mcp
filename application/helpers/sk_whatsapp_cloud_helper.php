@@ -116,7 +116,7 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
             `created_at` DATETIME NOT NULL,
             `updated_at` DATETIME NOT NULL,
             PRIMARY KEY (`id`),
-            UNIQUE KEY `uniq_phone` (`phone`),
+            KEY `idx_phone_pnid` (`phone`, `phone_number_id`),
             KEY `idx_vendor_phone` (`vendor_id`, `phone_number_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
@@ -126,6 +126,17 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
     }
     if ($CI->db->table_exists('wa_cloud_conversations') && !$CI->db->field_exists('phone_number_id', 'wa_cloud_conversations')) {
         $CI->db->query("ALTER TABLE `wa_cloud_conversations` ADD COLUMN `phone_number_id` VARCHAR(128) NULL AFTER `vendor_id`");
+    }
+    // Conversations are per business number (phone_number_id), not globally unique by customer phone.
+    if ($CI->db->table_exists('wa_cloud_conversations')) {
+        $uniqPhone = $CI->db->query("SHOW INDEX FROM `wa_cloud_conversations` WHERE Key_name = 'uniq_phone'")->result_array();
+        if ($uniqPhone) {
+            $CI->db->query("ALTER TABLE `wa_cloud_conversations` DROP INDEX `uniq_phone`");
+        }
+        $tenantIdx = $CI->db->query("SHOW INDEX FROM `wa_cloud_conversations` WHERE Key_name = 'idx_phone_pnid'")->result_array();
+        if (!$tenantIdx) {
+            $CI->db->query("ALTER TABLE `wa_cloud_conversations` ADD KEY `idx_phone_pnid` (`phone`, `phone_number_id`)");
+        }
     }
 
     if (!$CI->db->table_exists('wa_cloud_messages')) {
@@ -220,7 +231,8 @@ function sk_wa_cloud_resolve_vendor_from_phone(string $phoneNumberId, ?array $se
     if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
         $CI->load->model('Sk_Vendor_whatsapp_account_model');
     }
-    $account = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId);
+    // Prefer active; fall back to pending/inactive so webhook history still lands on the tenant.
+    $account = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId, true);
     if (!$account || empty($account['vendor_id'])) {
         return null;
     }
@@ -230,6 +242,7 @@ function sk_wa_cloud_resolve_vendor_from_phone(string $phoneNumberId, ?array $se
         'waba_id' => $account['waba_id'],
         'display_phone' => $account['display_phone'],
         'access_token' => $account['access_token'],
+        'status' => (string)($account['status'] ?? ''),
     ];
 }
 
