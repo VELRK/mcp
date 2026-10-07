@@ -1490,17 +1490,40 @@ function site_about_content_html()
 		.site_testimonials_html();
 }
 
+/**
+ * Inline JS: submit contact/enquiry forms via AJAX (no page reload).
+ */
+function site_contact_form_ajax_script($selector = 'form.site-form, form.js-contact-ajax')
+{
+	$sel = json_encode((string) $selector);
+	return '<script>(function(){'
+		.'var sel='.$sel.';'
+		.'function showMsg(box,ok,text){if(!box)return;box.hidden=false;box.className=ok?"site-form-ok site-form-full":"site-form-err site-form-full";box.textContent=text||"";box.scrollIntoView({behavior:"smooth",block:"nearest"});}'
+		.'function setCsrf(form,hash){if(!hash)return;var c=form.querySelector(\'input[name="csrf_token"]\');if(!c){c=document.createElement("input");c.type="hidden";c.name="csrf_token";form.appendChild(c);}c.value=hash;}'
+		.'document.querySelectorAll(sel).forEach(function(form){'
+		.'if(form.getAttribute("data-ajax-bound"))return;form.setAttribute("data-ajax-bound","1");'
+		.'form.addEventListener("submit",function(e){'
+		.'e.preventDefault();'
+		.'var box=form.querySelector("[data-form-msg]")||form.querySelector(".js-form-msg");'
+		.'var btn=form.querySelector(\'button[type="submit"],input[type="submit"]\');'
+		.'var prev=btn?(btn.textContent||btn.value||""):"";'
+		.'if(btn){btn.disabled=true;if(btn.tagName==="BUTTON")btn.textContent="Sending…";}'
+		.'fetch(form.action,{method:"POST",body:new FormData(form),credentials:"same-origin",headers:{"X-Requested-With":"XMLHttpRequest","Accept":"application/json"}})'
+		.'.then(function(r){return r.json().catch(function(){return{success:false,message:"Something went wrong. Please try again."};});})'
+		.'.then(function(res){'
+		.'if(res&&res.success){showMsg(box,true,res.message||"Thank you. We received your message and will reply shortly.");form.reset();setCsrf(form,res.csrf_hash);}'
+		.'else{setCsrf(form,res&&res.csrf_hash);showMsg(box,false,(res&&res.message)||"Please fill name, a valid email and a message, then try again.");}'
+		.'})'
+		.'.catch(function(){showMsg(box,false,"Network error. Please try again.");})'
+		.'.finally(function(){if(btn){btn.disabled=false;if(btn.tagName==="BUTTON")btn.textContent=prev;}});'
+		.'});'
+		.'});'
+		.'})();</script>';
+}
+
 function site_contact_form_html($type = 'contact')
 {
 	$action = htmlspecialchars(base_url('contact/save'), ENT_QUOTES, 'UTF-8');
-
-	$notice = '';
-	$sent = isset($_GET['sent']) ? (string) $_GET['sent'] : '';
-	if ($sent === '1') {
-		$notice = '<div class="site-form-ok site-form-full">Thank you. We received your message and will reply shortly.</div>';
-	} elseif ($sent === '0') {
-		$notice = '<div class="site-form-err site-form-full">Please fill name, a valid email and a message, then try again.</div>';
-	}
 
 	return '<section class="site-page"><div class="site-page-wrap"><div class="site-page-split">'
 		.'<aside class="site-page-aside"><div class="site-page-info">'
@@ -1514,7 +1537,9 @@ function site_contact_form_html($type = 'contact')
 		.'</dl></div></aside>'
 		.'<div class="site-page-panel">'
 		.'<h2>Get in touch</h2><p class="site-page-intro">Share your business and what you want the AI to handle.</p>'
-		.'<form class="site-form" method="post" action="'.$action.'">'.sk_csrf_field().$notice
+		.'<form class="site-form js-contact-ajax" method="post" action="'.$action.'">'
+		.sk_csrf_field()
+		.'<div class="site-form-ok site-form-full js-form-msg" data-form-msg hidden></div>'
 		.'<div><label for="site-name">Name</label><input id="site-name" name="name" type="text" required maxlength="150"></div>'
 		.'<div><label for="site-email">Email</label><input id="site-email" name="email" type="email" required maxlength="150"></div>'
 		.'<div class="site-form-full"><label for="site-phone">Phone</label><input id="site-phone" name="phone" type="tel" maxlength="40"></div>'
@@ -1527,7 +1552,8 @@ function site_contact_form_html($type = 'contact')
 		.'<div><label for="site-subject">Subject</label><input id="site-subject" name="subject" type="text" maxlength="200"></div>'
 		.'<div class="site-form-full"><label for="site-message">Message</label><textarea id="site-message" name="message" rows="6" required></textarea></div>'
 		.'<button type="submit">Send Message</button>'
-		.'</form></div></div></div></section>';
+		.'</form></div></div></div></section>'
+		.site_contact_form_ajax_script('form.js-contact-ajax');
 }
 
 function ensure_contact_enquiries_table()
@@ -1591,9 +1617,27 @@ function save_site_enquiry($source = 'web')
 	$business = trim((string) $CI->input->post('business', true));
 	$industry = trim((string) $CI->input->post('industry', true));
 
-	$redirect = 'contact';
+	$accept = (string) $CI->input->server('HTTP_ACCEPT');
+	$isAjax = $CI->input->is_ajax_request()
+		|| (stripos($accept, 'application/json') !== false);
+
+	$respond = function ($ok, $msg) use ($CI, $isAjax) {
+		$payload = array(
+			'success'   => (bool) $ok,
+			'message'   => (string) $msg,
+			'csrf_hash' => $CI->security->get_csrf_hash(),
+		);
+		if ($isAjax) {
+			$CI->output
+				->set_content_type('application/json')
+				->set_output(json_encode($payload));
+			return;
+		}
+		redirect('contact?sent='.($ok ? '1' : '0'));
+	};
+
 	if ($name === '' || $message === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-		redirect($redirect.'?sent=0');
+		$respond(false, 'Please fill name, a valid email and a message, then try again.');
 		return;
 	}
 
@@ -1618,7 +1662,7 @@ function save_site_enquiry($source = 'web')
 		));
 	} catch (Exception $e) {
 		log_message('error', 'Landing enquiry save failed: '.$e->getMessage());
-		redirect($redirect.'?sent=0');
+		$respond(false, 'Could not send your message right now. Please try again.');
 		return;
 	}
 
@@ -1634,7 +1678,7 @@ function save_site_enquiry($source = 'web')
 	$CI->load->helper('sk_mailer');
 	sk_mail_contact_enquiry($name, $email, $mailBody);
 
-	redirect($redirect.'?sent=1');
+	$respond(true, 'Thank you. We received your message and will reply shortly.');
 }
 
 function site_legal_content_html($type)
