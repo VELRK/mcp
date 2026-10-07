@@ -22,12 +22,20 @@ $m = new mysqli($c['hostname'], $c['username'], $c['password'], $c['database']);
 $m->set_charset('utf8mb4');
 
 $acct = $m->query(
-    "SELECT vendor_id, phone_number_id, display_phone_number, status
+    "SELECT vendor_id, phone_number_id, status
      FROM vendor_whatsapp_accounts
      WHERE phone_number_id='" . $m->real_escape_string($phone) . "' LIMIT 1"
 )->fetch_assoc();
 if (!$acct) {
-    fwrite(STDERR, "No vendor_whatsapp_accounts row for phone={$phone}\n");
+    // Fallback table name used in some installs.
+    $acct = $m->query(
+        "SELECT vendor_id, phone_number_id, status
+         FROM vendor_whatsapp_numbers
+         WHERE phone_number_id='" . $m->real_escape_string($phone) . "' LIMIT 1"
+    )->fetch_assoc();
+}
+if (!$acct) {
+    fwrite(STDERR, "No WhatsApp account row for phone={$phone}\n");
     exit(1);
 }
 $vid = (int)$acct['vendor_id'];
