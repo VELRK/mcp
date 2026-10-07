@@ -7,7 +7,8 @@ class Products extends Sk_Base {
 
     public function __construct() {
         parent::__construct();
-        $this->load->model(['Sk_Variant_unit_model', 'Sk_Product_variant_model']);
+        $this->load->model(['Sk_Variant_unit_model', 'Sk_Product_variant_model', 'Sk_Product_model']);
+        $this->Sk_Product_model->ensure_schema();
     }
 
     public function index() {
