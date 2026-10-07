@@ -216,8 +216,15 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             $displayPrice = $basePrice;
         }
 
+        // Skip rows that somehow escaped vendor scope.
+        if ($tenantId > 0 && isset($product['vendor_id']) && (int)$product['vendor_id'] > 0
+            && (int)$product['vendor_id'] !== $tenantId) {
+            continue;
+        }
+
         $matchRows[] = [
             'id' => (int)($product['id'] ?? 0),
+            'vendor_id' => (int)($product['vendor_id'] ?? $tenantId),
             'name' => (string)($product['name'] ?? ''),
             'sku' => (string)($product['sku'] ?? ''),
             'color' => trim((string)($product['color'] ?? '')),

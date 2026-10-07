@@ -5,6 +5,22 @@ class Sk_Product_model extends CI_Model {
 
     /** @var Sk_Product_variant_model|null */
     private $_variant_model = null;
+    private static $schema_ready = false;
+
+    /** Ensure columns used by admin product forms exist (idempotent). */
+    public function ensure_schema(): void {
+        if (self::$schema_ready) {
+            return;
+        }
+        if (!$this->db->table_exists('products')) {
+            return;
+        }
+        if (!$this->db->field_exists('payment_link', 'products')) {
+            $this->db->query("ALTER TABLE `products`
+                ADD COLUMN `payment_link` VARCHAR(500) NULL DEFAULT NULL AFTER `thumbnail`");
+        }
+        self::$schema_ready = true;
+    }
 
     private function variant_model() {
         if ($this->_variant_model === null) {
@@ -35,6 +51,10 @@ class Sk_Product_model extends CI_Model {
             $this->db->where('p.status', $filters['status']);
         } else {
             $this->db->where('p.status', 'active');
+        }
+        // Tenant / vendor scope — required for Meta BA + MCP catalog tools.
+        if (!empty($filters['vendor_id'])) {
+            $this->db->where('p.vendor_id', (int)$filters['vendor_id']);
         }
         if (!empty($filters['featured'])) {
             $this->db->where('p.featured', 1);

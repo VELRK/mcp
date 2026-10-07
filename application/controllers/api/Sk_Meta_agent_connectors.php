@@ -111,16 +111,20 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         if ($query === '') {
             $this->error('query is required.', 400);
         }
-        $result = sk_mcp_tool_find_products($query, ['tenant' => $tenant['vendor_id']], 3);
-        $products = $this->_meta_safe_products($result['results'] ?? []);
+        $vendorId = (int)$tenant['vendor_id'];
+        $result = sk_mcp_tool_find_products($query, ['tenant' => $vendorId], 3);
+        $products = $this->_meta_safe_products($result['results'] ?? [], $vendorId);
         // One fast catalog fallback only — avoid multi-query delays that push Meta past 10s.
         if (!$products) {
             $listed = $this->Sk_Product_model->get_all(
-                ['status' => 'active', 'vendor_id' => $tenant['vendor_id'], 'sort' => 'newest'],
+                ['status' => 'active', 'vendor_id' => $vendorId, 'sort' => 'newest'],
                 3,
                 0
             );
             foreach (($listed['data'] ?? []) as $product) {
+                if ($vendorId > 0 && (int)($product['vendor_id'] ?? 0) !== $vendorId) {
+                    continue;
+                }
                 $products[] = [
                     'id'               => (int)($product['id'] ?? 0),
                     'name'             => (string)($product['name'] ?? ''),
@@ -167,14 +171,22 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         ], 'Product search completed.');
     }
 
-    private function _meta_safe_products(array $rows): array {
+    private function _meta_safe_products(array $rows, int $vendorId = 0): array {
         $out = [];
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
             }
+            $id = (int)($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $rowVendor = (int)($row['vendor_id'] ?? 0);
+            if ($vendorId > 0 && $rowVendor > 0 && $rowVendor !== $vendorId) {
+                continue;
+            }
             $out[] = [
-                'id'               => (int)($row['id'] ?? 0),
+                'id'               => $id,
                 'name'             => (string)($row['name'] ?? ''),
                 'sku'              => (string)($row['sku'] ?? ''),
                 'color'            => (string)($row['color'] ?? ''),
