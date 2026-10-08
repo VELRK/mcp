@@ -20,6 +20,30 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
   <a href="<?= site_url('admin/meta/agent') ?>" class="btn btn-sm btn-success">Meta Business Agent</a>
 </div>
 
+<style>
+#waApp.main-chat-content { align-items: stretch; }
+#waApp .chat-area { min-width: 0; display: flex; }
+#waApp .chat-area > .chat-wrapper,
+#waApp .chat-contact > .chat-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: calc(100vh - 186px);
+  min-height: 420px;
+  overflow: hidden !important;
+}
+#waApp .chat-area .chat-conversation,
+#waApp #waList {
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  overflow: auto;
+}
+#waApp #waComposer { flex: 0 0 auto; }
+#waApp #waSendBtn { position: relative; z-index: 2; flex: 0 0 auto; }
+#waApp #waBody { resize: none; max-height: 120px; }
+</style>
 <div class="d-flex flex-wrap flex-xl-nowrap gap-xl-4 main-chat-content" id="waApp"
      data-conv-url="<?= site_url('admin/whatsapp/conversations') ?>"
      data-thread-url="<?= site_url('admin/whatsapp/thread') ?>"
@@ -42,7 +66,7 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
         </div>
       </div>
       <h6 class="text-muted fw-normal mb-3 px-4 mt-1">Chats</h6>
-      <div class="rich-list rounded-0 rich-list-action" id="waList" data-simplebar style="max-height: 560px;"></div>
+      <div class="rich-list rounded-0 rich-list-action" id="waList"></div>
     </div>
   </div>
 
@@ -62,10 +86,10 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
           <button type="button" class="btn btn-sm btn-outline-success" id="waReleaseBtn" disabled>Release to AI</button>
         </div>
       </div>
-      <div class="chat-conversation" data-simplebar style="max-height: 480px;">
+      <div class="chat-conversation">
         <div class="p-4 h-100">
           <div class="chat" id="waThread">
-            <div class="text-center text-muted py-5">Choose a conversation or start a new chat.</div>
+            <div class="text-center text-muted py-5 wa-thread-empty">Choose a conversation or start a new chat.</div>
           </div>
         </div>
       </div>
@@ -80,14 +104,21 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="px-5 py-4 bg-body-secondary position-relative border-top d-flex">
-          <div class="position-relative d-flex align-items-center gap-3 w-100">
-            <textarea name="body" id="waBody" class="form-control" placeholder="Type a message..." rows="1"></textarea>
-            <label class="text-muted position-relative mb-0" title="Attach File">
+        <div id="waMediaPreview" class="px-4 pt-2 d-none">
+          <div class="d-flex align-items-center gap-2 border rounded px-2 py-1 bg-body">
+            <img id="waMediaThumb" alt="" class="rounded d-none" style="width:36px;height:36px;object-fit:cover;">
+            <span id="waMediaName" class="small text-truncate"></span>
+            <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-auto" id="waMediaClear">Remove</button>
+          </div>
+        </div>
+        <div class="px-4 py-3 bg-body-secondary border-top">
+          <div class="d-flex align-items-end gap-2">
+            <label class="btn btn-light btn-icon mb-0 flex-shrink-0" title="Attach media" for="waMedia">
               <i class="mdi mdi-paperclip fs-20"></i>
-              <input type="file" name="media" id="waMedia" class="position-absolute top-0 start-0 w-100 h-100 opacity-0" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" title="Attach">
             </label>
-            <button type="submit" class="btn btn-primary btn-icon" <?= empty($ready) ? 'disabled' : '' ?> aria-label="Send">
+            <input type="file" name="media" id="waMedia" class="d-none" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+            <textarea name="body" id="waBody" class="form-control" placeholder="Type a message..." rows="1"></textarea>
+            <button type="submit" class="btn btn-primary btn-icon" id="waSendBtn" <?= empty($ready) ? 'disabled' : '' ?> aria-label="Send" title="Send">
               <i class="mdi mdi-send"></i>
             </button>
           </div>
@@ -229,15 +260,12 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
     var thread = document.getElementById('waThread');
     var msgs = payload.messages || [];
     if (!append) {
-      thread.innerHTML = msgs.length ? msgs.map(bubbleHtml).join('') : '<div class="text-center text-muted py-5">No messages yet.</div>';
+      thread.innerHTML = msgs.length ? msgs.map(bubbleHtml).join('') : '<div class="text-center text-muted py-5 wa-thread-empty">No messages yet.</div>';
       lastMsgId = msgs.length ? Number(msgs[msgs.length - 1].id) : 0;
     } else if (msgs.length) {
-      var empty = thread.querySelector('.text-muted');
-      if (empty && !msgs.length) empty.remove();
-      msgs.forEach(function (m) { thread.insertAdjacentHTML('beforeend', bubbleHtml(m)); lastMsgId = Number(m.id); });
+      appendBubbles(msgs);
     }
-    var scroller = thread.closest('.simplebar-content-wrapper') || thread.parentElement;
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    scrollThread();
     if (payload.conversation) {
       var name = payload.conversation.name || payload.conversation.phone;
       document.getElementById('waHeadName').textContent = name;
@@ -246,6 +274,35 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
       document.getElementById('waConvId').value = payload.conversation.id;
       setThreadOwner(payload.thread_owner || payload.conversation.thread_owner || 'meta_agent');
     }
+  }
+  function scrollThread() {
+    var thread = document.getElementById('waThread');
+    var scroller = thread.closest('.simplebar-content-wrapper') || thread.closest('.chat-conversation') || thread.parentElement;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }
+  function appendBubbles(msgs) {
+    var thread = document.getElementById('waThread');
+    var empty = thread.querySelector('.wa-thread-empty');
+    if (empty) empty.remove();
+    msgs.forEach(function (m) {
+      var id = Number(m.id);
+      if (!id || thread.querySelector('[data-mid="' + id + '"]')) {
+        if (id) lastMsgId = Math.max(lastMsgId, id);
+        return;
+      }
+      thread.insertAdjacentHTML('beforeend', bubbleHtml(m));
+      lastMsgId = Math.max(lastMsgId, id);
+    });
+    scrollThread();
+  }
+  function clearMedia() {
+    var input = document.getElementById('waMedia');
+    input.value = '';
+    document.getElementById('waType').value = document.getElementById('waTemplate').value ? 'template' : 'text';
+    document.getElementById('waMediaPreview').classList.add('d-none');
+    document.getElementById('waMediaThumb').classList.add('d-none');
+    document.getElementById('waMediaThumb').removeAttribute('src');
+    document.getElementById('waMediaName').textContent = '';
   }
   function loadList() {
     var q = document.getElementById('waSearch').value;
@@ -269,32 +326,72 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
   document.getElementById('waSearch').addEventListener('input', loadList);
   document.getElementById('waMedia').addEventListener('change', function () {
     var f = this.files && this.files[0];
-    var type = 'text';
-    if (f) {
-      var mime = f.type || '';
-      if (mime.indexOf('video') === 0) type = 'video';
-      else if (mime.indexOf('audio') === 0) type = 'audio';
-      else if (mime.indexOf('image') === 0) type = 'image';
-      else type = 'document';
-    }
+    var type = document.getElementById('waTemplate').value ? 'template' : 'text';
+    var preview = document.getElementById('waMediaPreview');
+    var thumb = document.getElementById('waMediaThumb');
+    if (!f) { clearMedia(); return; }
+    var mime = f.type || '';
+    if (mime.indexOf('video') === 0) type = 'video';
+    else if (mime.indexOf('audio') === 0) type = 'audio';
+    else if (mime.indexOf('image') === 0) type = 'image';
+    else type = 'document';
     document.getElementById('waType').value = type;
+    document.getElementById('waMediaName').textContent = f.name;
+    preview.classList.remove('d-none');
+    if (type === 'image') {
+      var reader = new FileReader();
+      reader.onload = function () { thumb.src = reader.result; thumb.classList.remove('d-none'); };
+      reader.readAsDataURL(f);
+    } else {
+      thumb.classList.add('d-none');
+      thumb.removeAttribute('src');
+    }
   });
+  document.getElementById('waMediaClear').addEventListener('click', clearMedia);
+  document.getElementById('waBody').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      var form = document.getElementById('waComposer');
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+  });
+  var sending = false;
   document.getElementById('waComposer').addEventListener('submit', function (e) {
     e.preventDefault();
+    if (sending) return;
     if (!activeId) { alert('Select a chat first.'); return; }
     var tpl = document.getElementById('waTemplate').value;
-    if (tpl) document.getElementById('waType').value = 'template';
+    var hasFile = document.getElementById('waMedia').files && document.getElementById('waMedia').files.length;
+    if (tpl && !hasFile) document.getElementById('waType').value = 'template';
+    var body = document.getElementById('waBody').value.trim();
+    if (!tpl && !hasFile && body === '') { alert('Type a message or attach a file.'); return; }
     var fd = new FormData(this);
     if (tpl) fd.set('template_id', tpl);
+    var btn = document.getElementById('waSendBtn');
+    var icon = btn.innerHTML;
+    sending = true;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-label="Sending"></span>';
     fetch(sendUrl, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } })
-      .then(function (r) { return r.json(); })
+      .then(function (r) { return r.text(); })
+      .then(function (t) {
+        try { return JSON.parse(t); } catch (err) { return { success: false, message: 'Send failed.' }; }
+      })
       .then(function (d) {
+        if (d.chat_message) appendBubbles([d.chat_message]);
+        if (d.thread_owner) setThreadOwner(d.thread_owner);
         if (!d.success) { alert(d.message || 'Send failed'); return; }
         document.getElementById('waBody').value = '';
-        document.getElementById('waMedia').value = '';
-        document.getElementById('waType').value = 'text';
         document.getElementById('waTemplate').value = '';
-        openThread(activeId);
+        clearMedia();
+        loadList();
+      })
+      .catch(function () { alert('Send failed.'); })
+      .then(function () {
+        sending = false;
+        btn.disabled = <?= empty($ready) ? 'true' : 'false' ?>;
+        btn.innerHTML = icon;
       });
   });
   document.getElementById('waStartForm').addEventListener('submit', function (e) {

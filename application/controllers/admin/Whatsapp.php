@@ -113,6 +113,18 @@ class Whatsapp extends Sk_Base {
         if (!in_array($type, ['text', 'image', 'video', 'audio', 'document', 'template'], true)) {
             $type = 'text';
         }
+        if ($type === 'text' && !empty($_FILES['media']['name'])) {
+            $mime = strtolower((string)($_FILES['media']['type'] ?? ''));
+            if (strpos($mime, 'video/') === 0) {
+                $type = 'video';
+            } elseif (strpos($mime, 'audio/') === 0) {
+                $type = 'audio';
+            } elseif (strpos($mime, 'image/') === 0) {
+                $type = 'image';
+            } else {
+                $type = 'document';
+            }
+        }
         $caption = trim((string)$this->input->post('body', FALSE));
 
         require_once APPPATH . 'libraries/Whatsapp_cloud.php';
@@ -171,7 +183,8 @@ class Whatsapp extends Sk_Base {
             $wamid = (string)$result['data']['messages'][0]['id'];
         }
         $ok = !empty($result['success']);
-        $this->Sk_Whatsapp_cloud_model->add_message($convId, [
+        $createdAt = date('Y-m-d H:i:s');
+        $msgId = $this->Sk_Whatsapp_cloud_model->add_message($convId, [
             'vendor_id'       => $vid > 0 ? $vid : null,
             'phone_number_id' => $phoneId !== '' ? $phoneId : null,
             'wamid'           => $wamid ?: null,
@@ -184,6 +197,7 @@ class Whatsapp extends Sk_Base {
             'status'          => $ok ? 'sent' : 'failed',
             'error_text'      => $ok ? null : ($result['message'] ?? 'Send failed'),
             'raw_json'        => json_encode($result['data'] ?? $result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'created_at'      => $createdAt,
         ]);
 
         // Sending from the app takes thread control from Meta Business Agent.
@@ -195,6 +209,15 @@ class Whatsapp extends Sk_Base {
             'success' => $ok,
             'message' => $ok ? 'Sent.' : ($result['message'] ?? 'Send failed.'),
             'thread_owner' => $ok ? 'app' : ($conv['thread_owner'] ?? 'meta_agent'),
+            'chat_message' => [
+                'id'         => $msgId,
+                'direction'  => 'out',
+                'type'       => $type,
+                'body'       => $caption,
+                'media_url'  => $mediaUrl,
+                'status'     => $ok ? 'sent' : 'failed',
+                'created_at' => sk_shift_datetime($createdAt, 'Asia/Kolkata'),
+            ],
         ]);
     }
 
