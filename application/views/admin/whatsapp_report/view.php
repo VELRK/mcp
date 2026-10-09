@@ -18,9 +18,10 @@
 
 <?php
   $badge = [
-    'sent' => 'bg-success',
+    'sent' => 'bg-primary',
+    'delivered' => 'bg-success',
+    'read' => 'bg-success',
     'failed' => 'bg-danger',
-    'skipped' => 'bg-warning text-dark',
   ][$log['delivery_status'] ?? ''] ?? 'bg-secondary';
 ?>
 
@@ -41,6 +42,7 @@
           </tr>
           <tr><th>Phone</th><td><?= htmlspecialchars($log['phone'] ?: '—') ?> <span class="text-muted small">(<?= htmlspecialchars($log['phone_source'] ?: 'none') ?>)</span></td></tr>
           <tr><th>Status trigger</th><td><?= htmlspecialchars($log['status_trigger'] ?: '—') ?></td></tr>
+          <tr><th>Template</th><td><code><?= htmlspecialchars($log['template_name'] ?: '—') ?></code></td></tr>
           <tr><th>Channel</th><td><?= htmlspecialchars($log['channel'] ?: '—') ?></td></tr>
           <tr><th>HTTP</th><td><?= $log['http_code'] !== null && $log['http_code'] !== '' ? (int)$log['http_code'] : '—' ?></td></tr>
           <tr><th>Reason</th><td class="text-break"><?= htmlspecialchars($log['reason'] ?: '—') ?></td></tr>

@@ -235,7 +235,7 @@ class Sk_Admin_model extends CI_Model {
 
             $row = ['key' => $key, 'value' => $value];
             if ($hasGroup) {
-                if (strpos($key, 'askeva_') === 0 || strpos($key, 'wa_cloud_') === 0) {
+                if (strpos($key, 'wa_cloud_') === 0) {
                     $row['group'] = 'whatsapp';
                 } elseif (strpos($key, 'isms_') === 0) {
                     $row['group'] = 'sms';

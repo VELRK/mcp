@@ -6,13 +6,26 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  */
 
 function sk_invoice_token_secret(): string {
-    $CI =& get_instance();
     $key = (string)config_item('encryption_key');
     if ($key === '') {
+        $CI =& get_instance();
         $CI->load->model('Sk_Admin_model');
         $settings = $CI->Sk_Admin_model->get_settings();
-        $key = (string)($settings['askeva_api_token'] ?? '') . (string)($settings['site_name'] ?? 'Talk AI Pilot');
+        $key = (string)($settings['site_name'] ?? 'Talk AI Pilot');
     }
+    return hash('sha256', 'invoice|' . $key);
+}
+
+/** Older public invoice links were signed with a retired settings value. */
+function sk_invoice_legacy_token_secret(): string {
+    $CI =& get_instance();
+    $CI->load->model('Sk_Admin_model');
+    $settings = $CI->Sk_Admin_model->get_settings();
+    $legacy = trim((string)($settings['askeva_api_token'] ?? ''));
+    if ($legacy === '') {
+        return '';
+    }
+    $key = $legacy . (string)($settings['site_name'] ?? 'Talk AI Pilot');
     return hash('sha256', 'invoice|' . $key);
 }
 
@@ -21,8 +34,18 @@ function sk_invoice_public_token(int $orderId, string $orderNumber): string {
 }
 
 function sk_invoice_verify_token(int $orderId, string $orderNumber, string $token): bool {
-    $expected = sk_invoice_public_token($orderId, $orderNumber);
-    return $token !== '' && hash_equals($expected, $token);
+    if ($token === '') {
+        return false;
+    }
+    if (hash_equals(sk_invoice_public_token($orderId, $orderNumber), $token)) {
+        return true;
+    }
+    $legacySecret = sk_invoice_legacy_token_secret();
+    if ($legacySecret === '') {
+        return false;
+    }
+    $legacy = substr(hash_hmac('sha256', $orderId . '|' . $orderNumber, $legacySecret), 0, 32);
+    return hash_equals($legacy, $token);
 }
 
 function sk_invoice_public_url(array $order): string {

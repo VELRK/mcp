@@ -3,7 +3,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
  * Order status WhatsApp messages. Delivery uses the shop's Meta Cloud templates
- * (order created, updated, cancelled, delivered). Askeva is no longer used.
+ * (order created, updated, cancelled, delivered).
  */
 
 function sk_whatsapp_ensure_settings(): void {
@@ -17,44 +17,11 @@ function sk_whatsapp_ensure_settings(): void {
         $CI->load->database();
     }
     sk_whatsapp_ensure_log_schema();
-    $CI->config->load('whatsapp', true);
-    $fileCfg = $CI->config->item('whatsapp') ?: [];
-    $defaults = [
-        'askeva_whatsapp_enabled' => '1',
-        'askeva_api_url'          => trim((string)($fileCfg['api_url'] ?? 'https://waadmin.syncr.in/v1/message/send-message'))
-            ?: 'https://waadmin.syncr.in/v1/message/send-message',
-        'askeva_api_token'        => trim((string)($fileCfg['api_key'] ?? '')),
-        // Optional Meta-approved UTILITY template name (2 body params: order no, status). Leave empty to text-only.
-        'askeva_order_template'   => '',
-        'askeva_template_lang'    => 'en',
-    ];
-    $hasGroup = $CI->db->field_exists('group', 'settings');
-    foreach ($defaults as $key => $value) {
-        $exists = $CI->db->get_where('settings', ['key' => $key], 1)->row_array();
-        if ($exists) {
-            // Sync token/url from config when file has a newer non-empty value.
-            if (in_array($key, ['askeva_api_token', 'askeva_api_url'], true)
-                && trim((string)$value) !== ''
-                && trim((string)($exists['value'] ?? '')) !== trim((string)$value)) {
-                $CI->db->where('key', $key)->update('settings', ['value' => (string)$value]);
-            }
-            continue;
-        }
-        $row = ['key' => $key, 'value' => (string) $value];
-        if ($hasGroup) {
-            $row['group'] = 'whatsapp';
-        }
-        $CI->db->insert('settings', $row);
-    }
 }
 
 function sk_whatsapp_config(array $settings = null): array {
     sk_whatsapp_ensure_settings();
-    if ($settings === null) {
-        $CI =& get_instance();
-        $CI->load->model('Sk_Admin_model');
-        $settings = $CI->Sk_Admin_model->get_settings();
-    }
+    unset($settings);
     $CI =& get_instance();
     $CI->config->load('whatsapp', true);
     $fileCfg = $CI->config->item('whatsapp');
@@ -75,16 +42,6 @@ function sk_whatsapp_config(array $settings = null): array {
         }
     }
 
-    // Prefer committed whatsapp.php token/URL so live matches git after pull
-    // (DB settings often keep a stale Askeva token → Syncr "Template is not valid").
-    $fileToken = trim((string)($fileCfg['api_key'] ?? ''));
-    $dbToken   = trim((string)($settings['askeva_api_token'] ?? ''));
-    $token     = $fileToken !== '' ? $fileToken : $dbToken;
-
-    $fileUrl = trim((string)($fileCfg['api_url'] ?? ''));
-    $dbUrl   = trim((string)($settings['askeva_api_url'] ?? ''));
-    $url     = $fileUrl !== '' ? $fileUrl : ($dbUrl !== '' ? $dbUrl : 'https://waadmin.syncr.in/v1/message/send-message');
-
     // Hard defaults so confirmed/shipped/etc. always map even if config is stale on server
     $defaultTemplates = [
         'pending'    => 'order_received',
@@ -102,25 +59,10 @@ function sk_whatsapp_config(array $settings = null): array {
     $statusTemplates = array_merge($defaultTemplates, $statusTemplates);
 
     $fallbackTpl = trim((string)($fileCfg['fallback_template'] ?? ''));
-    // Admin setting overrides fallback only (per-status names live in whatsapp.php).
-    $settingsTpl = trim((string)($settings['askeva_order_template'] ?? ''));
-    if ($settingsTpl !== '') {
-        $fallbackTpl = $settingsTpl;
-    }
-    // Prefer file lang (templates are approved as "en"). Settings override only when non-empty
-    // and matches a simple code — avoid en_US / en_GB breaking Syncr ("Template is not valid").
     $lang = trim((string)($fileCfg['template_lang'] ?? 'en')) ?: 'en';
-    $settingsLang = strtolower(trim((string)($settings['askeva_template_lang'] ?? '')));
-    if ($settingsLang !== '' && preg_match('/^[a-z]{2}$/', $settingsLang)) {
-        $lang = $settingsLang;
-    } elseif ($settingsLang !== '' && preg_match('/^([a-z]{2})[_-]/', $settingsLang, $m)) {
-        $lang = $m[1]; // en_US → en
-    }
 
     return [
-        'enabled'           => ($settings['askeva_whatsapp_enabled'] ?? '1') !== '0',
-        'url'               => $url ?: 'https://waadmin.syncr.in/v1/message/send-message',
-        'token'             => $token,
+        'enabled'           => true,
         'template'          => $fallbackTpl,
         'status_templates'  => $statusTemplates,
         'lang'              => $lang,
@@ -256,7 +198,10 @@ function sk_whatsapp_ensure_log_schema(): void {
             `phone` VARCHAR(32) NULL DEFAULT NULL,
             `phone_source` VARCHAR(20) NULL DEFAULT NULL,
             `status_trigger` VARCHAR(40) NULL DEFAULT NULL,
-            `channel` VARCHAR(20) NULL DEFAULT NULL,
+            `vendor_id` INT UNSIGNED NULL DEFAULT NULL,
+            `template_name` VARCHAR(128) NULL DEFAULT NULL,
+            `wamid` VARCHAR(128) NULL DEFAULT NULL,
+            `channel` VARCHAR(64) NULL DEFAULT NULL,
             `delivery_status` VARCHAR(20) NOT NULL DEFAULT 'failed',
             `reason` VARCHAR(500) NULL DEFAULT NULL,
             `http_code` INT NULL DEFAULT NULL,
@@ -267,8 +212,22 @@ function sk_whatsapp_ensure_log_schema(): void {
             PRIMARY KEY (`id`),
             KEY `idx_wa_order` (`order_id`),
             KEY `idx_wa_status` (`delivery_status`),
-            KEY `idx_wa_created` (`created_at`)
+            KEY `idx_wa_created` (`created_at`),
+            KEY `idx_wa_wamid` (`wamid`),
+            KEY `idx_wa_vendor` (`vendor_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+    if ($CI->db->field_exists('channel', 'whatsapp_logs')) {
+        $CI->db->query("ALTER TABLE `whatsapp_logs` MODIFY `channel` VARCHAR(64) NULL DEFAULT NULL");
+    }
+    if (!$CI->db->field_exists('vendor_id', 'whatsapp_logs')) {
+        $CI->db->query("ALTER TABLE `whatsapp_logs` ADD COLUMN `vendor_id` INT UNSIGNED NULL DEFAULT NULL, ADD KEY `idx_wa_vendor` (`vendor_id`)");
+    }
+    if (!$CI->db->field_exists('template_name', 'whatsapp_logs')) {
+        $CI->db->query("ALTER TABLE `whatsapp_logs` ADD COLUMN `template_name` VARCHAR(128) NULL DEFAULT NULL");
+    }
+    if (!$CI->db->field_exists('wamid', 'whatsapp_logs')) {
+        $CI->db->query("ALTER TABLE `whatsapp_logs` ADD COLUMN `wamid` VARCHAR(128) NULL DEFAULT NULL, ADD KEY `idx_wa_wamid` (`wamid`)");
     }
 }
 
@@ -281,7 +240,10 @@ function sk_whatsapp_log(array $row): void {
         'phone'           => isset($row['phone']) ? substr((string)$row['phone'], 0, 32) : null,
         'phone_source'    => isset($row['phone_source']) ? substr((string)$row['phone_source'], 0, 20) : null,
         'status_trigger'  => isset($row['status_trigger']) ? substr((string)$row['status_trigger'], 0, 40) : null,
-        'channel'         => isset($row['channel']) ? substr((string)$row['channel'], 0, 20) : null,
+        'vendor_id'       => isset($row['vendor_id']) ? (int)$row['vendor_id'] : null,
+        'template_name'   => isset($row['template_name']) ? substr((string)$row['template_name'], 0, 128) : null,
+        'wamid'           => isset($row['wamid']) ? substr((string)$row['wamid'], 0, 128) : null,
+        'channel'         => isset($row['channel']) ? substr((string)$row['channel'], 0, 64) : null,
         'delivery_status' => substr((string)($row['delivery_status'] ?? 'failed'), 0, 20),
         'reason'          => isset($row['reason']) ? substr((string)$row['reason'], 0, 500) : null,
         'http_code'       => isset($row['http_code']) ? (int)$row['http_code'] : null,
@@ -293,6 +255,45 @@ function sk_whatsapp_log(array $row): void {
         'created_at'      => date('Y-m-d H:i:s'),
     ];
     $CI->db->insert('whatsapp_logs', $data);
+}
+
+/**
+ * Move a Meta template send from sent → delivered → read, or mark it failed.
+ * Called from the WhatsApp webhook status callback.
+ */
+function sk_whatsapp_apply_meta_status(string $wamid, string $status, string $error = ''): void {
+    $wamid = trim($wamid);
+    $status = strtolower(trim($status));
+    if ($wamid === '' || !in_array($status, ['sent', 'delivered', 'read', 'failed'], true)) {
+        return;
+    }
+    $CI =& get_instance();
+    sk_whatsapp_ensure_log_schema();
+    if (!$CI->db->field_exists('wamid', 'whatsapp_logs')) {
+        return;
+    }
+    $row = $CI->db->where('wamid', $wamid)->limit(1)->get('whatsapp_logs')->row_array();
+    if (!$row) {
+        return;
+    }
+    $current = strtolower((string)($row['delivery_status'] ?? ''));
+    $rank = ['sent' => 1, 'delivered' => 2, 'read' => 3];
+    if ($status !== 'failed' && isset($rank[$current], $rank[$status]) && $rank[$current] >= $rank[$status]) {
+        return;
+    }
+    if ($status === 'sent' && $current === 'failed') {
+        return;
+    }
+    $upd = ['delivery_status' => $status];
+    if ($status === 'failed' && $error !== '') {
+        $upd['reason'] = substr($error, 0, 500);
+        $upd['api_message'] = $error;
+    } elseif ($status === 'delivered') {
+        $upd['reason'] = 'Delivered on WhatsApp';
+    } elseif ($status === 'read') {
+        $upd['reason'] = 'Read by the customer';
+    }
+    $CI->db->where('id', (int)$row['id'])->update('whatsapp_logs', $upd);
 }
 
 function sk_whatsapp_order_vendor_id(array $order): int {
@@ -396,6 +397,7 @@ function sk_whatsapp_notify_order_status(array $order, string $status, array $se
     if ($vendorId < 1) {
         return $fail($baseLog, 'Order has no shop, so the Meta template cannot be chosen.');
     }
+    $baseLog['vendor_id'] = $vendorId;
     sk_wa_ecomm_seed_vendor($vendorId, false);
     if (!isset($CI->Sk_Whatsapp_cloud_model)) {
         $CI->load->model('Sk_Whatsapp_cloud_model');
@@ -404,6 +406,7 @@ function sk_whatsapp_notify_order_status(array $order, string $status, array $se
     if (!$tpl) {
         return $fail($baseLog, 'Order template "' . $event . '" is missing for this shop.');
     }
+    $baseLog['template_name'] = (string)$tpl['name'];
 
     $phoneInfo = sk_whatsapp_order_phone_info($order, $settings);
     $phone = $phoneInfo['phone'];
@@ -453,13 +456,16 @@ function sk_whatsapp_notify_order_status(array $order, string $status, array $se
         $built['components']
     );
     $ok = !empty($sent['success']);
+    $wamid = (string)($sent['data']['messages'][0]['id'] ?? '');
     $message = $ok
         ? ('Sent via Meta template "' . $tpl['name'] . '"')
         : ('Meta template "' . $tpl['name'] . '" failed: ' . (string)($sent['message'] ?? 'send failed'));
     sk_whatsapp_log($baseLog + [
         'phone'           => $phone,
         'phone_source'    => $phoneInfo['source'],
-        'channel'         => 'meta:' . $tpl['name'],
+        'channel'         => 'meta',
+        'template_name'   => (string)$tpl['name'],
+        'wamid'           => $wamid !== '' ? $wamid : null,
         'delivery_status' => $ok ? 'sent' : 'failed',
         'reason'          => $message,
         'http_code'       => $sent['http'] ?? null,
@@ -510,70 +516,30 @@ function sk_whatsapp_order_message(array $order, string $status, array $settings
     return implode("\n", $lines);
 }
 
-/**
- * Low-level POST to Syncr/WAAdmin send-message (?token=...).
- * @return array{success:bool,http?:int,response?:mixed,message?:string}
- */
-function sk_whatsapp_api_send(array $payload, array $cfg): array {
-    if (empty($cfg['token'])) {
-        return ['success' => false, 'message' => 'WhatsApp API token not configured.'];
-    }
-    $url = rtrim($cfg['url'], '?&');
-    $url .= (strpos($url, '?') === false ? '?' : '&') . 'token=' . rawurlencode($cfg['token']);
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
-        CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        CURLOPT_TIMEOUT        => 30,
-        CURLOPT_SSL_VERIFYPEER => true,
-    ]);
-    $raw  = curl_exec($ch);
-    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err  = curl_error($ch);
-    curl_close($ch);
-
-    if ($err) {
-        log_message('error', 'Syncr WA curl: ' . $err);
-        return ['success' => false, 'http' => $code, 'message' => $err];
-    }
-    $json = json_decode((string)$raw, true);
-    $ok = $code >= 200 && $code < 300;
-    if (is_array($json) && (isset($json['error']) || (isset($json['status']) && $json['status'] === 'error'))) {
-        $ok = false;
-    }
-    if (!$ok) {
-        log_message('error', 'Syncr WA fail HTTP ' . $code . ': ' . $raw);
-    }
-    return [
-        'success'  => $ok,
-        'http'     => $code,
-        'response' => $json !== null ? $json : $raw,
-        'message'  => is_array($json) ? (string)($json['error'] ?? $json['message'] ?? ($ok ? 'sent' : 'failed')) : ($ok ? 'sent' : (string)$raw),
-    ];
-}
-
-/** Send plain utility/session text. */
+/** Send a session text through the shop's Meta Cloud API. */
 function sk_whatsapp_send_text(string $to, string $body, array $settings = null): array {
-    $cfg = sk_whatsapp_config($settings);
-    if (!$cfg['enabled']) {
-        return ['success' => false, 'message' => 'WhatsApp notifications disabled.'];
+    $CI =& get_instance();
+    $CI->load->helper('sk_whatsapp_cloud');
+    if ($settings === null) {
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
     }
-    $to = sk_whatsapp_destination_phone($to, $settings);
+    $to = sk_wa_cloud_normalize_phone($to);
     if ($to === '') {
         return ['success' => false, 'message' => 'Invalid phone.'];
     }
-    return sk_whatsapp_api_send([
-        'to'   => $to,
-        'type' => 'text',
-        'text' => ['body' => $body],
-    ], $cfg);
+    if (!sk_wa_cloud_is_ready($settings)) {
+        return ['success' => false, 'message' => sk_wa_cloud_not_ready_reason($settings)];
+    }
+    if (isset($CI->whatsapp_cloud)) {
+        unset($CI->whatsapp_cloud);
+    }
+    $CI->load->library('Whatsapp_cloud', $settings);
+    return $CI->whatsapp_cloud->send_text($to, $body);
 }
 
 /**
- * Build body parameters for Syncr/Meta.
+ * Build Meta template body parameters.
  * @param string[] $values ordered body texts
  * @param bool $named when true, attach parameter_name (Customername / OrderName)
  */
@@ -598,76 +564,40 @@ function sk_whatsapp_build_body_params(array $values, array $cfg, bool $named): 
     return $params;
 }
 
-/** Send approved utility template. $bodyValues = ordered list of body texts. */
+/** Send an approved template through the shop's Meta Cloud API. */
 function sk_whatsapp_send_template(string $to, string $templateName, array $bodyValues, array $settings = null): array {
-    $cfg = sk_whatsapp_config($settings);
-    if (!$cfg['enabled'] || $templateName === '') {
+    $CI =& get_instance();
+    $CI->load->helper('sk_whatsapp_cloud');
+    if ($settings === null) {
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    $templateName = trim($templateName);
+    $to = sk_wa_cloud_normalize_phone($to);
+    if ($templateName === '') {
         return ['success' => false, 'message' => 'Template not configured.'];
     }
-    $to = sk_whatsapp_destination_phone($to, $settings);
     if ($to === '') {
         return ['success' => false, 'message' => 'Invalid phone.'];
     }
-
-    // Normalize to a 0-indexed list of strings (ignore accidental string keys).
-    $values = [];
+    if (!sk_wa_cloud_is_ready($settings)) {
+        return ['success' => false, 'message' => sk_wa_cloud_not_ready_reason($settings)];
+    }
+    $params = [];
     foreach ($bodyValues as $p) {
-        $values[] = (string)$p;
+        $params[] = ['type' => 'text', 'text' => sk_whatsapp_sanitize_param((string)$p)];
     }
-
-    $mode = strtolower((string)($cfg['param_mode'] ?? 'auto'));
-    if (!in_array($mode, ['positional', 'named', 'auto'], true)) {
-        $mode = 'auto';
+    $components = $params ? [['type' => 'body', 'parameters' => $params]] : [];
+    if (isset($CI->whatsapp_cloud)) {
+        unset($CI->whatsapp_cloud);
     }
-    $attempts = $mode === 'named'
-        ? [true]
-        : ($mode === 'positional' ? [false] : [false, true]); // auto: positional then named
-
-    $result = ['success' => false, 'message' => 'no attempt'];
-    $lastParams = [];
-    $usedNamed = false;
-    foreach ($attempts as $named) {
-        $usedNamed = $named;
-        $params = sk_whatsapp_build_body_params($values, $cfg, $named);
-        $lastParams = $params;
-        $payload = [
-            'to'       => $to,
-            'type'     => 'template',
-            'template' => [
-                'language'   => ['policy' => 'deterministic', 'code' => $cfg['lang'] ?: 'en'],
-                'name'       => $templateName,
-                'components' => [[
-                    'type'      => 'body',
-                    'parameters' => $params,
-                ]],
-            ],
-        ];
-        $result = sk_whatsapp_api_send($payload, $cfg);
-        if (!empty($result['success'])) {
-            break;
-        }
-        $err = strtolower((string)($result['message'] ?? ''));
-        // Retry other style only for format / validity style errors
-        $retryable = (strpos($err, 'template is not valid') !== false)
-            || (strpos($err, 'parameter name') !== false)
-            || (strpos($err, 'invalid parameter') !== false)
-            || (strpos($err, 'number of parameters') !== false);
-        if (!$retryable) {
-            break;
-        }
+    $CI->load->library('Whatsapp_cloud', $settings);
+    $lang = 'en';
+    $CI->load->model('Sk_Whatsapp_cloud_model');
+    $vid = (int)($settings['vendor_id'] ?? 0);
+    $row = $vid > 0 ? $CI->Sk_Whatsapp_cloud_model->find_template_by_name($vid, $templateName) : null;
+    if (!empty($row['language'])) {
+        $lang = (string)$row['language'];
     }
-
-    if (empty($result['success'])) {
-        $snap = [];
-        foreach ($lastParams as $p) {
-            $snap[] = (isset($p['parameter_name']) ? $p['parameter_name'] . '=' : '') . ($p['text'] ?? '');
-        }
-        $tokenTip = $cfg['token'] !== '' ? ('…' . substr($cfg['token'], -6)) : '(empty)';
-        $result['message'] = (string)($result['message'] ?? 'failed')
-            . ' [tpl=' . $templateName . ' lang=' . ($cfg['lang'] ?: 'en')
-            . ' style=' . ($usedNamed ? 'named' : 'positional')
-            . ' token=' . $tokenTip
-            . ' params=' . json_encode($snap, JSON_UNESCAPED_UNICODE) . ']';
-    }
-    return $result;
+    return $CI->whatsapp_cloud->send_template($to, $templateName, $lang, $components);
 }

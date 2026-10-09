@@ -136,7 +136,6 @@ class Settings extends Sk_Base {
             'smtp_from_name', 'admin_email', 'meta_title', 'meta_desc', 'meta_keywords', 'seo_og_image',
             'head_scripts', 'footer_scripts', 'google_analytics', 'top_bar_text',
             'whatsapp_number',
-            'askeva_api_url', 'askeva_api_token', 'askeva_order_template', 'askeva_template_lang',
             'wa_cloud_verify_token',
             'saas_billing_token', 'saas_default_vendor_id', 'saas_cron_key',
             'company_legal_name', 'gstin', 'pan_no', 'state_code', 'invoice_prefix', 'invoice_footer',
@@ -146,7 +145,6 @@ class Settings extends Sk_Base {
         $raw_fields = [
             'isms_password', 'isms_api_key', 'smtp_pass', 'razorpay_key_secret',
             'razorpay_webhook_secret',
-            'askeva_api_token',
             'saas_billing_token', 'saas_cron_key',
         ];
         $preserve_if_empty = $raw_fields;
@@ -180,7 +178,6 @@ class Settings extends Sk_Base {
         $data['newsletter_popup_enabled'] = $this->input->post('newsletter_popup_enabled') ? '1' : '0';
         $data['top_bar_enabled'] = $this->input->post('top_bar_enabled') ? '1' : '0';
         $data['whatsapp_enabled'] = $this->input->post('whatsapp_enabled') ? '1' : '0';
-        $data['askeva_whatsapp_enabled'] = $this->input->post('askeva_whatsapp_enabled') ? '1' : '0';
         $data['isms_enabled'] = $this->input->post('isms_enabled') ? '1' : '0';
         $settingsTab = trim((string)$this->input->post('settings_tab'));
         if ($settingsTab === 'wacloud' || $this->input->post('wa_cloud_verify_token') !== null) {
@@ -188,18 +185,6 @@ class Settings extends Sk_Base {
             // Legacy local AI / external MCP reply engines removed — Meta Business Agent owns replies.
             $data['wa_mcp_enabled'] = '0';
             $data['wa_ai_enabled'] = '0';
-        }
-
-        // Always persist Askeva text fields when present (including empty template).
-        foreach (['askeva_api_url', 'askeva_order_template', 'askeva_template_lang'] as $askevaField) {
-            $posted = $this->input->post($askevaField, TRUE);
-            if ($posted !== null) {
-                $data[$askevaField] = trim((string) $posted);
-            }
-        }
-        $tokenPosted = $this->input->post('askeva_api_token', FALSE);
-        if ($tokenPosted !== null && trim((string) $tokenPosted) !== '') {
-            $data['askeva_api_token'] = trim((string) $tokenPosted);
         }
 
         // Persist phone/email/address from POST (also read raw $_POST in case XSS filter drops value).

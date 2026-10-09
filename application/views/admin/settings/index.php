@@ -131,7 +131,7 @@
                       value="<?= htmlspecialchars($settings['whatsapp_number'] ?? '') ?>"
                       placeholder="e.g. 919876543210">
                   </div>
-                  <div class="form-text small text-muted">Indian mobile with country code 91, no + (example 919876543210). Order status alerts are under the <strong>Order WhatsApp</strong> tab.</div>
+                  <div class="form-text small text-muted">Indian mobile with country code 91, no + (example 919876543210). Order status alerts use each shop's Meta templates.</div>
                 </div>
               </div>
             </div>
@@ -140,53 +140,15 @@
       </div>
     </div>
 
-    <!-- Order WhatsApp (Syncr) -->
+    <!-- Order WhatsApp (Meta templates) -->
     <?php if (empty($vendor_logged_in)): ?>
     <div class="tab-pane fade" id="tab-whatsapp">
       <div class="card sk-table-card shadow-sm">
         <div class="card-body">
-          <h6 class="mb-1"><i class="bi bi-whatsapp text-success me-1"></i>Order WhatsApp (Syncr)</h6>
-          <p class="text-muted small mb-3">Send WhatsApp messages to customers when order status changes (pending, confirmed, processing, shipped, delivered, cancelled). Uses Syncr <code>waadmin.syncr.in</code> for all vendors.</p>
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" name="askeva_whatsapp_enabled" id="askevaToggle" value="1"
-              <?= (!isset($settings['askeva_whatsapp_enabled']) || $settings['askeva_whatsapp_enabled'] == '1') ? 'checked' : '' ?>>
-            <label class="form-check-label" for="askevaToggle">Send WhatsApp on every order status change</label>
-          </div>
-          <div class="row g-3">
-            <div class="col-md-8">
-              <label class="form-label">API URL</label>
-              <input type="text" name="askeva_api_url" class="form-control"
-                value="<?= htmlspecialchars($settings['askeva_api_url'] ?? 'https://waadmin.syncr.in/v1/message/send-message') ?>">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Template language</label>
-              <input type="text" name="askeva_template_lang" class="form-control"
-                value="<?= htmlspecialchars($settings['askeva_template_lang'] ?? 'en') ?>">
-            </div>
-            <div class="col-12">
-              <label class="form-label">API Token</label>
-              <input type="text" name="askeva_api_token" class="form-control font-monospace" autocomplete="off"
-                value="" placeholder="<?= !empty($settings['askeva_api_token']) ? '•••• saved (leave blank to keep)' : 'Paste Syncr API token' ?>">
-              <?php if (!empty($settings['askeva_api_token'])): ?>
-                <div class="form-text text-success">
-                  Saved in DB (<?= strlen((string)$settings['askeva_api_token']) ?> chars, ends …<?= htmlspecialchars(substr((string)$settings['askeva_api_token'], -6)) ?>).
-                </div>
-              <?php else: ?>
-                <div class="form-text text-warning">No token in database yet — paste and Save Settings.</div>
-              <?php endif; ?>
-            </div>
-            <div class="col-12">
-              <label class="form-label">Fallback utility template name (optional)</label>
-              <input type="text" name="askeva_order_template" class="form-control"
-                value="<?= htmlspecialchars($settings['askeva_order_template'] ?? '') ?>"
-                placeholder="order_status_update">
-              <div class="form-text">
-                Per-status templates are configured in code (<code>application/config/whatsapp.php</code>).
-                Create them from <code>database/whatsapp_order_templates.txt</code>
-                ({{1}}=name, {{2}}=order no). This field is only an optional fallback.
-              </div>
-            </div>
-          </div>
+          <h6 class="mb-1"><i class="bi bi-whatsapp text-success me-1"></i>Order WhatsApp</h6>
+          <p class="text-muted small mb-3">Order created, updated, cancelled, and delivered messages are sent with each shop's Meta template. Delivery status is recorded on the delivery report when WhatsApp accepts, delivers, or marks the message read.</p>
+          <a class="btn btn-sm btn-outline-success" href="<?= site_url('admin/whatsapp/order-templates') ?>">Open order templates</a>
+          <a class="btn btn-sm btn-outline-secondary" href="<?= site_url('admin/whatsapp-report') ?>">Delivery report</a>
         </div>
       </div>
     </div>

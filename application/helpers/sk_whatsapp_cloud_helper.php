@@ -393,13 +393,7 @@ function sk_wa_cloud_not_ready_reason(?array $settings = null, ?int $vendorId = 
     if ($vid < 1) {
         return 'Pick a WhatsApp number first (open Templates from WA Numbers / Embed Login with ?vendor_id=).';
     }
-    if (empty($cfg['
-    
-    
-    
-    
-    
-    '])) {
+    if (empty($cfg['has_vendor_account'])) {
         return 'No active WhatsApp number for vendor #' . $vid . '. Run Embed Login on that vendor.';
     }
     if ($cfg['access_token'] === '') {

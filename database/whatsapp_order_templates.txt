@@ -1,5 +1,9 @@
 ================================================================================
-WHATSAPP UTILITY TEMPLATES — Askeva / Syncr / Meta
+RETIRED COPY — live order messages use each shop's Meta templates
+(order_created, order_updated, order_cancelled, order_delivered).
+Admin → WhatsApp → Order templates.
+
+WHATSAPP UTILITY TEMPLATES — historical names only
 ================================================================================
 Category : UTILITY
 Language : en
@@ -14,7 +18,7 @@ Sample for approval:
   {{1}} / Customername = Ahmad
   {{2}} / OrderName    = ORD-12345
 
-App sends positional first, then named if Syncr rejects.
+The app sends these through Meta only when a matching approved template exists.
 
 ================================================================================
 1) Template name: order_received

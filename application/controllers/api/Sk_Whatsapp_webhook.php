@@ -15,7 +15,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
     public function __construct() {
         parent::__construct();
-        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp_mcp', 'sk_meta_business_agent']);
+        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp', 'sk_whatsapp_mcp', 'sk_meta_business_agent']);
         $this->load->model(['Sk_Whatsapp_cloud_model', 'Sk_Admin_model', 'Sk_Vendor_meta_agent_model']);
         sk_wa_cloud_ensure_schema();
         $this->Sk_Vendor_meta_agent_model->ensure_schema();
@@ -237,6 +237,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 $err = (string)$st['errors'][0]['title'];
             }
             $this->Sk_Whatsapp_cloud_model->update_message_status($wamid, $status, $err);
+            if (function_exists('sk_whatsapp_apply_meta_status')) {
+                sk_whatsapp_apply_meta_status($wamid, $status, $err);
+            }
         }
     }
 

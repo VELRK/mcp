@@ -17,8 +17,13 @@ class Whatsapp_report extends Sk_Base {
         $limit  = 25;
         $offset = ($page - 1) * $limit;
 
-        $applyFilters = function () use ($status, $search, $from, $to) {
-            if (in_array($status, ['sent', 'failed', 'skipped'], true)) {
+        $vendorId = (!$this->is_super_admin()) ? (int)($this->current_vendor_id() ?? 0) : 0;
+        $applyFilters = function () use ($status, $search, $from, $to, $vendorId) {
+            $this->db->like('channel', 'meta', 'after');
+            if ($vendorId > 0 && $this->db->field_exists('vendor_id', 'whatsapp_logs')) {
+                $this->db->where('vendor_id', $vendorId);
+            }
+            if (in_array($status, ['sent', 'delivered', 'read', 'failed'], true)) {
                 $this->db->where('delivery_status', $status);
             }
             if ($search !== '') {
@@ -26,6 +31,7 @@ class Whatsapp_report extends Sk_Base {
                     ->like('order_number', $search)
                     ->or_like('phone', $search)
                     ->or_like('reason', $search)
+                    ->or_like('template_name', $search)
                     ->group_end();
             }
             if ($from !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
@@ -44,11 +50,16 @@ class Whatsapp_report extends Sk_Base {
 
         // Summary counts (same date/search filters, ignore status filter for cards)
         $this->db->reset_query();
+        $this->db->like('channel', 'meta', 'after');
+        if ($vendorId > 0 && $this->db->field_exists('vendor_id', 'whatsapp_logs')) {
+            $this->db->where('vendor_id', $vendorId);
+        }
         if ($search !== '') {
             $this->db->group_start()
                 ->like('order_number', $search)
                 ->or_like('phone', $search)
                 ->or_like('reason', $search)
+                ->or_like('template_name', $search)
                 ->group_end();
         }
         if ($from !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
@@ -60,7 +71,7 @@ class Whatsapp_report extends Sk_Base {
         $summaryRows = $this->db->select('delivery_status, COUNT(*) AS cnt', false)
             ->group_by('delivery_status')
             ->get('whatsapp_logs')->result_array();
-        $summary = ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'total' => 0];
+        $summary = ['sent' => 0, 'delivered' => 0, 'read' => 0, 'failed' => 0, 'total' => 0];
         foreach ($summaryRows as $s) {
             $k = $s['delivery_status'];
             $c = (int)$s['cnt'];
@@ -139,7 +150,7 @@ class Whatsapp_report extends Sk_Base {
             $order['customer_name'] = $order['shipping_name'];
         }
 
-        // null settings → helper loads fresh after syncing token/URL from whatsapp.php
+        // null settings → helper loads the shop Meta account and sends the order template.
         $result = sk_whatsapp_notify_order_status($order, $status, null);
 
         $ok = !empty($result['success']);

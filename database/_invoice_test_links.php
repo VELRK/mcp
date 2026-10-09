@@ -25,13 +25,11 @@ if (is_file($configFile)) {
 }
 if ($encKey === '') {
     $site = '';
-    $tok = '';
-    $r = $mysqli->query("SELECT `key`,`value` FROM settings WHERE `key` IN ('site_name','askeva_api_token')");
-    while ($r && $row = $r->fetch_assoc()) {
-        if ($row['key'] === 'site_name') $site = (string)$row['value'];
-        if ($row['key'] === 'askeva_api_token') $tok = (string)$row['value'];
+    $r = $mysqli->query("SELECT `value` FROM settings WHERE `key` = 'site_name' LIMIT 1");
+    if ($r && $row = $r->fetch_assoc()) {
+        $site = (string)$row['value'];
     }
-    $encKey = $tok . ($site !== '' ? $site : '2DEAL');
+    $encKey = $site !== '' ? $site : 'Talk AI Pilot';
 }
 $secret = hash('sha256', 'invoice|' . $encKey);
 

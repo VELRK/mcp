@@ -15,9 +15,9 @@ $delivery = $store['delivery_settings'] ?? [];
 <div class="alert alert-light border mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
   <div class="small mb-0">
     <i class="bi bi-whatsapp text-success me-1"></i>
-    Customer order status WhatsApp alerts are configured under <strong>Settings → Order WhatsApp</strong> (platform Askeva).
+    Customer order status WhatsApp alerts are sent with this shop's Meta templates.
   </div>
-  <a href="<?= site_url('admin/settings?tab=whatsapp') ?>" class="btn btn-sm btn-outline-success">Open Order WhatsApp</a>
+  <a href="<?= site_url('admin/whatsapp/order-templates') ?>" class="btn btn-sm btn-outline-success">Order templates</a>
 </div>
 
 <form method="post" action="<?= site_url('admin/stores/update/'.$vendor['id']) ?>" enctype="multipart/form-data" class="row g-3">
