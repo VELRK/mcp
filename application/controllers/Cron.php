@@ -49,6 +49,38 @@ class Cron extends CI_Controller {
         $this->_out($result, !empty($result['ok']) ? 200 : 500);
     }
 
+    /**
+     * Delete rejected shop order templates and submit the current Meta-safe copy.
+     * CLI: php index.php cron recreate_order_templates [vendor_id]
+     */
+    public function recreate_order_templates($vendorId = 0) {
+        if (!$this->_authorized()) {
+            $this->_out(['ok' => false, 'message' => 'Unauthorized.'], 403);
+            return;
+        }
+        $this->load->helper('sk_whatsapp_cloud');
+        $vendorId = (int)$vendorId;
+        $ids = [];
+        if ($vendorId > 0) {
+            $ids[] = $vendorId;
+        } elseif ($this->db->table_exists('vendors')) {
+            foreach ($this->db->select('id')->get('vendors')->result_array() as $row) {
+                $ids[] = (int)$row['id'];
+            }
+        }
+        $results = [];
+        foreach ($ids as $id) {
+            $seed = sk_wa_ecomm_seed_vendor($id, true);
+            $results[] = [
+                'vendor_id' => $id,
+                'created'   => (int)$seed['created'],
+                'pushed'    => (int)$seed['pushed'],
+                'errors'    => $seed['errors'],
+            ];
+        }
+        $this->_out(['ok' => true, 'results' => $results]);
+    }
+
     protected function _authorized(): bool {
         if (is_cli()) {
             return true;
