@@ -1164,25 +1164,25 @@ function sk_wa_ecomm_template_defs(): array {
     return [
         [
             'event_key' => 'order_created',
-            'name'      => 'order_created',
+            'name'      => 'order_created_v2',
             'body'      => 'Hi {{1}}, your order {{2}} has been received. The total is {{3}}. Thank you for shopping with {{4}} today.',
             'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'order_total', '4' => 'shop_name'],
         ],
         [
             'event_key' => 'order_updated',
-            'name'      => 'order_updated',
+            'name'      => 'order_updated_v2',
             'body'      => 'Hi {{1}}, your order {{2}} is now {{3}}. The total is {{4}}. Thank you for shopping with {{5}} today.',
             'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'order_status', '4' => 'order_total', '5' => 'shop_name'],
         ],
         [
             'event_key' => 'order_cancelled',
-            'name'      => 'order_cancelled',
+            'name'      => 'order_cancelled_v2',
             'body'      => 'Hi {{1}}, your order {{2}} has been cancelled. Please contact {{3}} if you need any help.',
             'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'shop_name'],
         ],
         [
             'event_key' => 'order_delivered',
-            'name'      => 'order_delivered',
+            'name'      => 'order_delivered_v2',
             'body'      => 'Hi {{1}}, your order {{2}} has been delivered. Thank you for shopping with {{3}} today.',
             'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'shop_name'],
         ],
@@ -1233,8 +1233,9 @@ function sk_wa_ecomm_seed_vendor(int $vendorId, bool $push = false): array {
             $rejected = in_array($status, ['FAILED', 'REJECTED'], true);
             // Keep the same Meta name. Deleting it and creating English again in the
             // same minute is rejected while Meta is still removing the old language.
-            if ($metaId === '' && ($rejected || $storedBody !== $def['body'])) {
+            if ($metaId === '' && ($rejected || $storedBody !== $def['body'] || (string)($row['name'] ?? '') !== $def['name'])) {
                 $CI->Sk_Whatsapp_cloud_model->save_template([
+                    'name'         => $def['name'],
                     'body_text'    => $def['body'],
                     'variable_map' => json_encode($def['map'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'status'       => 'DRAFT',
