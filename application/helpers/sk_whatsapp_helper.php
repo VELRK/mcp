@@ -622,7 +622,7 @@ function sk_whatsapp_send_shop_event(int $vendorId, string $eventKey, array $con
     if (!isset($CI->Sk_Whatsapp_cloud_model)) {
         $CI->load->model('Sk_Whatsapp_cloud_model');
     }
-    $tpl = $CI->Sk_Whatsapp_cloud_model->find_template_by_event($vendorId, $eventKey);
+    $tpl = sk_whatsapp_pick_event_template($vendorId, $eventKey, trim((string)($context['_wa_document_id'] ?? '')) !== '');
     if (!$tpl || strtoupper((string)($tpl['status'] ?? '')) !== 'APPROVED') {
         return 0;
     }
@@ -721,6 +721,58 @@ function sk_whatsapp_notify_payment_result(array $order, bool $paid, array $sett
     sk_whatsapp_send_shop_event($vendorId, 'payment_failed_admin_alert', $context, sk_whatsapp_owner_phones($vendorId), $settings, $log);
 }
 
+function sk_whatsapp_pick_event_template(int $vendorId, string $eventKey, bool $withDocument): ?array {
+    $rows = sk_wa_templates_for_event($vendorId, $eventKey);
+    $text = null;
+    foreach ($rows as $row) {
+        if (strtoupper((string)($row['status'] ?? '')) !== 'APPROVED') {
+            continue;
+        }
+        if ((string)($row['kind'] ?? 'text') === 'document') {
+            if ($withDocument) {
+                return $row;
+            }
+            continue;
+        }
+        if ($text === null) {
+            $text = $row;
+        }
+    }
+    return $text;
+}
+
+function sk_whatsapp_upload_invoice_pdf(array $order, array $settings, int $vendorId): array {
+    $empty = ['id' => '', 'filename' => 'invoice.pdf', 'invoice_no' => ''];
+    $CI =& get_instance();
+    $CI->load->helper(['sk_invoice', 'sk_invoice_pdf', 'sk_whatsapp_cloud']);
+    $settings['vendor_id'] = $vendorId;
+    if (!sk_wa_cloud_is_ready($settings, $vendorId)) {
+        return $empty;
+    }
+    $invoice = sk_invoice_build($order, $settings);
+    $pdf = sk_invoice_build_pdf($invoice);
+    if ($pdf === '') {
+        return $empty;
+    }
+    $no = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($invoice['invoice_no'] ?? $order['order_number'] ?? 'invoice'));
+    $filename = 'invoice-' . ($no !== '' ? $no : 'order') . '.pdf';
+    $tmp = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename;
+    if (@file_put_contents($tmp, $pdf) === false) {
+        return $empty;
+    }
+    if (isset($CI->whatsapp_cloud)) {
+        unset($CI->whatsapp_cloud);
+    }
+    $CI->load->library('Whatsapp_cloud', $settings);
+    $up = $CI->whatsapp_cloud->upload_media($tmp, 'application/pdf');
+    @unlink($tmp);
+    return [
+        'id'         => !empty($up['success']) ? (string)$up['id'] : '',
+        'filename'   => $filename,
+        'invoice_no' => (string)($invoice['invoice_no'] ?? ''),
+    ];
+}
+
 function sk_whatsapp_notify_invoice(array $order, array $settings = null, string $invoiceNo = ''): void {
     $vendorId = sk_whatsapp_order_vendor_id($order);
     if ($vendorId < 1) {
@@ -731,10 +783,20 @@ function sk_whatsapp_notify_invoice(array $order, array $settings = null, string
         $CI->load->model('Sk_Admin_model');
         $settings = $CI->Sk_Admin_model->get_settings();
     }
-    if (sk_whatsapp_event_sent_recently($vendorId, 'invoice_created', 60)) {
+    if (sk_whatsapp_event_sent_recently($vendorId, 'invoice_created', 60)
+        || sk_whatsapp_event_sent_recently($vendorId, 'invoice_created_pdf', 60)) {
         return;
     }
-    $context = sk_whatsapp_alert_context($order, $settings, ['invoice_no' => $invoiceNo]);
+    $doc = sk_whatsapp_upload_invoice_pdf($order, $settings, $vendorId);
+    if ($invoiceNo === '' && $doc['invoice_no'] !== '') {
+        $invoiceNo = $doc['invoice_no'];
+    }
+    $extra = ['invoice_no' => $invoiceNo];
+    if ($doc['id'] !== '') {
+        $extra['_wa_document_id'] = $doc['id'];
+        $extra['_wa_document_filename'] = $doc['filename'];
+    }
+    $context = sk_whatsapp_alert_context($order, $settings, $extra);
     $log = [
         'order_id'       => (int)($order['id'] ?? 0) ?: null,
         'order_number'   => (string)($order['order_number'] ?? ''),

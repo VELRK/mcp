@@ -792,7 +792,23 @@ function sk_wa_cloud_send_components(array $template, array $context): array {
     }
     $components = [];
     $kind = (string)($template['kind'] ?? 'text');
-    if (($kind === 'image' || $kind === 'video') && !empty($template['media_url'])) {
+    $documentId = trim((string)($context['_wa_document_id'] ?? ''));
+    if ($kind === 'document' && $documentId !== '') {
+        $filename = trim((string)($context['_wa_document_filename'] ?? 'invoice.pdf'));
+        if ($filename === '') {
+            $filename = 'invoice.pdf';
+        }
+        $components[] = [
+            'type'       => 'header',
+            'parameters' => [[
+                'type'     => 'document',
+                'document' => [
+                    'id'       => $documentId,
+                    'filename' => $filename,
+                ],
+            ]],
+        ];
+    } elseif (($kind === 'image' || $kind === 'video') && !empty($template['media_url'])) {
         $components[] = [
             'type'       => 'header',
             'parameters' => [[
@@ -1232,18 +1248,20 @@ function sk_wa_admin_template_defs(): array {
         ],
         [
             'event_key' => 'invoice_created',
-            'name'      => 'invoice_created',
+            'name'      => 'invoice_created_pdf',
+            'kind'      => 'document',
             'audience'  => 'Customer',
-            'trigger'   => 'Invoice generated',
-            'body'      => 'Hi {{1}}, your invoice {{2}} for order {{3}} is ready. The total is {{4}}. Thank you for shopping with {{5}} today.',
+            'trigger'   => 'Invoice generated, with the invoice PDF attached',
+            'body'      => 'Hi {{1}}, your invoice {{2}} for order {{3}} is attached. The total is {{4}}. Thank you for shopping with {{5}} today.',
             'map'       => ['1' => 'name', '2' => 'invoice_no', '3' => 'order_number', '4' => 'order_total', '5' => 'shop_name'],
         ],
         [
             'event_key' => 'invoice_shared_admin_alert',
-            'name'      => 'invoice_shared_admin_alert',
+            'name'      => 'invoice_shared_admin_pdf',
+            'kind'      => 'document',
             'audience'  => 'Shop owner',
-            'trigger'   => 'Invoice created or shared',
-            'body'      => 'Hello {{1}}, invoice {{2}} for order {{3}} was shared with {{4}}. The total is {{5}}. You can review it in the shop today.',
+            'trigger'   => 'Invoice created or shared, with the invoice PDF attached',
+            'body'      => 'Hello {{1}}, invoice {{2}} for order {{3}} was shared with {{4}}. The invoice is attached and the total is {{5}}. You can review it in the shop today.',
             'map'       => ['1' => 'shop_name', '2' => 'invoice_no', '3' => 'order_number', '4' => 'customer_name', '5' => 'order_total'],
         ],
         [
@@ -1411,9 +1429,11 @@ function sk_wa_admin_seed_vendor(int $vendorId, bool $push = false): array {
             $status = strtoupper((string)($row['status'] ?? 'DRAFT'));
             $metaId = trim((string)($row['meta_id'] ?? ''));
             $rejected = in_array($status, ['FAILED', 'REJECTED'], true);
-            if ($metaId === '' && ($rejected || trim((string)($row['body_text'] ?? '')) !== $def['body'] || (string)($row['event_key'] ?? '') !== $def['event_key'])) {
+            $kind = (string)($def['kind'] ?? 'text');
+            if ($metaId === '' && ($rejected || trim((string)($row['body_text'] ?? '')) !== $def['body'] || (string)($row['event_key'] ?? '') !== $def['event_key'] || (string)($row['kind'] ?? 'text') !== $kind)) {
                 $CI->Sk_Whatsapp_cloud_model->save_template([
                     'name'         => $def['name'],
+                    'kind'         => $kind,
                     'body_text'    => $def['body'],
                     'variable_map' => json_encode($def['map'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'status'       => 'DRAFT',
@@ -1429,7 +1449,7 @@ function sk_wa_admin_seed_vendor(int $vendorId, bool $push = false): array {
                 'name'         => $def['name'],
                 'language'     => 'en',
                 'category'     => 'UTILITY',
-                'kind'         => 'text',
+                'kind'         => (string)($def['kind'] ?? 'text'),
                 'body_text'    => $def['body'],
                 'header_text'  => '',
                 'footer_text'  => '',
@@ -1455,6 +1475,51 @@ function sk_wa_admin_seed_vendor(int $vendorId, bool $push = false): array {
         }
     }
     return $out;
+}
+
+function sk_wa_sample_pdf_path(): string {
+    $path = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'wa-sample-invoice.pdf';
+    if (is_file($path) && filesize($path) > 100) {
+        return $path;
+    }
+    $objects = [
+        "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n",
+        "2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n",
+        "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n",
+    ];
+    $stream = 'BT /F1 18 Tf 40 120 Td (Sample invoice) Tj ET';
+    $objects[] = "4 0 obj<</Length " . strlen($stream) . ">>stream\n" . $stream . "\nendstream\nendobj\n";
+    $objects[] = "5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n";
+    $body = "%PDF-1.4\n";
+    $offsets = [0];
+    foreach ($objects as $obj) {
+        $offsets[] = strlen($body);
+        $body .= $obj;
+    }
+    $xref = strlen($body);
+    $body .= 'xref\n0 ' . count($offsets) . "\n";
+    $body .= "0000000000 65535 f \n";
+    for ($i = 1; $i < count($offsets); $i++) {
+        $body .= sprintf("%010d 00000 n \n", $offsets[$i]);
+    }
+    $body .= 'trailer<</Size ' . count($offsets) . "/Root 1 0 R>>\nstartxref\n" . $xref . "\n%%EOF";
+    file_put_contents($path, $body);
+    return $path;
+}
+
+function sk_wa_templates_for_event(int $vendorId, string $eventKey): array {
+    if ($vendorId < 1 || $eventKey === '') {
+        return [];
+    }
+    $CI =& get_instance();
+    if (!$CI->db->table_exists('wa_cloud_templates')) {
+        return [];
+    }
+    return $CI->db->where('vendor_id', $vendorId)
+        ->where('event_key', $eventKey)
+        ->order_by('id', 'DESC')
+        ->get('wa_cloud_templates')
+        ->result_array();
 }
 
 /**
@@ -1493,7 +1558,18 @@ function sk_wa_cloud_submit_template(int $id, int $vendorId = 0): array {
     $components = [];
     $variableMap = $row['variable_map'] ?? '';
     $kind = (string)($row['kind'] ?? 'text');
-    if ($kind === 'image' || $kind === 'video') {
+    if ($kind === 'document') {
+        $file = sk_wa_sample_pdf_path();
+        $uploaded = sk_wa_cloud_template_header_handle($file, $cfg);
+        if (empty($uploaded['ok'])) {
+            return ['ok' => false, 'text' => $uploaded['error'] ?: 'Invoice sample PDF upload failed.'];
+        }
+        $components[] = [
+            'type'    => 'HEADER',
+            'format'  => 'DOCUMENT',
+            'example' => ['header_handle' => [$uploaded['handle']]],
+        ];
+    } elseif ($kind === 'image' || $kind === 'video') {
         $fmt = $kind === 'video' ? 'VIDEO' : 'IMAGE';
         $file = sk_wa_cloud_local_media_path((string)($row['media_url'] ?? ''));
         if ($file === '') {
