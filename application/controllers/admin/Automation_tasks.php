@@ -1,81 +1,108 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 
-class Automation_tasks extends CI_Controller {
+require_once APPPATH . 'controllers/admin/Sk_Base.php';
+
+class Automation_tasks extends Sk_Base {
+
     public function __construct()
     {
         parent::__construct();
         $this->load->model('Automation_task_model');
-        // Load helpers if needed
-        $this->load->helper(['url', 'form']);
+        $this->_ensure_schema();
     }
 
-    // List all tasks
     public function index()
     {
-        $data['tasks'] = $this->db->table_exists('automation_tasks')
-            ? $this->Automation_task_model->get_all()
-            : [];
+        $data['tasks'] = $this->Automation_task_model->get_all();
         $data['title'] = 'Automation Tasks';
-        $this->load->view('admin/layout/header', $data);
-        $this->load->view('admin/layout/sidebar');
-        $this->load->view('admin/automation_tasks/list', $data);
-        $this->load->view('admin/layout/footer');
+        $this->render('automation_tasks/list', $data);
     }
 
-    // Show create form
     public function create()
     {
         $data['title'] = 'Add Automation Task';
-        $this->load->view('admin/layout/header', $data);
-        $this->load->view('admin/layout/sidebar');
-        $this->load->view('admin/automation_tasks/form', $data);
-        $this->load->view('admin/layout/footer');
+        $data['task'] = [];
+        $this->render('automation_tasks/form', $data);
     }
 
-    // Store new task
     public function store()
     {
-        $task = [
-            'name' => $this->input->post('name', true),
-            'schedule' => $this->input->post('schedule', true),
+        $name = trim((string)$this->input->post('name', true));
+        if ($name === '') {
+            $this->session->set_flashdata('error', 'Task name is required.');
+            redirect('admin/automation_tasks/create');
+            return;
+        }
+        $this->Automation_task_model->insert([
+            'name' => $name,
+            'schedule' => trim((string)$this->input->post('schedule', true)),
             'status' => $this->input->post('status', true) ?: 'pending',
-        ];
-        $this->Automation_task_model->insert($task);
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
         $this->session->set_flashdata('success', 'Automation task created');
         redirect('admin/automation_tasks');
     }
 
-    // Show edit form
     public function edit($id)
     {
-        $data['task'] = $this->Automation_task_model->get($id);
+        $task = $this->Automation_task_model->get($id);
+        if (!$task) {
+            show_404();
+        }
+        $data['task'] = $task;
         $data['title'] = 'Edit Automation Task';
-        $this->load->view('admin/layout/header', $data);
-        $this->load->view('admin/layout/sidebar');
-        $this->load->view('admin/automation_tasks/form', $data);
-        $this->load->view('admin/layout/footer');
+        $this->render('automation_tasks/form', $data);
     }
 
-    // Update task
     public function update($id)
     {
-        $task = [
-            'name' => $this->input->post('name', true),
-            'schedule' => $this->input->post('schedule', true),
-            'status' => $this->input->post('status', true),
-        ];
-        $this->Automation_task_model->update($id, $task);
+        if (!$this->Automation_task_model->get($id)) {
+            show_404();
+        }
+        $this->Automation_task_model->update($id, [
+            'name' => trim((string)$this->input->post('name', true)),
+            'schedule' => trim((string)$this->input->post('schedule', true)),
+            'status' => $this->input->post('status', true) ?: 'pending',
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
         $this->session->set_flashdata('success', 'Automation task updated');
         redirect('admin/automation_tasks');
     }
 
-    // Delete task
     public function delete($id)
     {
         $this->Automation_task_model->delete($id);
         $this->session->set_flashdata('success', 'Automation task deleted');
         redirect('admin/automation_tasks');
     }
+
+    private function _ensure_schema(): void
+    {
+        if (!$this->db->table_exists('automation_tasks')) {
+            $this->db->query("CREATE TABLE `automation_tasks` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `name` VARCHAR(190) NOT NULL,
+                `schedule` VARCHAR(190) NULL,
+                `status` VARCHAR(32) NOT NULL DEFAULT 'pending',
+                `created_at` DATETIME NOT NULL,
+                `updated_at` DATETIME NULL,
+                PRIMARY KEY (`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            return;
+        }
+        if (!$this->db->field_exists('created_at', 'automation_tasks')) {
+            $this->db->query("ALTER TABLE `automation_tasks` ADD COLUMN `created_at` DATETIME NULL");
+        }
+        if (!$this->db->field_exists('updated_at', 'automation_tasks')) {
+            $this->db->query("ALTER TABLE `automation_tasks` ADD COLUMN `updated_at` DATETIME NULL");
+        }
+        if (!$this->db->field_exists('schedule', 'automation_tasks')) {
+            $this->db->query("ALTER TABLE `automation_tasks` ADD COLUMN `schedule` VARCHAR(190) NULL");
+        }
+        if (!$this->db->field_exists('status', 'automation_tasks')) {
+            $this->db->query("ALTER TABLE `automation_tasks` ADD COLUMN `status` VARCHAR(32) NOT NULL DEFAULT 'pending'");
+        }
+    }
 }
-?>

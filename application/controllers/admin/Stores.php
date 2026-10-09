@@ -26,6 +26,8 @@ class Stores extends Sk_Base {
         $data['vendor'] = $vendor;
         $data['store']  = $store;
         $data['days']   = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+        $data['load_quill'] = true;
+        $data['extra_js'] = $this->load->view('admin/stores/_quill', [], true);
         $this->render('stores/edit', $data);
     }
 

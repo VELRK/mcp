@@ -121,7 +121,7 @@ class Products extends Sk_Base {
             'brand_id'         => $this->input->post('brand_id') ?: null,
             'sku'              => $this->input->post('sku', TRUE),
             'description'      => $this->input->post('description'),
-            'short_desc'       => $this->input->post('short_desc', TRUE),
+            'short_desc'       => $this->input->post('short_desc'),
             'price'            => ($this->input->post('price') !== null && $this->input->post('price') !== '')
                 ? $this->input->post('price')
                 : 0,
@@ -290,7 +290,7 @@ class Products extends Sk_Base {
             'brand_id'         => $this->input->post('brand_id') ?: null,
             'sku'              => $this->input->post('sku', TRUE),
             'description'      => $this->input->post('description'),
-            'short_desc'       => $this->input->post('short_desc', TRUE),
+            'short_desc'       => $this->input->post('short_desc'),
             'price'            => ($postedPrice !== false && $postedPrice !== null && $postedPrice !== '') ? $postedPrice : $product['price'],
             'sale_price'       => (array_key_exists('sale_price', $_POST) && $this->input->post('sale_price') !== '')
                 ? $this->input->post('sale_price')
@@ -775,93 +775,29 @@ JS;
             return;
         }
 
+        $this->load->helper('sk_razorpay');
         $settings = $this->Sk_Admin_model->get_settings();
-        $keyId = trim((string)($settings['razorpay_key_id'] ?? ''));
-        $keySecret = trim((string)($settings['razorpay_key_secret'] ?? ''));
-
-        if ($keyId === '' || $keySecret === '') {
-            $this->config->load('ecommerce', true);
-            $cfg = $this->config->item('ecommerce');
-            if (empty($keyId)) {
-                $keyId = trim((string)($cfg['razorpay_key_id'] ?? ''));
-            }
-            if (empty($keySecret)) {
-                $keySecret = trim((string)($cfg['razorpay_key_secret'] ?? ''));
-            }
-        }
-
-        if ($keyId === '' || $keySecret === '') {
-            $this->json([
-                'success' => false,
-                'message' => 'Razorpay API credentials (Key ID and Secret) are missing. Please configure them in Settings.'
-            ], 400);
-            return;
-        }
-
-        $currency = trim((string)($settings['currency'] ?? 'INR'));
-        if ($currency === 'RM' || $currency === 'MYR') {
-            $currency = 'MYR';
-        } elseif (empty($currency) || $currency === '₹') {
-            $currency = 'INR';
-        }
-
-        $amountInPaise = (int)round($amount * 100);
-        $description = !empty($product_name) ? 'Payment for ' . $product_name : 'Product Payment';
-        $description = mb_substr($description, 0, 250);
-
-        $payload = [
-            'amount'          => $amountInPaise,
-            'currency'        => $currency,
-            'accept_partial'  => false,
-            'description'     => $description,
-            'reference_id'    => 'prod_' . ($product_id > 0 ? $product_id : 'new') . '_' . time(),
-            'notify'          => [
-                'sms'      => false,
-                'email'    => false,
-                'whatsapp' => false,
-            ],
-            'reminder_enable' => false,
-            'notes'           => [
+        $created = sk_razorpay_create_payment_link(
+            $amount,
+            $product_name !== '' ? ('Payment for ' . $product_name) : 'Product payment',
+            'prod_' . ($product_id > 0 ? $product_id : 'new') . '_' . time(),
+            [
                 'product_id'   => (string)$product_id,
                 'product_name' => mb_substr($product_name, 0, 50),
             ],
-        ];
-
-        $ch = curl_init('https://api.razorpay.com/v1/payment_links');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_USERPWD        => $keyId . ':' . $keySecret,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode($payload),
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT        => 25,
+            $settings
+        );
+        if (empty($created['success'])) {
+            $this->json(['success' => false, 'message' => $created['message'] ?: 'Failed to create Razorpay payment link.'], 400);
+            return;
+        }
+        $this->json([
+            'success'      => true,
+            'payment_link' => $created['payment_link'],
+            'plink_id'     => $created['id'],
+            'amount'       => $amount,
+            'currency'     => $created['currency'],
+            'message'      => 'Razorpay payment link created successfully!',
         ]);
-        $response = curl_exec($ch);
-        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
-
-        if ($curlError) {
-            $this->json(['success' => false, 'message' => 'Network error connecting to Razorpay: ' . $curlError], 500);
-            return;
-        }
-
-        $res = json_decode((string)$response, true);
-        if ($httpCode >= 200 && $httpCode < 300 && !empty($res['short_url'])) {
-            $this->json([
-                'success'      => true,
-                'payment_link' => $res['short_url'],
-                'plink_id'     => $res['id'] ?? '',
-                'amount'       => $amount,
-                'currency'     => $currency,
-                'message'      => 'Razorpay payment link created successfully!',
-            ]);
-            return;
-        }
-
-        $errMsg = $res['error']['description'] ?? ($res['message'] ?? 'Failed to create Razorpay payment link. HTTP ' . $httpCode);
-        $this->json(['success' => false, 'message' => $errMsg], 400);
     }
 }

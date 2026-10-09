@@ -5,6 +5,102 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * Shared Razorpay / Curlec helpers for checkout, wallet top-up, and webhooks.
  */
 
+/**
+ * Create a Razorpay / Curlec payment link for a product or order amount.
+ *
+ * @return array{success:bool,payment_link:string,message:string,id:string,currency:string}
+ */
+function sk_razorpay_create_payment_link(
+    float $amount,
+    string $description,
+    string $referenceId,
+    array $notes = [],
+    ?array $settings = null
+): array {
+    $fail = static function (string $message): array {
+        return ['success' => false, 'payment_link' => '', 'message' => $message, 'id' => '', 'currency' => ''];
+    };
+    if ($amount <= 0) {
+        return $fail('Payment amount must be greater than 0.');
+    }
+    $CI =& get_instance();
+    if ($settings === null) {
+        if (!isset($CI->Sk_Admin_model)) {
+            $CI->load->model('Sk_Admin_model');
+        }
+        $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    $CI->load->helper('sk_currency');
+    $keyId = trim((string)($settings['razorpay_key_id'] ?? ''));
+    $keySecret = sk_razorpay_key_secret($settings);
+    if ($keyId === '' || $keySecret === '') {
+        $CI->config->load('ecommerce', true);
+        $cfg = $CI->config->item('ecommerce');
+        $cfg = is_array($cfg) ? $cfg : [];
+        if ($keyId === '') {
+            $keyId = trim((string)($cfg['razorpay_key_id'] ?? ''));
+        }
+        if ($keySecret === '') {
+            $keySecret = trim((string)($cfg['razorpay_key_secret'] ?? ''));
+        }
+    }
+    if ($keyId === '' || $keySecret === '') {
+        return $fail('Razorpay Key ID and Key Secret are missing in Settings.');
+    }
+    $currency = sk_currency_code($settings);
+    $amountInPaise = (int)round($amount * 100);
+    if ($amountInPaise < 100) {
+        return $fail('Amount is below the payment gateway minimum.');
+    }
+    $referenceId = substr(preg_replace('/[^A-Za-z0-9_\-]/', '', $referenceId) ?: ('pay_' . time()), 0, 40);
+    $noteOut = [];
+    foreach ($notes as $k => $v) {
+        $noteOut[substr((string)$k, 0, 40)] = substr((string)$v, 0, 250);
+    }
+    $payload = [
+        'amount'          => $amountInPaise,
+        'currency'        => $currency,
+        'accept_partial'  => false,
+        'description'     => mb_substr($description !== '' ? $description : 'Payment', 0, 250),
+        'reference_id'    => $referenceId,
+        'notify'          => ['sms' => false, 'email' => false, 'whatsapp' => false],
+        'reminder_enable' => false,
+    ];
+    if ($noteOut) {
+        $payload['notes'] = $noteOut;
+    }
+    $ch = curl_init('https://api.razorpay.com/v1/payment_links');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_USERPWD        => $keyId . ':' . $keySecret,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload),
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT        => 25,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+    if ($curlError) {
+        return $fail('Could not reach Razorpay: ' . $curlError);
+    }
+    $res = json_decode((string)$response, true);
+    if ($httpCode >= 200 && $httpCode < 300 && !empty($res['short_url'])) {
+        return [
+            'success'      => true,
+            'payment_link' => (string)$res['short_url'],
+            'message'      => 'Payment link created.',
+            'id'           => (string)($res['id'] ?? ''),
+            'currency'     => $currency,
+        ];
+    }
+    $err = is_array($res) ? (string)($res['error']['description'] ?? $res['message'] ?? '') : '';
+    return $fail($err !== '' ? ('Razorpay: ' . $err) : ('Payment link failed (HTTP ' . $httpCode . ').'));
+}
+
 function sk_razorpay_key_secret(array $settings = null): string {
     if ($settings === null) {
         $CI =& get_instance();

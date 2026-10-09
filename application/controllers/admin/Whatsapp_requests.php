@@ -448,17 +448,23 @@ class Whatsapp_requests extends Sk_Base {
             ]);
         }
 
+        $seed = sk_wa_ecomm_seed_vendor((int)$req['vendor_id'], true);
+        $seedNote = '';
+        if (!empty($seed['created']) || !empty($seed['pushed'])) {
+            $seedNote = ' Order templates are ready under Order templates.';
+        }
+
         return [
             'ok'      => true,
             'error'   => '',
-            'message' => 'WhatsApp connected. Phone ID: ' . $phone . ' · WABA: ' . ($waba ?: '—'),
+            'message' => 'WhatsApp connected. Phone ID: ' . $phone . ' · WABA: ' . ($waba ?: '—') . $seedNote,
             'saved'   => [
                 'phone_number_id' => $phone,
                 'waba_id'         => $waba,
                 'display_phone'   => $saved['wa_cloud_display_phone'] ?? '',
                 'vendor_id'       => (int)$req['vendor_id'],
                 'request_id'      => (int)($req['id'] ?? 0),
-                'templates_url'   => site_url('admin/whatsapp/templates?vendor_id=' . (int)$req['vendor_id']),
+                'templates_url'   => site_url('admin/whatsapp/order-templates?vendor_id=' . (int)$req['vendor_id']),
             ],
         ];
     }

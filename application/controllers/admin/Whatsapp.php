@@ -344,16 +344,11 @@ class Whatsapp extends Sk_Base {
             }
         }
         $savedId = $this->Sk_Whatsapp_cloud_model->save_template($payload, $id);
-        $push = (string)$this->input->post('push_meta') === '1';
-        if ($push) {
-            $msg = $this->_push_template_to_meta($savedId, $vid);
-            if (!empty($msg['ok'])) {
-                $this->session->set_flashdata('success', $msg['text']);
-            } else {
-                $this->session->set_flashdata('error', 'Template saved as a draft. ' . $msg['text']);
-            }
+        $msg = sk_wa_cloud_submit_template($savedId, $vid);
+        if (!empty($msg['ok'])) {
+            $this->session->set_flashdata('success', 'Template saved and sent to Meta. ' . $msg['text']);
         } else {
-            $this->session->set_flashdata('success', 'Template saved locally.');
+            $this->session->set_flashdata('error', 'Template saved. Meta was not updated yet. ' . $msg['text']);
         }
         $this->_templates_redirect($vid);
     }
@@ -607,9 +602,43 @@ class Whatsapp extends Sk_Base {
 
     public function template_push($id = 0) {
         $vid = $this->_resolve_ops_vendor_id();
-        $msg = $this->_push_template_to_meta((int)$id, $vid);
+        $msg = sk_wa_cloud_submit_template((int)$id, $vid);
         $this->session->set_flashdata($msg['ok'] ? 'success' : 'error', $msg['text']);
         redirect('shopkart/whatsapp/templates' . ($vid > 0 ? '?vendor_id=' . $vid : ''));
+    }
+
+    /** Shared order create / update / cancel / delivery templates for this shop. */
+    public function order_templates() {
+        $vid = $this->_resolve_ops_vendor_id();
+        $settings = $this->Sk_Admin_model->get_settings();
+        if ($vid > 0) {
+            $settings['vendor_id'] = $vid;
+            $readyNow = sk_wa_cloud_is_ready($settings, $vid);
+            $seed = sk_wa_ecomm_seed_vendor($vid, $readyNow);
+            if (!empty($seed['created']) || !empty($seed['pushed'])) {
+                $note = 'Order templates ready';
+                if (!empty($seed['created'])) {
+                    $note .= ' (' . (int)$seed['created'] . ' added)';
+                }
+                $note .= !empty($seed['pushed']) ? ' and submitted to Meta.' : '.';
+                if (!empty($seed['errors'])) {
+                    $this->session->set_flashdata('error', $note . ' ' . implode(' ', array_slice($seed['errors'], 0, 2)));
+                } else {
+                    $this->session->set_flashdata('success', $note);
+                }
+            }
+        }
+        $vendors = [];
+        if ($vid < 1 && $this->is_super_admin()) {
+            $vendors = $this->Sk_Vendor_model->get_master_shop_summary();
+        }
+        $data['title'] = 'Order templates';
+        $data['vendor_id'] = $vid;
+        $data['vendors'] = $vendors;
+        $data['templates'] = $vid > 0 ? $this->Sk_Whatsapp_cloud_model->list_event_templates($vid) : [];
+        $data['ready'] = $vid > 0 && sk_wa_cloud_is_ready($settings, $vid);
+        $data['defs'] = sk_wa_ecomm_template_defs();
+        $this->render('whatsapp/order_templates', $data);
     }
 
     /**
@@ -641,75 +670,7 @@ class Whatsapp extends Sk_Base {
 
     private function _push_template_to_meta(int $id, ?int $vendorId = null): array {
         $vid = $vendorId !== null ? (int)$vendorId : $this->_resolve_ops_vendor_id();
-        $row = $this->Sk_Whatsapp_cloud_model->get_template($id, $vid > 0 ? $vid : null);
-        if (!$row) {
-            return ['ok' => false, 'text' => 'Template not found.'];
-        }
-        $settings = $this->Sk_Admin_model->get_settings();
-        if ($vid > 0) {
-            $settings['vendor_id'] = $vid;
-        }
-        if (!sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null)) {
-            return ['ok' => false, 'text' => sk_wa_cloud_not_ready_reason($settings, $vid > 0 ? $vid : null)];
-        }
-        $cfg = sk_wa_cloud_config($settings, $vid > 0 ? $vid : null);
-        if (trim((string)($cfg['waba_id'] ?? '')) === '') {
-            return ['ok' => false, 'text' => 'WhatsApp Business Account ID is missing for this number.'];
-        }
-        // Fresh instance so constructor picks vendor_id from $settings.
-        if (isset($this->whatsapp_cloud)) {
-            unset($this->whatsapp_cloud);
-        }
-        $this->load->library('Whatsapp_cloud', $settings);
-        $components = [];
-        $variableMap = $row['variable_map'] ?? '';
-        if ($row['kind'] === 'image' || $row['kind'] === 'video') {
-            $fmt = $row['kind'] === 'video' ? 'VIDEO' : 'IMAGE';
-            $file = sk_wa_cloud_local_media_path((string)($row['media_url'] ?? ''));
-            if ($file === '') {
-                return ['ok' => false, 'text' => 'Upload a header image or video before sending this template to Meta.'];
-            }
-            $uploaded = sk_wa_cloud_template_header_handle($file, $cfg);
-            if (empty($uploaded['ok'])) {
-                return ['ok' => false, 'text' => $uploaded['error'] ?: 'Header file upload failed.'];
-            }
-            $components[] = [
-                'type'    => 'HEADER',
-                'format'  => $fmt,
-                'example' => ['header_handle' => [$uploaded['handle']]],
-            ];
-        } elseif (trim((string)$row['header_text']) !== '') {
-            $header = ['type' => 'HEADER', 'format' => 'TEXT', 'text' => $row['header_text']];
-            $headerSamples = sk_wa_cloud_example_samples((string)$row['header_text'], $variableMap);
-            if ($headerSamples) {
-                $header['example'] = ['header_text' => $headerSamples];
-            }
-            $components[] = $header;
-        }
-        $body = ['type' => 'BODY', 'text' => (string)$row['body_text']];
-        $bodySamples = sk_wa_cloud_example_samples((string)$row['body_text'], $variableMap);
-        if ($bodySamples) {
-            $body['example'] = ['body_text' => [$bodySamples]];
-        }
-        $components[] = $body;
-        if (trim((string)$row['footer_text']) !== '') {
-            $components[] = ['type' => 'FOOTER', 'text' => $row['footer_text']];
-        }
-        $res = $this->whatsapp_cloud->create_template([
-            'name'       => $row['name'],
-            'language'   => $row['language'],
-            'category'   => $row['category'] ?: 'UTILITY',
-            'components' => $components,
-        ]);
-        if (!empty($res['success'])) {
-            $this->Sk_Whatsapp_cloud_model->save_template([
-                'meta_id'      => (string)($res['data']['id'] ?? $row['meta_id']),
-                'status'       => (string)($res['data']['status'] ?? 'PENDING'),
-                'meta_payload' => json_encode($res['data'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            ], $id);
-            return ['ok' => true, 'text' => 'Submitted to Meta. Status: ' . ($res['data']['status'] ?? 'PENDING')];
-        }
-        return ['ok' => false, 'text' => $res['message'] ?? 'Meta rejected the template.'];
+        return sk_wa_cloud_submit_template($id, $vid);
     }
 
     private function _store_upload(string $kind): array {

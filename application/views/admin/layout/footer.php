@@ -153,6 +153,9 @@ document.querySelectorAll('.sk-datatable').forEach(t => {
   }
 })();
 </script>
+<?php if (!empty($load_quill) || !empty($extra_js)): ?>
+<script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+<?php endif; ?>
 <?php if (isset($extra_js)): ?>
   <?= $extra_js ?>
 <?php endif; ?>

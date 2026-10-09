@@ -2,8 +2,8 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * Askeva WhatsApp (backend.askeva.io) — order status utility messages.
- * Prefer free-form text; optional approved utility template fallback when session is closed.
+ * Order status WhatsApp messages. Delivery uses the shop's Meta Cloud templates
+ * (order created, updated, cancelled, delivered). Askeva is no longer used.
  */
 
 function sk_whatsapp_ensure_settings(): void {
@@ -295,22 +295,78 @@ function sk_whatsapp_log(array $row): void {
     $CI->db->insert('whatsapp_logs', $data);
 }
 
+function sk_whatsapp_order_vendor_id(array $order): int {
+    $direct = (int)($order['vendor_id'] ?? 0);
+    if ($direct > 0) {
+        return $direct;
+    }
+    $CI =& get_instance();
+    $orderId = (int)($order['id'] ?? 0);
+    if ($orderId < 1) {
+        return 0;
+    }
+    if ($CI->db->table_exists('order_items') && $CI->db->field_exists('vendor_id', 'order_items')) {
+        $row = $CI->db->select('vendor_id')
+            ->where('order_id', $orderId)
+            ->where('vendor_id >', 0)
+            ->limit(1)
+            ->get('order_items')
+            ->row_array();
+        if (!empty($row['vendor_id'])) {
+            return (int)$row['vendor_id'];
+        }
+    }
+    if ($CI->db->table_exists('order_items') && $CI->db->table_exists('products') && $CI->db->field_exists('vendor_id', 'products')) {
+        $row = $CI->db->select('p.vendor_id')
+            ->from('order_items oi')
+            ->join('products p', 'p.id = oi.product_id', 'inner')
+            ->where('oi.order_id', $orderId)
+            ->where('p.vendor_id >', 0)
+            ->limit(1)
+            ->get()
+            ->row_array();
+        if (!empty($row['vendor_id'])) {
+            return (int)$row['vendor_id'];
+        }
+    }
+    return 0;
+}
+
+function sk_whatsapp_shop_name(int $vendorId, array $settings = []): string {
+    $CI =& get_instance();
+    if ($vendorId > 0 && $CI->db->table_exists('vendor_stores')) {
+        $store = $CI->db->select('store_name')->where('vendor_id', $vendorId)->get('vendor_stores')->row_array();
+        $name = trim((string)($store['store_name'] ?? ''));
+        if ($name !== '' && strcasecmp($name, 'Default Store') !== 0) {
+            return $name;
+        }
+    }
+    if ($vendorId > 0 && $CI->db->table_exists('vendors')) {
+        $vendor = $CI->db->select('business_name')->where('id', $vendorId)->get('vendors')->row_array();
+        $biz = trim((string)($vendor['business_name'] ?? ''));
+        if ($biz !== '') {
+            return $biz;
+        }
+    }
+    return trim((string)($settings['site_name'] ?? $settings['company_legal_name'] ?? 'Shop'));
+}
+
 /**
- * Notify customer on order status change via WhatsApp.
- * Tries text first; if session closed and a utility template is set, falls back to template.
- * Every attempt is stored in whatsapp_logs for the delivery report.
+ * Notify the customer through the shop's Meta order template.
+ * The attempt is stored in whatsapp_logs for the delivery report.
  */
 function sk_whatsapp_notify_order_status(array $order, string $status, array $settings = null): array {
-    // Unpaid Razorpay attempts must not trigger order-received / confirm templates.
     if ($status === 'payment_attempt') {
         return ['success' => false, 'message' => 'Skipped: payment attempt (notify after payment).', 'via' => 'none'];
     }
     $CI =& get_instance();
+    $CI->load->helper('sk_whatsapp_cloud');
     if ($settings === null) {
         $CI->load->model('Sk_Admin_model');
         $settings = $CI->Sk_Admin_model->get_settings();
     }
     sk_whatsapp_ensure_log_schema();
+    sk_wa_cloud_ensure_schema();
 
     $orderId = (int)($order['id'] ?? 0) ?: null;
     $orderNo = (string)($order['order_number'] ?? '');
@@ -319,101 +375,102 @@ function sk_whatsapp_notify_order_status(array $order, string $status, array $se
         'order_number'   => $orderNo,
         'status_trigger' => $status,
     ];
-
-    $cfg = sk_whatsapp_config($settings);
-    if (!$cfg['enabled']) {
-        $result = ['success' => false, 'message' => 'WhatsApp notifications disabled in Settings.', 'via' => 'none'];
-        sk_whatsapp_log($baseLog + [
-            'phone' => null,
-            'phone_source' => 'none',
-            'channel' => 'none',
-            'delivery_status' => 'skipped',
-            'reason' => $result['message'],
-            'api_message' => $result['message'],
+    $fail = static function (array $base, string $message, string $phone = '', string $source = 'none') {
+        sk_whatsapp_log($base + [
+            'phone'           => $phone !== '' ? $phone : null,
+            'phone_source'    => $source,
+            'channel'         => 'meta',
+            'delivery_status' => 'failed',
+            'reason'          => $message,
+            'api_message'     => $message,
         ]);
-        return $result;
+        return ['success' => false, 'message' => $message, 'via' => 'meta'];
+    };
+
+    $event = sk_wa_ecomm_event_for_status($status);
+    if ($event === '') {
+        return $fail($baseLog, 'No order template for status "' . $status . '".');
     }
 
-    if ($cfg['token'] === '') {
-        $result = ['success' => false, 'message' => 'Askeva API token not configured.', 'via' => 'none'];
-        sk_whatsapp_log($baseLog + [
-            'channel' => 'none',
-            'delivery_status' => 'skipped',
-            'reason' => $result['message'],
-            'api_message' => $result['message'],
-        ]);
-        return $result;
+    $vendorId = sk_whatsapp_order_vendor_id($order);
+    if ($vendorId < 1) {
+        return $fail($baseLog, 'Order has no shop, so the Meta template cannot be chosen.');
+    }
+    sk_wa_ecomm_seed_vendor($vendorId, false);
+    if (!isset($CI->Sk_Whatsapp_cloud_model)) {
+        $CI->load->model('Sk_Whatsapp_cloud_model');
+    }
+    $tpl = $CI->Sk_Whatsapp_cloud_model->find_template_by_event($vendorId, $event);
+    if (!$tpl) {
+        return $fail($baseLog, 'Order template "' . $event . '" is missing for this shop.');
     }
 
     $phoneInfo = sk_whatsapp_order_phone_info($order, $settings);
     $phone = $phoneInfo['phone'];
-    $cfgForce = trim((string)($cfg['test_force_phone'] ?? ''));
-    if ($cfgForce !== '') {
-        // TESTING: always deliver to force phone even if order has no phone
-        $phone = $cfgForce;
-        $phoneInfo['source'] = 'test_force';
-    }
     if ($phone === '') {
-        $result = ['success' => false, 'message' => 'No customer phone on order (shipping/billing/registration all empty).', 'via' => 'none'];
-        sk_whatsapp_log($baseLog + [
-            'phone' => null,
-            'phone_source' => 'none',
-            'channel' => 'none',
-            'delivery_status' => 'skipped',
-            'reason' => $result['message'],
-            'api_message' => $result['message'],
-        ]);
-        return $result;
+        return $fail($baseLog, 'No customer phone on this order.');
     }
 
+    $settings['vendor_id'] = $vendorId;
+    if (!sk_wa_cloud_is_ready($settings, $vendorId)) {
+        return $fail($baseLog, sk_wa_cloud_not_ready_reason($settings, $vendorId), $phone, $phoneInfo['source']);
+    }
+    $metaStatus = strtoupper((string)($tpl['status'] ?? ''));
+    if ($metaStatus !== 'APPROVED') {
+        return $fail(
+            $baseLog,
+            'Template "' . $tpl['name'] . '" is ' . ($metaStatus !== '' ? $metaStatus : 'not approved') . ' on Meta.',
+            $phone,
+            $phoneInfo['source']
+        );
+    }
+
+    $shop = sk_whatsapp_shop_name($vendorId, $settings);
+    $CI->load->helper('sk_currency');
+    $totalRaw = $order['total'] ?? '';
+    $total = ($totalRaw !== '' && $totalRaw !== null && function_exists('sk_money'))
+        ? sk_money($totalRaw, $settings)
+        : (string)$totalRaw;
+    $context = [
+        'name'         => trim((string)($order['customer_name'] ?? $order['shipping_name'] ?? 'Customer')),
+        'order_number' => $orderNo !== '' ? $orderNo : ('#' . (int)($order['id'] ?? 0)),
+        'order_status' => sk_whatsapp_status_label($status),
+        'order_total'  => $total !== '' ? $total : '-',
+        'shop_name'    => $shop,
+        'site_name'    => $shop,
+    ];
+    $built = sk_wa_cloud_send_components($tpl, $context);
     $msg = sk_whatsapp_order_message($order, $status, $settings);
 
-    // Prefer approved utility template (works outside 24h session — no open chat needed).
-    // Free-text only when no template is mapped (text requires an open 24h customer session).
-    $tpl = sk_whatsapp_template_for_status($status, $order, $cfg);
-    if ($tpl !== null) {
-        $result = sk_whatsapp_send_template($phone, $tpl['name'], $tpl['values'], $settings);
-        $result['via'] = 'template:' . $tpl['name'];
-        if (empty($result['success'])) {
-            // Do not fall back to free text — it needs a 24h session and confuses the report.
-            $result['message'] = 'Template "' . $tpl['name'] . '" failed: '
-                . (string)($result['message'] ?? 'unknown');
-        } else {
-            $result['message'] = 'Sent via template "' . $tpl['name'] . '"'
-                . ($cfgForce !== '' ? ' (test phone ' . $cfgForce . ')' : '');
-        }
-    } else {
-        $result = sk_whatsapp_send_text($phone, $msg, $settings);
-        $result['via'] = 'text';
-        if (empty($result['success'])) {
-            $result['message'] = (string)($result['message'] ?? 'text send failed')
-                . ' — no WhatsApp utility template configured for status "' . $status
-                . '" (see database/whatsapp_order_templates.txt). Templates do not need a 24h session.';
-        }
+    if (isset($CI->whatsapp_cloud)) {
+        unset($CI->whatsapp_cloud);
     }
-
-    $delivered = !empty($result['success']);
+    $CI->load->library('Whatsapp_cloud', $settings);
+    $sent = $CI->whatsapp_cloud->send_template(
+        $phone,
+        (string)$tpl['name'],
+        (string)($tpl['language'] ?: 'en'),
+        $built['components']
+    );
+    $ok = !empty($sent['success']);
+    $message = $ok
+        ? ('Sent via Meta template "' . $tpl['name'] . '"')
+        : ('Meta template "' . $tpl['name'] . '" failed: ' . (string)($sent['message'] ?? 'send failed'));
     sk_whatsapp_log($baseLog + [
         'phone'           => $phone,
         'phone_source'    => $phoneInfo['source'],
-        'channel'         => $result['via'] ?? 'text',
-        'delivery_status' => $delivered ? 'sent' : 'failed',
-        'reason'          => $delivered
-            ? ('Delivered via ' . ($result['via'] ?? 'text')
-                . ($cfgForce !== '' ? ' to TEST phone' : (' to ' . $phoneInfo['source'] . ' phone')))
-            : (string)($result['message'] ?? 'Send failed'),
-        'http_code'       => $result['http'] ?? null,
-        'api_message'     => $result['message'] ?? null,
-        'api_response'    => $result['response'] ?? null,
+        'channel'         => 'meta:' . $tpl['name'],
+        'delivery_status' => $ok ? 'sent' : 'failed',
+        'reason'          => $message,
+        'http_code'       => $sent['http'] ?? null,
+        'api_message'     => $sent['message'] ?? $message,
+        'api_response'    => $sent['data'] ?? $sent,
         'message_body'    => $msg,
     ]);
+    log_message('info', 'Meta WA order ' . ($order['id'] ?? '?') . ' status=' . $status
+        . ' tpl=' . $tpl['name'] . ' ok=' . ($ok ? '1' : '0') . ' to=' . $phone);
 
-    log_message('info', 'Askeva WA order ' . ($order['id'] ?? '?') . ' status=' . $status
-        . ' via=' . ($result['via'] ?? '?') . ' ok=' . ($delivered ? '1' : '0')
-        . ' to=' . $phone
-        . ' msg=' . ($result['message'] ?? ''));
-
-    return $result;
+    return ['success' => $ok, 'message' => $message, 'via' => 'meta:' . $tpl['name'], 'response' => $sent['data'] ?? null];
 }
 
 

@@ -55,7 +55,8 @@ $delivery = $store['delivery_settings'] ?? [];
         </div>
         <div class="col-12">
           <label class="form-label">Description</label>
-          <textarea name="description" class="form-control" rows="3"><?= htmlspecialchars($store['description'] ?? '') ?></textarea>
+          <input type="hidden" name="description" id="storeDescription" value="<?= htmlspecialchars($store['description'] ?? '', ENT_QUOTES) ?>">
+          <div id="quill-store-description" style="min-height:140px;background:#fff;"></div>
         </div>
         <div class="col-md-6">
           <label class="form-label">Logo</label>

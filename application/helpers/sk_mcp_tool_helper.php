@@ -217,8 +217,7 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
         }
 
         // Skip rows that somehow escaped vendor scope.
-        if ($tenantId > 0 && isset($product['vendor_id']) && (int)$product['vendor_id'] > 0
-            && (int)$product['vendor_id'] !== $tenantId) {
+        if ($tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== $tenantId) {
             continue;
         }
 
@@ -297,27 +296,79 @@ function sk_ai_tenant_resolve(array $message = [], ?array $settings = null): arr
         $CI->load->model('Sk_Admin_model');
     }
     $settings = $settings ?? $CI->Sk_Admin_model->get_settings();
+    $CI->load->helper('sk_whatsapp_cloud');
 
     $phoneNumberId = trim((string)($message['phone_number_id'] ?? ''));
     $customerPhone = trim((string)($message['customer_phone'] ?? ''));
+    $tenantId = 0;
+    $shopName = '';
+    $source = 'unresolved';
 
-    $tenantId = (int)($settings['saas_default_vendor_id'] ?? $settings['tenant_id'] ?? $settings['shop_id'] ?? $settings['vendor_id'] ?? 1);
-    $shopName = trim((string)($settings['shop_name'] ?? $settings['business_name'] ?? 'Default Shop'));
-
-    if ($phoneNumberId !== '' && !empty($settings['wa_cloud_phone_number_id'])) {
-        if ((string)$settings['wa_cloud_phone_number_id'] === $phoneNumberId) {
-            $tenantId = (int)($settings['saas_default_vendor_id'] ?? $settings['tenant_id'] ?? $settings['vendor_id'] ?? $tenantId);
-            $shopName = trim((string)($settings['shop_name'] ?? $shopName));
+    if ($phoneNumberId !== '') {
+        $match = sk_wa_cloud_resolve_vendor_from_phone($phoneNumberId, $settings);
+        if ($match && (int)($match['vendor_id'] ?? 0) > 0) {
+            $tenantId = (int)$match['vendor_id'];
+            $source = 'phone_number_id';
         }
+    }
+    if ($tenantId < 1) {
+        $fromMessage = (int)($message['vendor_id'] ?? $message['tenant_id'] ?? 0);
+        if ($fromMessage > 0) {
+            $tenantId = $fromMessage;
+            $source = 'message_vendor';
+        }
+    }
+    if ($tenantId > 0 && $CI->db->table_exists('vendor_stores')) {
+        $store = $CI->db->select('store_name')->where('vendor_id', $tenantId)->limit(1)->get('vendor_stores')->row_array();
+        $shopName = trim((string)($store['store_name'] ?? ''));
+        if ($shopName !== '' && strcasecmp($shopName, 'Default Store') === 0) {
+            $shopName = '';
+        }
+    }
+    if ($shopName === '' && $tenantId > 0 && $CI->db->table_exists('vendors')) {
+        $vendor = $CI->db->select('business_name, owner_name')->where('id', $tenantId)->limit(1)->get('vendors')->row_array();
+        $shopName = trim((string)($vendor['business_name'] ?? $vendor['owner_name'] ?? ''));
     }
 
     return [
         'tenant_id' => $tenantId,
-        'shop_name' => $shopName,
+        'shop_name' => $shopName !== '' ? $shopName : ($tenantId > 0 ? 'this shop' : ''),
         'phone_number_id' => $phoneNumberId,
         'customer_phone' => $customerPhone,
-        'source' => $phoneNumberId !== '' ? 'trusted_phone_number_id' : 'default_tenant',
+        'source' => $source,
     ];
+}
+
+function sk_ai_order_in_shop(array $order, int $tenantId): bool {
+    if ($tenantId < 1) {
+        return false;
+    }
+    if ((int)($order['vendor_id'] ?? 0) === $tenantId) {
+        return true;
+    }
+    $CI =& get_instance();
+    $orderId = (int)($order['id'] ?? 0);
+    if ($orderId < 1) {
+        return false;
+    }
+    if ($CI->db->table_exists('order_items') && $CI->db->field_exists('vendor_id', 'order_items')) {
+        $hit = $CI->db->where('order_id', $orderId)->where('vendor_id', $tenantId)->limit(1)->get('order_items')->row_array();
+        if ($hit) {
+            return true;
+        }
+    }
+    if ($CI->db->table_exists('order_items') && $CI->db->table_exists('products') && $CI->db->field_exists('vendor_id', 'products')) {
+        $hit = $CI->db->select('oi.id')
+            ->from('order_items oi')
+            ->join('products p', 'p.id = oi.product_id', 'inner')
+            ->where('oi.order_id', $orderId)
+            ->where('p.vendor_id', $tenantId)
+            ->limit(1)
+            ->get()
+            ->row_array();
+        return !empty($hit);
+    }
+    return false;
 }
 
 function sk_ai_mcp_tool_registry(): array {
@@ -570,6 +621,9 @@ function sk_ai_get_order_status(int $orderId, ?int $tenantId = null): array {
     if (!$order) {
         return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_NOT_FOUND', 'message' => 'Order not found.']];
     }
+    if ($tenantId > 0 && !sk_ai_order_in_shop($order, (int)$tenantId)) {
+        return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_FORBIDDEN', 'message' => 'That order is not from this shop.']];
+    }
 
     return [
         'success' => true,
@@ -819,6 +873,9 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
         if (!$product) {
             continue;
         }
+        if ($tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== (int)$tenantId) {
+            continue;
+        }
         $unit = (float)($product['effective_price'] ?? $product['sale_price'] ?? $product['price'] ?? 0);
         $orderItems[] = [
             'product_id'   => $productId,
@@ -903,6 +960,9 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
     if (!$order) {
         return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_NOT_FOUND', 'message' => 'Order not found.']];
     }
+    if (!sk_ai_order_in_shop($order, $tenantId)) {
+        return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_FORBIDDEN', 'message' => 'That order is not from this shop.']];
+    }
     $status = strtolower((string)($order['status'] ?? ''));
     // Payment link only after human approval (confirmed) — never invent URLs.
     if (!in_array($status, ['confirmed', 'processing', 'shipped', 'delivered'], true)) {
@@ -933,11 +993,23 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
         }
     }
     if ($link === '') {
-        return [
-            'success' => false,
-            'data' => ['order_id' => $orderId],
-            'error' => ['code' => 'PAYMENT_LINK_MISSING', 'message' => 'No payment link is configured for the ordered product(s).'],
-        ];
+        $CI->load->helper('sk_razorpay');
+        $CI->load->model('Sk_Admin_model');
+        $created = sk_razorpay_create_payment_link(
+            (float)($order['total'] ?? 0),
+            'Order ' . (string)($order['order_number'] ?? $orderId),
+            'ord_' . $orderId . '_' . time(),
+            ['order_id' => (string)$orderId, 'vendor_id' => (string)$tenantId],
+            $CI->Sk_Admin_model->get_settings()
+        );
+        if (empty($created['success'])) {
+            return [
+                'success' => false,
+                'data' => ['order_id' => $orderId],
+                'error' => ['code' => 'PAYMENT_LINK_FAILED', 'message' => (string)($created['message'] ?? 'Payment gateway could not create a link.')],
+            ];
+        }
+        $link = (string)$created['payment_link'];
     }
     return [
         'success' => true,
@@ -970,6 +1042,9 @@ function sk_ai_get_payment_status_tool(array $params, int $tenantId): array {
     $order = $CI->Sk_Order_model->get_by_id($orderId);
     if (!$order) {
         return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_NOT_FOUND', 'message' => 'Order not found.']];
+    }
+    if (!sk_ai_order_in_shop($order, $tenantId)) {
+        return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_FORBIDDEN', 'message' => 'That order is not from this shop.']];
     }
     $payment = is_array($order['payment'] ?? null) ? $order['payment'] : null;
     return [
@@ -1046,7 +1121,14 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
         return ['success' => false, 'data' => null, 'error' => ['code' => 'MCP_TOOL_NOT_FOUND', 'message' => 'Tool is not registered.']];
     }
 
-    $tenantId = (int)($tenant['tenant_id'] ?? $tenant['tenant'] ?? 1);
+    $tenantId = (int)($tenant['tenant_id'] ?? $tenant['tenant'] ?? 0);
+    if ($tenantId < 1) {
+        return [
+            'success' => false,
+            'data' => null,
+            'error' => ['code' => 'SHOP_UNRESOLVED', 'message' => 'This chat is not tied to a shop. Do not use another shop catalog.'],
+        ];
+    }
     $params = is_array($params) ? $params : [];
 
     // Meta connectors may stringify nested JSON fields.
@@ -1161,6 +1243,9 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
             $CI->load->model('Sk_Product_model');
         }
         $product = $CI->Sk_Product_model->get_by_id($productId);
+        if ($product && $tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== $tenantId) {
+            return ['success' => false, 'data' => null, 'error' => ['code' => 'PRODUCT_FORBIDDEN', 'message' => 'That product is not in this shop.']];
+        }
         $stock = 0;
         $available = false;
         if ($product) {
@@ -1207,7 +1292,7 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
             return ['success' => false, 'data' => null, 'error' => ['code' => 'PRODUCT_NOT_FOUND', 'message' => 'Product not found.']];
         }
         // Tenant ownership check when vendor_id is present on product rows.
-        if ($tenantId > 0 && isset($product['vendor_id']) && (int)$product['vendor_id'] > 0 && (int)$product['vendor_id'] !== $tenantId) {
+        if ($tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== $tenantId) {
             return ['success' => false, 'data' => null, 'error' => ['code' => 'PRODUCT_FORBIDDEN', 'message' => 'Product is not in this shop catalog.']];
         }
 
@@ -1268,11 +1353,7 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
             $cats = $CI->Sk_Product_model->get_categories($tenantId > 0 ? $tenantId : null);
         } elseif ($CI->db->table_exists('categories')) {
             if ($tenantId > 0 && $CI->db->field_exists('vendor_id', 'categories')) {
-                $CI->db->group_start()
-                    ->where('vendor_id', $tenantId)
-                    ->or_where('vendor_id', null)
-                    ->or_where('vendor_id', 0)
-                    ->group_end();
+                $CI->db->where('vendor_id', $tenantId);
             }
             $cats = $CI->db->order_by('name', 'ASC')->get('categories')->result_array();
         }
@@ -1320,6 +1401,9 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
         $order = $CI->Sk_Order_model->get_by_id($orderId);
         if (!$order) {
             return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_NOT_FOUND', 'message' => 'Order not found.']];
+        }
+        if (!sk_ai_order_in_shop($order, $tenantId)) {
+            return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_FORBIDDEN', 'message' => 'That order is not from this shop.']];
         }
         $CI->Sk_Order_model->update_status($orderId, $status);
         return sk_ai_get_order_status($orderId, $tenantId);

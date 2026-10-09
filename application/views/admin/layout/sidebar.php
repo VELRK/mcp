@@ -72,6 +72,7 @@ $open = static function (array $keys) use ($uri) {
                         <ul class="sub-menu" aria-expanded="false">
                             <li><a href="<?= site_url('admin/whatsapp') ?>" class="<?= ($uri === 'whatsapp' && $uri3 === '') ? 'active' : '' ?>">Inbox</a></li>
                             <li><a href="<?= site_url('admin/whatsapp/templates') ?>">Templates</a></li>
+                            <li><a href="<?= site_url('admin/whatsapp/order-templates') ?>" class="<?= ($uri === 'whatsapp' && $uri3 === 'order-templates') ? 'active' : '' ?>">Order templates</a></li>
                             <li><a href="<?= site_url('admin/whatsapp/campaigns') ?>">Campaigns</a></li>
                             <li><a href="<?= site_url('admin/whatsapp-report') ?>">Delivery report</a></li>
                             <li><a href="<?= site_url('admin/meta/agent') ?>" class="<?= ($uri === 'meta' && $uri3 === 'agent') ? 'active' : '' ?>">Meta Business Agent</a></li>

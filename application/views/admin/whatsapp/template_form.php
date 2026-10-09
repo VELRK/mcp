@@ -26,7 +26,7 @@ foreach ($modules as $key => $mod) {
         <label class="form-label">Template name</label>
         <input type="text" name="name" class="form-control" required
                value="<?= htmlspecialchars($row['name'] ?? '') ?>" placeholder="order_ready">
-        <div class="form-text">Lowercase letters, numbers, underscore. Must be unique on Meta.</div>
+        <div class="form-text">Lowercase letters, numbers, underscore. Saving sends this template to Meta. Image and video types need a header file.</div>
       </div>
       <div class="col-md-3">
         <label class="form-label">Language</label>
@@ -43,10 +43,11 @@ foreach ($modules as $key => $mod) {
       <div class="col-md-4">
         <label class="form-label">Type</label>
         <select name="kind" id="tplKind" class="form-select">
-          <option value="text" <?= (($row['kind'] ?? '') === 'text') ? 'selected' : '' ?>>Text</option>
+          <option value="text" <?= (($row['kind'] ?? 'text') === 'text') ? 'selected' : '' ?>>Text</option>
           <option value="image" <?= (($row['kind'] ?? '') === 'image') ? 'selected' : '' ?>>Image</option>
           <option value="video" <?= (($row['kind'] ?? '') === 'video') ? 'selected' : '' ?>>Video</option>
         </select>
+        <div class="form-text">Text, image, and video templates are created here and submitted to Meta on save.</div>
       </div>
       <div class="col-md-8" id="tplMediaWrap">
         <label class="form-label">Header media</label>
@@ -96,13 +97,11 @@ foreach ($modules as $key => $mod) {
       </div>
     </div>
 
-    <div class="form-check mt-3">
-      <input class="form-check-input" type="checkbox" name="push_meta" value="1" id="pushMeta" <?= !empty($ready) ? 'checked' : '' ?>>
-      <label class="form-check-label" for="pushMeta">Also submit to Meta for approval</label>
-      <?php if (empty($ready)): ?>
-        <div class="form-text">No active WhatsApp number yet. The template is saved as a draft until Embed Login is done for this vendor.</div>
-      <?php endif; ?>
-    </div>
+    <?php if (empty($ready)): ?>
+    <div class="alert alert-warning mt-3 mb-0">No active WhatsApp number yet. The template is saved, and Meta submission runs automatically after this shop connects WhatsApp.</div>
+    <?php else: ?>
+    <div class="form-text mt-3">Save submits this template to Meta. There is no separate push step.</div>
+    <?php endif; ?>
   </div>
   <div class="card-footer d-flex gap-2">
     <button class="btn btn-success">Save template</button>

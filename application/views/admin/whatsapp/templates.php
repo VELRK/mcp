@@ -26,7 +26,7 @@
   <?= htmlspecialchars(function_exists('sk_wa_cloud_not_ready_reason')
       ? sk_wa_cloud_not_ready_reason(null, !empty($vendor_id) ? (int)$vendor_id : null)
       : 'Meta Cloud API is not connected.') ?>
-  You can still save drafts, then push after Embed Login.
+  You can still save text, image, and video templates. They are sent to Meta automatically once this shop is connected.
 </div>
 <?php elseif (!empty($meta_sync['error'])): ?>
 <div class="alert alert-warning">
@@ -79,7 +79,6 @@
           <td class="text-nowrap">
             <a class="btn btn-sm btn-outline-dark" href="<?= site_url('shopkart/whatsapp/templates/edit/'.$t['id']) ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>">Edit</a>
             <a class="btn btn-sm btn-outline-primary" href="<?= site_url('shopkart/whatsapp/campaigns/add?template_id='.$t['id']) ?><?= !empty($vendor_id) ? '&vendor_id='.(int)$vendor_id : '' ?>">Campaign</a>
-            <a class="btn btn-sm btn-outline-success" href="<?= site_url('shopkart/whatsapp/templates/push/'.$t['id']) ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>">Push to Meta</a>
             <a class="btn btn-sm btn-outline-danger" href="<?= site_url('shopkart/whatsapp/templates/delete/'.$t['id']) ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>" onclick="return confirm('Delete this template?')">Delete</a>
           </td>
         </tr>

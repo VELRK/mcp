@@ -25,6 +25,44 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
         return $row ?: null;
     }
 
+    public function find_template_by_event(int $vendorId, string $eventKey): ?array {
+        if ($vendorId < 1 || $eventKey === '' || !$this->db->field_exists('event_key', 'wa_cloud_templates')) {
+            return null;
+        }
+        $row = $this->db->where('vendor_id', $vendorId)
+            ->where('event_key', $eventKey)
+            ->order_by('id', 'DESC')
+            ->limit(1)
+            ->get('wa_cloud_templates')
+            ->row_array();
+        return $row ?: null;
+    }
+
+    public function find_template_by_name(int $vendorId, string $name, string $language = 'en'): ?array {
+        if ($vendorId < 1 || $name === '') {
+            return null;
+        }
+        $row = $this->db->where('vendor_id', $vendorId)
+            ->where('name', $name)
+            ->where('language', $language)
+            ->limit(1)
+            ->get('wa_cloud_templates')
+            ->row_array();
+        return $row ?: null;
+    }
+
+    public function list_event_templates(int $vendorId): array {
+        if ($vendorId < 1 || !$this->db->field_exists('event_key', 'wa_cloud_templates')) {
+            return [];
+        }
+        return $this->db->where('vendor_id', $vendorId)
+            ->where('event_key IS NOT NULL', null, false)
+            ->where('event_key !=', '')
+            ->order_by('id', 'ASC')
+            ->get('wa_cloud_templates')
+            ->result_array();
+    }
+
     public function save_template(array $data, int $id = 0): int {
         $now = date('Y-m-d H:i:s');
         $data['updated_at'] = $now;

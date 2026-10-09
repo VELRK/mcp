@@ -13,6 +13,9 @@
   <link href="<?= base_url('assets/aquiry/css/app.min.css') ?>" id="app-style" rel="stylesheet" type="text/css">
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
   <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin-theme.css') ?>">
+  <?php if (!empty($load_quill) || !empty($extra_js)): ?>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css">
+  <?php endif; ?>
   <style>
     .brand-mark { font-weight: 700; letter-spacing: -0.02em; line-height: 1; white-space: nowrap; }
     .brand-mark .brand-ai { color: var(--bs-primary); }

@@ -60,6 +60,9 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
             $CI->db->query("ALTER TABLE `wa_cloud_templates` ADD UNIQUE KEY `uniq_vendor_name_lang` (`vendor_id`, `name`(140), `language`)");
         }
     }
+    if ($CI->db->table_exists('wa_cloud_templates') && !$CI->db->field_exists('event_key', 'wa_cloud_templates')) {
+        $CI->db->query("ALTER TABLE `wa_cloud_templates` ADD COLUMN `event_key` VARCHAR(40) NULL, ADD KEY `idx_wa_tpl_event` (`vendor_id`, `event_key`)");
+    }
 
     if (!$CI->db->table_exists('wa_cloud_campaigns')) {
         $CI->db->query("CREATE TABLE `wa_cloud_campaigns` (
@@ -523,6 +526,10 @@ function sk_wa_cloud_customer_modules(): array {
         'last_order_number' => ['label' => 'Last order no.', 'group' => 'Orders'],
         'last_order_total'  => ['label' => 'Last order total', 'group' => 'Orders'],
         'last_order_status' => ['label' => 'Last order status', 'group' => 'Orders'],
+        'order_number'      => ['label' => 'This order no.', 'group' => 'Orders'],
+        'order_status'      => ['label' => 'This order status', 'group' => 'Orders'],
+        'order_total'       => ['label' => 'This order total', 'group' => 'Orders'],
+        'shop_name'         => ['label' => 'This shop name', 'group' => 'Store'],
         'site_name'         => ['label' => 'Store name', 'group' => 'Store'],
     ];
 }
@@ -573,6 +580,10 @@ function sk_wa_cloud_example_samples(string $text, $variableMap): array {
         'last_order_number' => 'SK1001',
         'last_order_total'  => '329',
         'last_order_status' => 'ready',
+        'order_number'      => 'SK1001',
+        'order_status'      => 'Confirmed',
+        'order_total'       => '329',
+        'shop_name'         => 'Shopkart',
         'site_name'         => 'Shopkart',
     ];
     $max = max($indexes);
@@ -754,6 +765,10 @@ function sk_wa_cloud_load_customer_context(?array $user, ?array $settings = null
         'last_order_number' => trim((string)($order['order_number'] ?? '')),
         'last_order_total'  => $orderTotal,
         'last_order_status' => trim((string)($order['status'] ?? '')),
+        'order_number'      => trim((string)($order['order_number'] ?? '')),
+        'order_status'      => trim((string)($order['status'] ?? '')),
+        'order_total'       => $orderTotal,
+        'shop_name'         => trim((string)($settings['site_name'] ?? $settings['company_legal_name'] ?? 'Talk AI Pilot')),
         'site_name'         => trim((string)($settings['site_name'] ?? $settings['company_legal_name'] ?? 'Talk AI Pilot')),
     ];
 }
@@ -1144,4 +1159,205 @@ function sk_wa_meta_save_connection(array $tokenData, array $assets, array $sign
     // Platform / Meta connect page (no vendor): persist global Cloud credentials.
     $CI->Sk_Admin_model->save_settings($save);
     return $save;
+}
+
+/**
+ * Shared ecommerce WhatsApp templates. Every vendor gets the same four events.
+ *
+ * @return array<int,array{event_key:string,name:string,body:string,map:array<string,string>}>
+ */
+function sk_wa_ecomm_template_defs(): array {
+    return [
+        [
+            'event_key' => 'order_created',
+            'name'      => 'order_created',
+            'body'      => 'Hi {{1}}, your order {{2}} has been received. Total {{3}}. Thank you for shopping with {{4}}.',
+            'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'order_total', '4' => 'shop_name'],
+        ],
+        [
+            'event_key' => 'order_updated',
+            'name'      => 'order_updated',
+            'body'      => 'Hi {{1}}, your order {{2}} is now {{3}}. Total {{4}}. Thank you for shopping with {{5}}.',
+            'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'order_status', '4' => 'order_total', '5' => 'shop_name'],
+        ],
+        [
+            'event_key' => 'order_cancelled',
+            'name'      => 'order_cancelled',
+            'body'      => 'Hi {{1}}, your order {{2}} has been cancelled. If you have questions, please contact {{3}}.',
+            'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'shop_name'],
+        ],
+        [
+            'event_key' => 'order_delivered',
+            'name'      => 'order_delivered',
+            'body'      => 'Hi {{1}}, your order {{2}} has been delivered. We hope you enjoy your purchase. Thank you for shopping with {{3}}.',
+            'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'shop_name'],
+        ],
+    ];
+}
+
+function sk_wa_ecomm_event_for_status(string $status): string {
+    $status = strtolower(trim($status));
+    if (in_array($status, ['pending', 'confirmed'], true)) {
+        return 'order_created';
+    }
+    if (in_array($status, ['cancelled', 'canceled', 'returned'], true)) {
+        return 'order_cancelled';
+    }
+    if ($status === 'delivered') {
+        return 'order_delivered';
+    }
+    if (in_array($status, ['processing', 'shipped', 'ready', 'out_for_delivery'], true)) {
+        return 'order_updated';
+    }
+    return '';
+}
+
+/**
+ * Create the shared order templates for one vendor. Push new drafts to Meta when asked.
+ *
+ * @return array{created:int,pushed:int,errors:array<int,string>}
+ */
+function sk_wa_ecomm_seed_vendor(int $vendorId, bool $push = false): array {
+    $out = ['created' => 0, 'pushed' => 0, 'errors' => []];
+    if ($vendorId < 1) {
+        return $out;
+    }
+    sk_wa_cloud_ensure_schema();
+    $CI =& get_instance();
+    if (!isset($CI->Sk_Whatsapp_cloud_model)) {
+        $CI->load->model('Sk_Whatsapp_cloud_model');
+    }
+    foreach (sk_wa_ecomm_template_defs() as $def) {
+        $row = $CI->Sk_Whatsapp_cloud_model->find_template_by_event($vendorId, $def['event_key']);
+        if (!$row) {
+            $row = $CI->Sk_Whatsapp_cloud_model->find_template_by_name($vendorId, $def['name']);
+        }
+        if (!$row) {
+            $id = $CI->Sk_Whatsapp_cloud_model->save_template([
+                'vendor_id'    => $vendorId,
+                'name'         => $def['name'],
+                'language'     => 'en',
+                'category'     => 'UTILITY',
+                'kind'         => 'text',
+                'body_text'    => $def['body'],
+                'header_text'  => '',
+                'footer_text'  => '',
+                'status'       => 'DRAFT',
+                'event_key'    => $def['event_key'],
+                'variable_map' => json_encode($def['map'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]);
+            $row = $CI->Sk_Whatsapp_cloud_model->get_template($id, $vendorId);
+            $out['created']++;
+        } elseif (trim((string)($row['event_key'] ?? '')) === '') {
+            $CI->Sk_Whatsapp_cloud_model->save_template(['event_key' => $def['event_key']], (int)$row['id']);
+            $row['event_key'] = $def['event_key'];
+        }
+        if (!$push || !$row) {
+            continue;
+        }
+        $status = strtoupper((string)($row['status'] ?? 'DRAFT'));
+        if ($status !== 'DRAFT' && trim((string)($row['meta_id'] ?? '')) !== '') {
+            continue;
+        }
+        $pushed = sk_wa_cloud_submit_template((int)$row['id'], $vendorId);
+        if (!empty($pushed['ok'])) {
+            $out['pushed']++;
+        } elseif (!empty($pushed['text'])) {
+            $out['errors'][] = $def['name'] . ': ' . $pushed['text'];
+        }
+    }
+    return $out;
+}
+
+/**
+ * Submit one saved template to Meta. Image and video headers are uploaded first.
+ *
+ * @return array{ok:bool,text:string}
+ */
+function sk_wa_cloud_submit_template(int $id, int $vendorId = 0): array {
+    $CI =& get_instance();
+    if (!isset($CI->Sk_Whatsapp_cloud_model)) {
+        $CI->load->model('Sk_Whatsapp_cloud_model');
+    }
+    if (!isset($CI->Sk_Admin_model)) {
+        $CI->load->model('Sk_Admin_model');
+    }
+    $row = $CI->Sk_Whatsapp_cloud_model->get_template($id, $vendorId > 0 ? $vendorId : null);
+    if (!$row) {
+        return ['ok' => false, 'text' => 'Template not found.'];
+    }
+    $vid = $vendorId > 0 ? $vendorId : (int)($row['vendor_id'] ?? 0);
+    $settings = $CI->Sk_Admin_model->get_settings();
+    if ($vid > 0) {
+        $settings['vendor_id'] = $vid;
+    }
+    if (!sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null)) {
+        return ['ok' => false, 'text' => sk_wa_cloud_not_ready_reason($settings, $vid > 0 ? $vid : null)];
+    }
+    $cfg = sk_wa_cloud_config($settings, $vid > 0 ? $vid : null);
+    if (trim((string)($cfg['waba_id'] ?? '')) === '') {
+        return ['ok' => false, 'text' => 'WhatsApp Business Account ID is missing for this number.'];
+    }
+    if (isset($CI->whatsapp_cloud)) {
+        unset($CI->whatsapp_cloud);
+    }
+    $CI->load->library('Whatsapp_cloud', $settings);
+    $components = [];
+    $variableMap = $row['variable_map'] ?? '';
+    $kind = (string)($row['kind'] ?? 'text');
+    if ($kind === 'image' || $kind === 'video') {
+        $fmt = $kind === 'video' ? 'VIDEO' : 'IMAGE';
+        $file = sk_wa_cloud_local_media_path((string)($row['media_url'] ?? ''));
+        if ($file === '') {
+            return ['ok' => false, 'text' => 'Upload a header image or video before this template can be sent to Meta.'];
+        }
+        $uploaded = sk_wa_cloud_template_header_handle($file, $cfg);
+        if (empty($uploaded['ok'])) {
+            return ['ok' => false, 'text' => $uploaded['error'] ?: 'Header file upload failed.'];
+        }
+        $components[] = [
+            'type'    => 'HEADER',
+            'format'  => $fmt,
+            'example' => ['header_handle' => [$uploaded['handle']]],
+        ];
+    } elseif (trim((string)($row['header_text'] ?? '')) !== '') {
+        $header = ['type' => 'HEADER', 'format' => 'TEXT', 'text' => $row['header_text']];
+        $headerSamples = sk_wa_cloud_example_samples((string)$row['header_text'], $variableMap);
+        if ($headerSamples) {
+            $header['example'] = ['header_text' => $headerSamples];
+        }
+        $components[] = $header;
+    }
+    $body = ['type' => 'BODY', 'text' => (string)$row['body_text']];
+    $bodySamples = sk_wa_cloud_example_samples((string)$row['body_text'], $variableMap);
+    if ($bodySamples) {
+        $body['example'] = ['body_text' => [$bodySamples]];
+    }
+    $components[] = $body;
+    if (trim((string)($row['footer_text'] ?? '')) !== '') {
+        $components[] = ['type' => 'FOOTER', 'text' => $row['footer_text']];
+    }
+    $res = $CI->whatsapp_cloud->create_template([
+        'name'       => $row['name'],
+        'language'   => $row['language'] ?: 'en',
+        'category'   => $row['category'] ?: 'UTILITY',
+        'components' => $components,
+    ]);
+    if (!empty($res['success'])) {
+        $CI->Sk_Whatsapp_cloud_model->save_template([
+            'meta_id'      => (string)($res['data']['id'] ?? $row['meta_id']),
+            'status'       => (string)($res['data']['status'] ?? 'PENDING'),
+            'meta_payload' => json_encode($res['data'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ], $id);
+        return ['ok' => true, 'text' => 'Submitted to Meta. Status: ' . ($res['data']['status'] ?? 'PENDING')];
+    }
+    $text = (string)($res['message'] ?? 'Meta rejected the template.');
+    if (stripos($text, 'already') !== false || stripos($text, 'duplicate') !== false) {
+        return ['ok' => true, 'text' => 'This template is already on Meta. Open the list to refresh its approval status.'];
+    }
+    $CI->Sk_Whatsapp_cloud_model->save_template([
+        'status'       => 'FAILED',
+        'meta_payload' => json_encode($res['data'] ?? $res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ], $id);
+    return ['ok' => false, 'text' => $text];
 }
