@@ -615,14 +615,16 @@ class Whatsapp extends Sk_Base {
             $settings['vendor_id'] = $vid;
             $readyNow = sk_wa_cloud_is_ready($settings, $vid);
             $seed = sk_wa_ecomm_seed_vendor($vid, $readyNow);
-            if (!empty($seed['created']) || !empty($seed['pushed'])) {
+            if (!empty($seed['errors']) && empty($seed['pushed'])) {
+                $this->session->set_flashdata('error', implode(' ', $seed['errors']));
+            } elseif (!empty($seed['created']) || !empty($seed['pushed'])) {
                 $note = 'Order templates ready';
                 if (!empty($seed['created'])) {
                     $note .= ' (' . (int)$seed['created'] . ' added)';
                 }
                 $note .= !empty($seed['pushed']) ? ' and submitted to Meta.' : '.';
                 if (!empty($seed['errors'])) {
-                    $this->session->set_flashdata('error', $note . ' ' . implode(' ', array_slice($seed['errors'], 0, 2)));
+                    $this->session->set_flashdata('error', $note . ' ' . implode(' ', $seed['errors']));
                 } else {
                     $this->session->set_flashdata('success', $note);
                 }

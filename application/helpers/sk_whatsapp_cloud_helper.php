@@ -1206,28 +1206,6 @@ function sk_wa_ecomm_event_for_status(string $status): string {
     return '';
 }
 
-/** Remove a shop template name from Meta before it is created again. Missing names are ignored. */
-function sk_wa_ecomm_delete_remote_template(int $vendorId, string $name): void {
-    $name = trim($name);
-    if ($vendorId < 1 || $name === '') {
-        return;
-    }
-    $CI =& get_instance();
-    if (!isset($CI->Sk_Admin_model)) {
-        $CI->load->model('Sk_Admin_model');
-    }
-    $settings = $CI->Sk_Admin_model->get_settings();
-    $settings['vendor_id'] = $vendorId;
-    if (!sk_wa_cloud_is_ready($settings, $vendorId)) {
-        return;
-    }
-    if (isset($CI->whatsapp_cloud)) {
-        unset($CI->whatsapp_cloud);
-    }
-    $CI->load->library('Whatsapp_cloud', $settings);
-    $CI->whatsapp_cloud->delete_template($name);
-}
-
 /**
  * Create the shared order templates for one vendor. Push new drafts to Meta when asked.
  *
@@ -1253,12 +1231,17 @@ function sk_wa_ecomm_seed_vendor(int $vendorId, bool $push = false): array {
             $metaId = trim((string)($row['meta_id'] ?? ''));
             $storedBody = trim((string)($row['body_text'] ?? ''));
             $rejected = in_array($status, ['FAILED', 'REJECTED'], true);
-            if ($rejected || ($metaId === '' && $storedBody !== $def['body'])) {
-                if ($push) {
-                    sk_wa_ecomm_delete_remote_template($vendorId, $def['name']);
-                }
-                $CI->Sk_Whatsapp_cloud_model->delete_template((int)$row['id'], $vendorId);
-                $row = null;
+            // Keep the same Meta name. Deleting it and creating English again in the
+            // same minute is rejected while Meta is still removing the old language.
+            if ($metaId === '' && ($rejected || $storedBody !== $def['body'])) {
+                $CI->Sk_Whatsapp_cloud_model->save_template([
+                    'body_text'    => $def['body'],
+                    'variable_map' => json_encode($def['map'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'status'       => 'DRAFT',
+                    'event_key'    => $def['event_key'],
+                    'meta_payload' => null,
+                ], (int)$row['id']);
+                $row = $CI->Sk_Whatsapp_cloud_model->get_template((int)$row['id'], $vendorId);
             }
         }
         if (!$row) {
@@ -1383,6 +1366,13 @@ function sk_wa_cloud_submit_template(int $id, int $vendorId = 0): array {
     $text = (string)($res['message'] ?? 'Meta rejected the template.');
     if (stripos($text, 'already') !== false || stripos($text, 'duplicate') !== false) {
         return ['ok' => true, 'text' => 'This template is already on Meta. Open the list to refresh its approval status.'];
+    }
+    if (stripos($text, 'being deleted') !== false) {
+        $CI->Sk_Whatsapp_cloud_model->save_template([
+            'status'       => 'DRAFT',
+            'meta_payload' => json_encode($res['data'] ?? $res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ], $id);
+        return ['ok' => false, 'text' => 'Meta is still deleting the previous English template. Wait a minute, then open Order templates again.'];
     }
     $CI->Sk_Whatsapp_cloud_model->save_template([
         'status'       => 'FAILED',
