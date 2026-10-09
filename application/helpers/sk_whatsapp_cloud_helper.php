@@ -1165,25 +1165,25 @@ function sk_wa_ecomm_template_defs(): array {
         [
             'event_key' => 'order_created',
             'name'      => 'order_created',
-            'body'      => 'Hi {{1}}, your order {{2}} has been received. Total {{3}}. Thank you for shopping with {{4}}.',
+            'body'      => 'Hi {{1}}, your order {{2}} has been received. The total is {{3}}. Thank you for shopping with {{4}} today.',
             'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'order_total', '4' => 'shop_name'],
         ],
         [
             'event_key' => 'order_updated',
             'name'      => 'order_updated',
-            'body'      => 'Hi {{1}}, your order {{2}} is now {{3}}. Total {{4}}. Thank you for shopping with {{5}}.',
+            'body'      => 'Hi {{1}}, your order {{2}} is now {{3}}. The total is {{4}}. Thank you for shopping with {{5}} today.',
             'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'order_status', '4' => 'order_total', '5' => 'shop_name'],
         ],
         [
             'event_key' => 'order_cancelled',
             'name'      => 'order_cancelled',
-            'body'      => 'Hi {{1}}, your order {{2}} has been cancelled. If you have questions, please contact {{3}}.',
+            'body'      => 'Hi {{1}}, your order {{2}} has been cancelled. Please contact {{3}} if you need any help.',
             'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'shop_name'],
         ],
         [
             'event_key' => 'order_delivered',
             'name'      => 'order_delivered',
-            'body'      => 'Hi {{1}}, your order {{2}} has been delivered. We hope you enjoy your purchase. Thank you for shopping with {{3}}.',
+            'body'      => 'Hi {{1}}, your order {{2}} has been delivered. Thank you for shopping with {{3}} today.',
             'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'shop_name'],
         ],
     ];
@@ -1206,6 +1206,28 @@ function sk_wa_ecomm_event_for_status(string $status): string {
     return '';
 }
 
+/** Remove a shop template name from Meta before it is created again. Missing names are ignored. */
+function sk_wa_ecomm_delete_remote_template(int $vendorId, string $name): void {
+    $name = trim($name);
+    if ($vendorId < 1 || $name === '') {
+        return;
+    }
+    $CI =& get_instance();
+    if (!isset($CI->Sk_Admin_model)) {
+        $CI->load->model('Sk_Admin_model');
+    }
+    $settings = $CI->Sk_Admin_model->get_settings();
+    $settings['vendor_id'] = $vendorId;
+    if (!sk_wa_cloud_is_ready($settings, $vendorId)) {
+        return;
+    }
+    if (isset($CI->whatsapp_cloud)) {
+        unset($CI->whatsapp_cloud);
+    }
+    $CI->load->library('Whatsapp_cloud', $settings);
+    $CI->whatsapp_cloud->delete_template($name);
+}
+
 /**
  * Create the shared order templates for one vendor. Push new drafts to Meta when asked.
  *
@@ -1225,6 +1247,19 @@ function sk_wa_ecomm_seed_vendor(int $vendorId, bool $push = false): array {
         $row = $CI->Sk_Whatsapp_cloud_model->find_template_by_event($vendorId, $def['event_key']);
         if (!$row) {
             $row = $CI->Sk_Whatsapp_cloud_model->find_template_by_name($vendorId, $def['name']);
+        }
+        if ($row) {
+            $status = strtoupper((string)($row['status'] ?? 'DRAFT'));
+            $metaId = trim((string)($row['meta_id'] ?? ''));
+            $storedBody = trim((string)($row['body_text'] ?? ''));
+            $rejected = in_array($status, ['FAILED', 'REJECTED'], true);
+            if ($rejected || ($metaId === '' && $storedBody !== $def['body'])) {
+                if ($push) {
+                    sk_wa_ecomm_delete_remote_template($vendorId, $def['name']);
+                }
+                $CI->Sk_Whatsapp_cloud_model->delete_template((int)$row['id'], $vendorId);
+                $row = null;
+            }
         }
         if (!$row) {
             $id = $CI->Sk_Whatsapp_cloud_model->save_template([
