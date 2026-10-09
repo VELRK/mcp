@@ -391,6 +391,10 @@ class Sk_Payment extends Sk_Base_Api {
                 $view['message'] = $outcome['message'] ?? sk_razorpay_pending_message();
             } else {
                 $view['message'] = $outcome['message'] ?? ($result['message'] ?? $view['message']);
+                if ($order && ($outcome['kind'] ?? '') !== 'pending' && empty($result['pending'])) {
+                    $this->load->helper('sk_whatsapp');
+                    sk_whatsapp_notify_payment_result($order, false, $settings);
+                }
             }
             $this->load->view('payment/result', $view);
             return;
@@ -403,6 +407,15 @@ class Sk_Payment extends Sk_Base_Api {
             $view['message'] = sk_razorpay_pending_message();
             $this->load->view('payment/result', $view);
             return;
+        }
+
+        if ($shopOrderId > 0) {
+            $order = $this->Sk_Order_model->get_by_id($shopOrderId);
+            if ($order) {
+                $view['order_number'] = (string)($order['order_number'] ?? '');
+                $this->load->helper('sk_whatsapp');
+                sk_whatsapp_notify_payment_result($order, false, $settings);
+            }
         }
 
         $this->load->view('payment/result', $view);

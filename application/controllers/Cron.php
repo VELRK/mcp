@@ -71,6 +71,10 @@ class Cron extends CI_Controller {
         $results = [];
         foreach ($ids as $id) {
             $seed = sk_wa_ecomm_seed_vendor($id, true);
+            $adminSeed = sk_wa_admin_seed_vendor($id, true);
+            $seed['created'] += (int)$adminSeed['created'];
+            $seed['pushed'] += (int)$adminSeed['pushed'];
+            $seed['errors'] = array_merge($seed['errors'], $adminSeed['errors']);
             $results[] = [
                 'vendor_id' => $id,
                 'created'   => (int)$seed['created'],

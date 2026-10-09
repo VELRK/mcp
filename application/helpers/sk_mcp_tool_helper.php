@@ -739,6 +739,11 @@ function sk_ai_human_handoff(array $context = [], ?int $tenantId = null): array 
     } catch (Throwable $e) {
         log_message('error', 'sk_ai_human_handoff: ' . $e->getMessage());
     }
+    if ($tenantId && $tenantId > 0) {
+        $CI =& get_instance();
+        $CI->load->helper('sk_whatsapp');
+        sk_whatsapp_notify_handoff((int)$tenantId, $phone, $reason, trim((string)($data['customer_name'] ?? $data['name'] ?? '')));
+    }
     return [
         'success' => true,
         'data' => [

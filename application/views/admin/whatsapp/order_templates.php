@@ -1,7 +1,7 @@
 <div class="sk-page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
   <div>
-    <h5 class="sk-page-title mb-0">Order templates</h5>
-    <div class="small text-muted">The same order created, updated, cancelled, and delivered messages for every shop. Sent with the Meta API.</div>
+    <h5 class="sk-page-title mb-0">Shop templates</h5>
+    <div class="small text-muted">Order, payment, invoice, refund, support, and WhatsApp enrollment messages. Sent with the Meta API to the customer, shop owner, or platform admin.</div>
   </div>
   <a class="btn btn-sm btn-outline-secondary" href="<?= site_url('admin/whatsapp/templates') ?><?= !empty($vendor_id) ? '?vendor_id='.(int)$vendor_id : '' ?>">Other templates</a>
 </div>
@@ -9,7 +9,7 @@
 <?php if (empty($vendor_id)): ?>
 <div class="card sk-table-card shadow-sm">
   <div class="card-body">
-    <p class="mb-3">Choose a shop. Each vendor gets these four templates when WhatsApp is connected.</p>
+    <p class="mb-3">Choose a shop. Each vendor gets these templates when WhatsApp is connected.</p>
     <div class="list-group">
       <?php foreach ($vendors as $v): ?>
         <a class="list-group-item list-group-item-action" href="<?= site_url('admin/whatsapp/order-templates?vendor_id='.(int)$v['id']) ?>">
@@ -31,8 +31,9 @@
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th>Event</th>
           <th>Template</th>
+          <th>Who</th>
+          <th>Trigger</th>
           <th>Message</th>
           <th>Meta status</th>
           <th></th>
@@ -57,8 +58,9 @@
             $cls = $st === 'APPROVED' ? 'bg-success' : ($st === 'REJECTED' || $st === 'FAILED' ? 'bg-danger' : 'bg-secondary');
         ?>
         <tr>
-          <td class="fw-semibold"><?= htmlspecialchars($labels[$def['event_key']] ?? $def['event_key']) ?></td>
           <td><code><?= htmlspecialchars($def['name']) ?></code></td>
+          <td class="small"><?= htmlspecialchars($def['audience'] ?? 'Customer') ?></td>
+          <td class="small"><?= htmlspecialchars($def['trigger'] ?? ($labels[$def['event_key']] ?? $def['event_key'])) ?></td>
           <td class="small text-muted"><?= htmlspecialchars(mb_substr((string)($t['body_text'] ?? $def['body']), 0, 110)) ?></td>
           <td><span class="badge <?= $cls ?>"><?= htmlspecialchars($st) ?></span></td>
           <td class="text-nowrap">

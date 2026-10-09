@@ -215,6 +215,14 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 $owner,
                 'messaging_handovers'
             );
+            if ($vendorId > 0 && in_array($owner, ['app', 'human'], true)) {
+                sk_whatsapp_notify_handoff(
+                    $vendorId,
+                    $to,
+                    'WhatsApp handed the chat to the shop',
+                    (string)($value['contacts'][0]['profile']['name'] ?? '')
+                );
+            }
         }
 
         log_message('info', 'WhatsApp messaging_handovers: ' . json_encode([
@@ -325,6 +333,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 $this->Sk_Vendor_meta_agent_model->set_conversation_owner((int)$conv['id'], $forceOwner, 'standby');
             } elseif ($direction === 'out' && $this->_is_bizai_echo($raw, $m)) {
                 $this->Sk_Vendor_meta_agent_model->set_conversation_owner((int)$conv['id'], 'meta_agent', 'message_echo');
+            }
+            if ($direction === 'in' && $vendorId > 0 && !empty($conv['handoff_at'])) {
+                sk_whatsapp_notify_handoff($vendorId, $peer, $body, $names[$peer] ?? '', true);
             }
         }
     }

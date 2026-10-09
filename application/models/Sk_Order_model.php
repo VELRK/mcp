@@ -540,6 +540,12 @@ class Sk_Order_model extends CI_Model {
             'payment_status'=> 'refunded',
         ]);
         $this->void_invoice($orderId, false);
+        $fresh = $this->get_by_id($orderId);
+        if ($fresh) {
+            $CI =& get_instance();
+            $CI->load->helper('sk_whatsapp');
+            sk_whatsapp_notify_refund($fresh, $settings);
+        }
         $state = ($refund['refund_status'] ?? '') === 'completed' ? 'completed' : 'initiated';
         return ['ok' => true, 'message' => 'Razorpay refund ' . $state . '. Invoice is void and inactive.'];
     }

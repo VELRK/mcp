@@ -399,10 +399,14 @@ function sk_whatsapp_notify_order_status(array $order, string $status, array $se
     }
     $baseLog['vendor_id'] = $vendorId;
     sk_wa_ecomm_seed_vendor($vendorId, false);
+    sk_wa_admin_seed_vendor($vendorId, false);
     if (!isset($CI->Sk_Whatsapp_cloud_model)) {
         $CI->load->model('Sk_Whatsapp_cloud_model');
     }
-    $tpl = $CI->Sk_Whatsapp_cloud_model->find_template_by_event($vendorId, $event);
+    $adminEvent = $event === 'order_created' ? 'order_placed' : ($event === 'order_cancelled' ? 'order_cancel_alert' : '');
+    $adminTpl = $adminEvent !== '' ? $CI->Sk_Whatsapp_cloud_model->find_template_by_event($vendorId, $adminEvent) : null;
+    $useAdmin = $adminTpl && strtoupper((string)($adminTpl['status'] ?? '')) === 'APPROVED';
+    $tpl = $useAdmin ? $adminTpl : $CI->Sk_Whatsapp_cloud_model->find_template_by_event($vendorId, $event);
     if (!$tpl) {
         return $fail($baseLog, 'Order template "' . $event . '" is missing for this shop.');
     }
@@ -476,7 +480,365 @@ function sk_whatsapp_notify_order_status(array $order, string $status, array $se
     log_message('info', 'Meta WA order ' . ($order['id'] ?? '?') . ' status=' . $status
         . ' tpl=' . $tpl['name'] . ' ok=' . ($ok ? '1' : '0') . ' to=' . $phone);
 
+    sk_whatsapp_fanout_order_alerts($order, $status, $settings, $phone, (string)$tpl['name']);
+
     return ['success' => $ok, 'message' => $message, 'via' => 'meta:' . $tpl['name'], 'response' => $sent['data'] ?? null];
+}
+
+/**
+ * Extra admin templates for the same order event.
+ * Customer already received $sentTemplate. Owners get that message too when it
+ * is an admin template, plus the owner-only alert.
+ */
+function sk_whatsapp_fanout_order_alerts(array $order, string $status, array $settings, string $customerPhone, string $sentTemplate): void {
+    $vendorId = sk_whatsapp_order_vendor_id($order);
+    if ($vendorId < 1) {
+        return;
+    }
+    $event = sk_wa_ecomm_event_for_status($status);
+    $context = sk_whatsapp_alert_context($order, $settings);
+    $owners = sk_whatsapp_owner_phones($vendorId);
+    $customer = sk_whatsapp_unique_phones([$customerPhone]);
+    $log = [
+        'order_id'       => (int)($order['id'] ?? 0) ?: null,
+        'order_number'   => (string)($order['order_number'] ?? ''),
+        'status_trigger' => $status,
+        'vendor_id'      => $vendorId,
+    ];
+    if ($event === 'order_created') {
+        $placedTo = $sentTemplate === 'order_placed' ? $owners : array_merge($customer, $owners);
+        sk_whatsapp_send_shop_event($vendorId, 'order_placed', $context, $placedTo, $settings, $log, $sentTemplate === 'order_placed' ? $customerPhone : '');
+        sk_whatsapp_send_shop_event($vendorId, 'new_order_admin_alert', $context, $owners, $settings, $log);
+    } elseif ($event === 'order_cancelled') {
+        $cancelTo = $sentTemplate === 'order_cancelled' ? $owners : array_merge($customer, $owners);
+        sk_whatsapp_send_shop_event($vendorId, 'order_cancel_alert', $context, $cancelTo, $settings, $log, $sentTemplate === 'order_cancelled' ? $customerPhone : '');
+    }
+}
+
+function sk_whatsapp_unique_phones(array $phones): array {
+    $CI =& get_instance();
+    $CI->load->helper('sk_whatsapp_cloud');
+    $out = [];
+    foreach ($phones as $phone) {
+        $norm = sk_wa_cloud_normalize_phone((string)$phone);
+        if ($norm !== '') {
+            $out[$norm] = $norm;
+        }
+    }
+    return array_values($out);
+}
+
+function sk_whatsapp_owner_phones(int $vendorId): array {
+    $CI =& get_instance();
+    $phones = [];
+    if ($vendorId > 0 && $CI->db->table_exists('vendor_stores')) {
+        $store = $CI->db->select('contact_phone')->where('vendor_id', $vendorId)->get('vendor_stores')->row_array();
+        $phones[] = (string)($store['contact_phone'] ?? '');
+    }
+    if ($vendorId > 0 && $CI->db->table_exists('vendors')) {
+        $vendor = $CI->db->select('phone')->where('id', $vendorId)->get('vendors')->row_array();
+        $phones[] = (string)($vendor['phone'] ?? '');
+    }
+    return sk_whatsapp_unique_phones($phones);
+}
+
+function sk_whatsapp_platform_phones(array $settings): array {
+    return sk_whatsapp_unique_phones([(string)($settings['site_phone'] ?? '')]);
+}
+
+function sk_whatsapp_alert_context(array $order, array $settings, array $extra = []): array {
+    $CI =& get_instance();
+    $CI->load->helper('sk_currency');
+    $vendorId = sk_whatsapp_order_vendor_id($order);
+    $shop = sk_whatsapp_shop_name($vendorId, $settings);
+    if ($shop === '') {
+        $shop = 'the shop';
+    }
+    $name = trim((string)($order['customer_name'] ?? $order['shipping_name'] ?? ''));
+    if ($name === '') {
+        $name = 'Customer';
+    }
+    $orderNo = trim((string)($order['order_number'] ?? ''));
+    if ($orderNo === '') {
+        $orderNo = '#' . (int)($order['id'] ?? 0);
+    }
+    $totalRaw = $order['total'] ?? '';
+    $total = ($totalRaw !== '' && $totalRaw !== null && function_exists('sk_money'))
+        ? sk_money($totalRaw, $settings)
+        : (string)$totalRaw;
+    if ($total === '') {
+        $total = '0';
+    }
+    $items = [];
+    foreach (($order['items'] ?? []) as $item) {
+        $label = trim((string)($item['product_name'] ?? 'Item'));
+        $qty = (int)($item['quantity'] ?? 1);
+        if ($label !== '') {
+            $items[] = $label . ' x' . $qty;
+        }
+    }
+    $itemSummary = $items ? implode(', ', $items) : 'items in this order';
+    if (function_exists('mb_substr')) {
+        $itemSummary = mb_substr($itemSummary, 0, 180);
+    }
+    $invoiceNo = trim((string)($extra['invoice_no'] ?? $orderNo));
+    $refund = trim((string)($order['refund_status'] ?? ''));
+    if ($refund === '' && strtolower((string)($order['payment_status'] ?? '')) === 'refunded') {
+        $refund = 'initiated';
+    }
+    $refund = $refund !== '' ? ucfirst($refund) : 'Updated';
+    return array_merge([
+        'name'           => $name,
+        'customer_name' => $name,
+        'customer_phone'=> trim((string)($order['shipping_phone'] ?? 'the customer')),
+        'order_number'  => $orderNo,
+        'order_total'   => $total,
+        'order_status'  => sk_whatsapp_status_label((string)($order['status'] ?? '')),
+        'shop_name'     => $shop,
+        'site_name'     => $shop,
+        'item_summary'  => $itemSummary,
+        'invoice_no'    => $invoiceNo !== '' ? $invoiceNo : $orderNo,
+        'refund_status' => $refund,
+        'reason'        => 'the customer needs help',
+        'admin_name'    => 'Admin',
+        'owner_name'    => 'there',
+        'display_phone' => 'the requested number',
+        'enroll_status' => 'pending',
+    ], $extra);
+}
+
+function sk_whatsapp_send_shop_event(int $vendorId, string $eventKey, array $context, array $phones, array $settings = null, array $logBase = [], string $skipPhone = ''): int {
+    if ($vendorId < 1 || $eventKey === '') {
+        return 0;
+    }
+    $CI =& get_instance();
+    $CI->load->helper('sk_whatsapp_cloud');
+    if ($settings === null) {
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    sk_whatsapp_ensure_log_schema();
+    sk_wa_admin_seed_vendor($vendorId, false);
+    if (!isset($CI->Sk_Whatsapp_cloud_model)) {
+        $CI->load->model('Sk_Whatsapp_cloud_model');
+    }
+    $tpl = $CI->Sk_Whatsapp_cloud_model->find_template_by_event($vendorId, $eventKey);
+    if (!$tpl || strtoupper((string)($tpl['status'] ?? '')) !== 'APPROVED') {
+        return 0;
+    }
+    $phones = sk_whatsapp_unique_phones($phones);
+    $skip = sk_wa_cloud_normalize_phone($skipPhone);
+    $settings['vendor_id'] = $vendorId;
+    if (!sk_wa_cloud_is_ready($settings, $vendorId)) {
+        return 0;
+    }
+    if ($eventKey === 'human_reply_alert' && sk_whatsapp_event_sent_recently($vendorId, (string)$tpl['name'], 15)) {
+        return 0;
+    }
+    $built = sk_wa_cloud_send_components($tpl, $context);
+    if (isset($CI->whatsapp_cloud)) {
+        unset($CI->whatsapp_cloud);
+    }
+    $CI->load->library('Whatsapp_cloud', $settings);
+    $sentCount = 0;
+    foreach ($phones as $phone) {
+        if ($skip !== '' && $phone === $skip) {
+            continue;
+        }
+        $sent = $CI->whatsapp_cloud->send_template(
+            $phone,
+            (string)$tpl['name'],
+            (string)($tpl['language'] ?: 'en'),
+            $built['components']
+        );
+        $ok = !empty($sent['success']);
+        if ($ok) {
+            $sentCount++;
+        }
+        $wamid = (string)($sent['data']['messages'][0]['id'] ?? '');
+        $message = $ok
+            ? ('Sent via Meta template "' . $tpl['name'] . '"')
+            : ('Meta template "' . $tpl['name'] . '" failed: ' . (string)($sent['message'] ?? 'send failed'));
+        sk_whatsapp_log($logBase + [
+            'vendor_id'       => $vendorId,
+            'phone'           => $phone,
+            'phone_source'    => 'alert',
+            'channel'         => 'meta',
+            'template_name'   => (string)$tpl['name'],
+            'wamid'           => $wamid !== '' ? $wamid : null,
+            'delivery_status' => $ok ? 'sent' : 'failed',
+            'reason'          => $message,
+            'http_code'       => $sent['http'] ?? null,
+            'api_message'     => $sent['message'] ?? $message,
+            'api_response'    => $sent['data'] ?? $sent,
+            'status_trigger'  => $logBase['status_trigger'] ?? $eventKey,
+        ]);
+    }
+    return $sentCount;
+}
+
+function sk_whatsapp_event_sent_recently(int $vendorId, string $template, int $minutes): bool {
+    $CI =& get_instance();
+    if (!$CI->db->table_exists('whatsapp_logs') || $template === '') {
+        return false;
+    }
+    $since = date('Y-m-d H:i:s', time() - ($minutes * 60));
+    $row = $CI->db->select('id')
+        ->where('vendor_id', $vendorId)
+        ->where('template_name', $template)
+        ->where('created_at >=', $since)
+        ->limit(1)
+        ->get('whatsapp_logs')
+        ->row_array();
+    return !empty($row);
+}
+
+function sk_whatsapp_notify_payment_result(array $order, bool $paid, array $settings = null): void {
+    $vendorId = sk_whatsapp_order_vendor_id($order);
+    if ($vendorId < 1) {
+        return;
+    }
+    if ($settings === null) {
+        $CI =& get_instance();
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    $context = sk_whatsapp_alert_context($order, $settings);
+    $log = [
+        'order_id'       => (int)($order['id'] ?? 0) ?: null,
+        'order_number'   => (string)($order['order_number'] ?? ''),
+        'status_trigger' => $paid ? 'payment_success' : 'payment_failed',
+        'vendor_id'      => $vendorId,
+    ];
+    if ($paid) {
+        $phones = array_merge(
+            sk_whatsapp_unique_phones([(string)($order['shipping_phone'] ?? '')]),
+            sk_whatsapp_owner_phones($vendorId)
+        );
+        sk_whatsapp_send_shop_event($vendorId, 'payment_success', $context, $phones, $settings, $log);
+        return;
+    }
+    sk_whatsapp_send_shop_event($vendorId, 'payment_failed_admin_alert', $context, sk_whatsapp_owner_phones($vendorId), $settings, $log);
+}
+
+function sk_whatsapp_notify_invoice(array $order, array $settings = null, string $invoiceNo = ''): void {
+    $vendorId = sk_whatsapp_order_vendor_id($order);
+    if ($vendorId < 1) {
+        return;
+    }
+    if ($settings === null) {
+        $CI =& get_instance();
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    if (sk_whatsapp_event_sent_recently($vendorId, 'invoice_created', 60)) {
+        return;
+    }
+    $context = sk_whatsapp_alert_context($order, $settings, ['invoice_no' => $invoiceNo]);
+    $log = [
+        'order_id'       => (int)($order['id'] ?? 0) ?: null,
+        'order_number'   => (string)($order['order_number'] ?? ''),
+        'status_trigger' => 'invoice_created',
+        'vendor_id'      => $vendorId,
+    ];
+    sk_whatsapp_send_shop_event(
+        $vendorId,
+        'invoice_created',
+        $context,
+        sk_whatsapp_unique_phones([(string)($order['shipping_phone'] ?? '')]),
+        $settings,
+        $log
+    );
+    sk_whatsapp_send_shop_event($vendorId, 'invoice_shared_admin_alert', $context, sk_whatsapp_owner_phones($vendorId), $settings, $log);
+}
+
+function sk_whatsapp_notify_refund(array $order, array $settings = null): void {
+    $vendorId = sk_whatsapp_order_vendor_id($order);
+    if ($vendorId < 1) {
+        return;
+    }
+    if ($settings === null || $settings === []) {
+        $CI =& get_instance();
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    $context = sk_whatsapp_alert_context($order, $settings);
+    $log = [
+        'order_id'       => (int)($order['id'] ?? 0) ?: null,
+        'order_number'   => (string)($order['order_number'] ?? ''),
+        'status_trigger' => 'refund_status_update',
+        'vendor_id'      => $vendorId,
+    ];
+    $phones = array_merge(
+        sk_whatsapp_unique_phones([(string)($order['shipping_phone'] ?? '')]),
+        sk_whatsapp_owner_phones($vendorId)
+    );
+    sk_whatsapp_send_shop_event($vendorId, 'refund_status_update', $context, $phones, $settings, $log);
+}
+
+function sk_whatsapp_notify_handoff(int $vendorId, string $customerPhone, string $reason, string $customerName = '', bool $reply = false): void {
+    if ($vendorId < 1) {
+        return;
+    }
+    $CI =& get_instance();
+    $CI->load->model('Sk_Admin_model');
+    $settings = $CI->Sk_Admin_model->get_settings();
+    $name = trim($customerName) !== '' ? trim($customerName) : 'Customer';
+    $note = trim($reason) !== '' ? trim($reason) : 'the customer needs help';
+    if (function_exists('mb_substr')) {
+        $note = mb_substr($note, 0, 180);
+    }
+    $context = sk_whatsapp_alert_context([
+        'customer_name' => $name,
+        'shipping_phone'=> $customerPhone,
+        'vendor_id'     => $vendorId,
+    ], $settings, [
+        'reason'         => $note,
+        'customer_phone' => $customerPhone !== '' ? $customerPhone : 'the customer',
+        'customer_name'  => $name,
+        'name'           => $name,
+    ]);
+    $event = $reply ? 'human_reply_alert' : 'human_handoff_alert';
+    sk_whatsapp_send_shop_event($vendorId, $event, $context, sk_whatsapp_owner_phones($vendorId), $settings, [
+        'vendor_id'      => $vendorId,
+        'status_trigger' => $event,
+        'order_number'   => '',
+    ]);
+}
+
+function sk_whatsapp_notify_enrollment(int $vendorId, string $status, string $displayPhone, array $settings = null): void {
+    if ($vendorId < 1) {
+        return;
+    }
+    $CI =& get_instance();
+    if ($settings === null) {
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    $shop = sk_whatsapp_shop_name($vendorId, $settings);
+    $phoneLabel = trim($displayPhone) !== '' ? trim($displayPhone) : 'a new number';
+    $statusLabel = ucfirst(strtolower($status));
+    if (!in_array(strtolower($status), ['approved', 'rejected', 'pending'], true)) {
+        $statusLabel = 'Pending';
+    }
+    $context = sk_whatsapp_alert_context(['vendor_id' => $vendorId], $settings, [
+        'shop_name'     => $shop !== '' ? $shop : 'the shop',
+        'display_phone' => $phoneLabel,
+        'enroll_status' => $statusLabel,
+        'admin_name'    => 'Admin',
+        'owner_name'    => 'there',
+    ]);
+    if (strtolower($status) === 'request') {
+        sk_whatsapp_send_shop_event($vendorId, 'whatsapp_number_enrollment_request', $context, sk_whatsapp_platform_phones($settings), $settings, [
+            'vendor_id'      => $vendorId,
+            'status_trigger' => 'whatsapp_number_enrollment_request',
+        ]);
+        return;
+    }
+    sk_whatsapp_send_shop_event($vendorId, 'whatsapp_number_enrollment_status', $context, sk_whatsapp_owner_phones($vendorId), $settings, [
+        'vendor_id'      => $vendorId,
+        'status_trigger' => 'whatsapp_number_enrollment_status',
+    ]);
 }
 
 

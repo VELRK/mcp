@@ -273,6 +273,11 @@ class Whatsapp extends Sk_Base {
             $settings['vendor_id'] = $vid;
         }
         $cfg = sk_wa_cloud_config($settings, $vid > 0 ? $vid : null);
+        if ($vid > 0) {
+            $readyNow = sk_wa_cloud_is_ready($settings, $vid);
+            sk_wa_admin_seed_vendor($vid, $readyNow);
+            sk_wa_ecomm_seed_vendor($vid, $readyNow);
+        }
         $sync = $this->_pull_templates_from_meta($settings, $vid);
         $data['title'] = 'WhatsApp Templates';
         $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates($vid > 0 ? $vid : null);
@@ -615,10 +620,14 @@ class Whatsapp extends Sk_Base {
             $settings['vendor_id'] = $vid;
             $readyNow = sk_wa_cloud_is_ready($settings, $vid);
             $seed = sk_wa_ecomm_seed_vendor($vid, $readyNow);
+            $adminSeed = sk_wa_admin_seed_vendor($vid, $readyNow);
+            $seed['created'] += (int)$adminSeed['created'];
+            $seed['pushed'] += (int)$adminSeed['pushed'];
+            $seed['errors'] = array_merge($seed['errors'], $adminSeed['errors']);
             if (!empty($seed['errors']) && empty($seed['pushed'])) {
                 $this->session->set_flashdata('error', implode(' ', $seed['errors']));
             } elseif (!empty($seed['created']) || !empty($seed['pushed'])) {
-                $note = 'Order templates ready';
+                $note = 'Shop templates ready';
                 if (!empty($seed['created'])) {
                     $note .= ' (' . (int)$seed['created'] . ' added)';
                 }
@@ -639,7 +648,7 @@ class Whatsapp extends Sk_Base {
         $data['vendors'] = $vendors;
         $data['templates'] = $vid > 0 ? $this->Sk_Whatsapp_cloud_model->list_event_templates($vid) : [];
         $data['ready'] = $vid > 0 && sk_wa_cloud_is_ready($settings, $vid);
-        $data['defs'] = sk_wa_ecomm_template_defs();
+        $data['defs'] = array_merge(sk_wa_admin_template_defs(), sk_wa_ecomm_template_defs());
         $this->render('whatsapp/order_templates', $data);
     }
 

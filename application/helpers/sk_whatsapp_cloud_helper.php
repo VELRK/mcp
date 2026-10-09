@@ -1189,6 +1189,114 @@ function sk_wa_ecomm_template_defs(): array {
     ];
 }
 
+/**
+ * Admin notification templates. Names match the shop events.
+ * order_cancel_alert is the Meta name order_cancelled so it does not replace
+ * the already approved order_cancelled_v2 row.
+ *
+ * @return array<int,array{event_key:string,name:string,body:string,map:array<string,string>,audience:string,trigger:string}>
+ */
+function sk_wa_admin_template_defs(): array {
+    return [
+        [
+            'event_key' => 'order_placed',
+            'name'      => 'order_placed',
+            'audience'  => 'Customer + Owner',
+            'trigger'   => 'New order created',
+            'body'      => 'Hi {{1}}, your order {{2}} has been placed. The total is {{3}}. Thank you for shopping with {{4}} today.',
+            'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'order_total', '4' => 'shop_name'],
+        ],
+        [
+            'event_key' => 'new_order_admin_alert',
+            'name'      => 'new_order_admin_alert',
+            'audience'  => 'Shop owner',
+            'trigger'   => 'New order with customer and item details',
+            'body'      => 'Hello {{1}}, a new order {{2}} was placed by {{3}}. Items: {{4}}. The total is {{5}}. Please review it in the shop today.',
+            'map'       => ['1' => 'shop_name', '2' => 'order_number', '3' => 'customer_name', '4' => 'item_summary', '5' => 'order_total'],
+        ],
+        [
+            'event_key' => 'payment_success',
+            'name'      => 'payment_success',
+            'audience'  => 'Customer + Owner',
+            'trigger'   => 'Payment completed',
+            'body'      => 'Hi {{1}}, payment for order {{2}} is complete. The amount received is {{3}}. Thank you for shopping with {{4}} today.',
+            'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'order_total', '4' => 'shop_name'],
+        ],
+        [
+            'event_key' => 'payment_failed_admin_alert',
+            'name'      => 'payment_failed_admin_alert',
+            'audience'  => 'Shop owner',
+            'trigger'   => 'Payment failed',
+            'body'      => 'Hello {{1}}, payment for order {{2}} from {{3}} did not complete. The amount was {{4}}. Please follow up with the customer today.',
+            'map'       => ['1' => 'shop_name', '2' => 'order_number', '3' => 'customer_name', '4' => 'order_total'],
+        ],
+        [
+            'event_key' => 'invoice_created',
+            'name'      => 'invoice_created',
+            'audience'  => 'Customer',
+            'trigger'   => 'Invoice generated',
+            'body'      => 'Hi {{1}}, your invoice {{2}} for order {{3}} is ready. The total is {{4}}. Thank you for shopping with {{5}} today.',
+            'map'       => ['1' => 'name', '2' => 'invoice_no', '3' => 'order_number', '4' => 'order_total', '5' => 'shop_name'],
+        ],
+        [
+            'event_key' => 'invoice_shared_admin_alert',
+            'name'      => 'invoice_shared_admin_alert',
+            'audience'  => 'Shop owner',
+            'trigger'   => 'Invoice created or shared',
+            'body'      => 'Hello {{1}}, invoice {{2}} for order {{3}} was shared with {{4}}. The total is {{5}}. You can review it in the shop today.',
+            'map'       => ['1' => 'shop_name', '2' => 'invoice_no', '3' => 'order_number', '4' => 'customer_name', '5' => 'order_total'],
+        ],
+        [
+            'event_key' => 'human_handoff_alert',
+            'name'      => 'human_handoff_alert',
+            'audience'  => 'Shop owner / Staff',
+            'trigger'   => 'Customer needs human support',
+            'body'      => 'Hello {{1}}, customer {{2}} needs a person on chat. The reason is {{3}}. Please open the inbox for {{4}} today.',
+            'map'       => ['1' => 'shop_name', '2' => 'customer_name', '3' => 'reason', '4' => 'customer_phone'],
+        ],
+        [
+            'event_key' => 'human_reply_alert',
+            'name'      => 'human_reply_alert',
+            'audience'  => 'Staff / Owner',
+            'trigger'   => 'Customer conversation needs attention',
+            'body'      => 'Hello {{1}}, customer {{2}} is waiting for a reply. The latest note is {{3}}. Please check the inbox for {{4}} today.',
+            'map'       => ['1' => 'shop_name', '2' => 'customer_name', '3' => 'reason', '4' => 'customer_phone'],
+        ],
+        [
+            'event_key' => 'whatsapp_number_enrollment_request',
+            'name'      => 'whatsapp_number_enrollment_request',
+            'audience'  => 'Platform admin',
+            'trigger'   => 'Shop requests a new WhatsApp number',
+            'body'      => 'Hello {{1}}, shop {{2}} requested WhatsApp number {{3}}. Please review the enrollment in the admin panel today.',
+            'map'       => ['1' => 'admin_name', '2' => 'shop_name', '3' => 'display_phone'],
+        ],
+        [
+            'event_key' => 'whatsapp_number_enrollment_status',
+            'name'      => 'whatsapp_number_enrollment_status',
+            'audience'  => 'Shop owner',
+            'trigger'   => 'Number enrollment approved, rejected, or pending',
+            'body'      => 'Hello {{1}}, your WhatsApp number {{2}} for {{3}} is now {{4}}. Thank you for using the shop platform today.',
+            'map'       => ['1' => 'owner_name', '2' => 'display_phone', '3' => 'shop_name', '4' => 'enroll_status'],
+        ],
+        [
+            'event_key' => 'order_cancel_alert',
+            'name'      => 'order_cancelled',
+            'audience'  => 'Customer + Owner',
+            'trigger'   => 'Order cancelled',
+            'body'      => 'Hi {{1}}, your order {{2}} has been cancelled. Please contact {{3}} if you need any help.',
+            'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'shop_name'],
+        ],
+        [
+            'event_key' => 'refund_status_update',
+            'name'      => 'refund_status_update',
+            'audience'  => 'Customer + Owner',
+            'trigger'   => 'Refund initiated or completed',
+            'body'      => 'Hi {{1}}, the refund for order {{2}} is now {{3}}. The amount is {{4}}. Thank you for shopping with {{5}} today.',
+            'map'       => ['1' => 'name', '2' => 'order_number', '3' => 'refund_status', '4' => 'order_total', '5' => 'shop_name'],
+        ],
+    ];
+}
+
 function sk_wa_ecomm_event_for_status(string $status): string {
     $status = strtolower(trim($status));
     if (in_array($status, ['pending', 'confirmed'], true)) {
@@ -1264,6 +1372,73 @@ function sk_wa_ecomm_seed_vendor(int $vendorId, bool $push = false): array {
         } elseif (trim((string)($row['event_key'] ?? '')) === '') {
             $CI->Sk_Whatsapp_cloud_model->save_template(['event_key' => $def['event_key']], (int)$row['id']);
             $row['event_key'] = $def['event_key'];
+        }
+        if (!$push || !$row) {
+            continue;
+        }
+        $status = strtoupper((string)($row['status'] ?? 'DRAFT'));
+        if ($status !== 'DRAFT' && trim((string)($row['meta_id'] ?? '')) !== '') {
+            continue;
+        }
+        $pushed = sk_wa_cloud_submit_template((int)$row['id'], $vendorId);
+        if (!empty($pushed['ok'])) {
+            $out['pushed']++;
+        } elseif (!empty($pushed['text'])) {
+            $out['errors'][] = $def['name'] . ': ' . $pushed['text'];
+        }
+    }
+    return $out;
+}
+
+/**
+ * Create the admin notification templates and submit new drafts to Meta.
+ *
+ * @return array{created:int,pushed:int,errors:array<int,string>}
+ */
+function sk_wa_admin_seed_vendor(int $vendorId, bool $push = false): array {
+    $out = ['created' => 0, 'pushed' => 0, 'errors' => []];
+    if ($vendorId < 1) {
+        return $out;
+    }
+    sk_wa_cloud_ensure_schema();
+    $CI =& get_instance();
+    if (!isset($CI->Sk_Whatsapp_cloud_model)) {
+        $CI->load->model('Sk_Whatsapp_cloud_model');
+    }
+    foreach (sk_wa_admin_template_defs() as $def) {
+        $row = $CI->Sk_Whatsapp_cloud_model->find_template_by_name($vendorId, $def['name']);
+        if ($row) {
+            $status = strtoupper((string)($row['status'] ?? 'DRAFT'));
+            $metaId = trim((string)($row['meta_id'] ?? ''));
+            $rejected = in_array($status, ['FAILED', 'REJECTED'], true);
+            if ($metaId === '' && ($rejected || trim((string)($row['body_text'] ?? '')) !== $def['body'] || (string)($row['event_key'] ?? '') !== $def['event_key'])) {
+                $CI->Sk_Whatsapp_cloud_model->save_template([
+                    'name'         => $def['name'],
+                    'body_text'    => $def['body'],
+                    'variable_map' => json_encode($def['map'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'status'       => 'DRAFT',
+                    'event_key'    => $def['event_key'],
+                    'meta_payload' => null,
+                ], (int)$row['id']);
+                $row = $CI->Sk_Whatsapp_cloud_model->get_template((int)$row['id'], $vendorId);
+            }
+        }
+        if (!$row) {
+            $id = $CI->Sk_Whatsapp_cloud_model->save_template([
+                'vendor_id'    => $vendorId,
+                'name'         => $def['name'],
+                'language'     => 'en',
+                'category'     => 'UTILITY',
+                'kind'         => 'text',
+                'body_text'    => $def['body'],
+                'header_text'  => '',
+                'footer_text'  => '',
+                'status'       => 'DRAFT',
+                'event_key'    => $def['event_key'],
+                'variable_map' => json_encode($def['map'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]);
+            $row = $CI->Sk_Whatsapp_cloud_model->get_template($id, $vendorId);
+            $out['created']++;
         }
         if (!$push || !$row) {
             continue;

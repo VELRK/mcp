@@ -122,6 +122,8 @@ class Whatsapp_requests extends Sk_Base {
 
         if (!empty($res['ok'])) {
             $this->activity_log->log_admin('wa_requests', 'create', $res['id'], null, ['vendor_id' => $vid]);
+            $this->load->helper('sk_whatsapp');
+            sk_whatsapp_notify_enrollment($vid, 'request', $display !== '' ? $display : $phone, $this->Sk_Admin_model->get_settings());
             $this->session->set_flashdata('success', 'WhatsApp provisioning request created. Admin will review shortly.');
         } else {
             $this->session->set_flashdata('error', 'Could not create request.');
@@ -304,6 +306,8 @@ class Whatsapp_requests extends Sk_Base {
 
             if (!empty($saveRes['ok'])) {
                 $this->Sk_Wa_Provision_request_model->update_status($id, 'approved', $this->admin['id'], 'Connected by admin, account id ' . ($saveRes['id'] ?? ''));
+                $this->load->helper('sk_whatsapp');
+                sk_whatsapp_notify_enrollment((int)$req['vendor_id'], 'approved', $display !== '' ? $display : $phone, $this->Sk_Admin_model->get_settings());
                 $this->activity_log->log_admin('wa_requests', 'approve', $id, $req, ['account' => $saveRes]);
                 $this->session->set_flashdata('success', 'Provisioning approved and account saved.');
                 redirect('admin/whatsapp_requests/pending');
@@ -326,6 +330,12 @@ class Whatsapp_requests extends Sk_Base {
         $note = trim((string)$this->input->post('admin_note', TRUE) ?: 'Rejected by admin');
         $ok = $this->Sk_Wa_Provision_request_model->update_status($id, 'rejected', $this->admin['id'], $note);
         if ($ok) {
+            $req = $this->Sk_Wa_Provision_request_model->get_by_id($id);
+            if ($req) {
+                $this->load->helper('sk_whatsapp');
+                $shown = trim((string)($req['display_phone'] ?? '')) ?: trim((string)($req['phone_number_id'] ?? ''));
+                sk_whatsapp_notify_enrollment((int)$req['vendor_id'], 'rejected', $shown, $this->Sk_Admin_model->get_settings());
+            }
             $this->activity_log->log_admin('wa_requests', 'reject', $id, null, ['note' => $note]);
             $this->session->set_flashdata('success', 'Request rejected.');
         } else {
@@ -436,6 +446,9 @@ class Whatsapp_requests extends Sk_Base {
                 (int)($this->admin['id'] ?? 0),
                 'Connected via WhatsApp embedded login. Phone ID: ' . $phone . ' WABA: ' . $waba
             );
+            $this->load->helper('sk_whatsapp');
+            $shownPhone = trim((string)($saved['wa_cloud_display_phone'] ?? ''));
+            sk_whatsapp_notify_enrollment((int)$req['vendor_id'], 'approved', $shownPhone !== '' ? $shownPhone : $phone, $settings);
             $this->activity_log->log_admin('wa_requests', 'approve_embed', (int)$req['id'], $req, [
                 'phone_number_id' => $phone,
                 'waba_id'         => $waba,

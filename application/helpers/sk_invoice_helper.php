@@ -727,7 +727,12 @@ function sk_mail_order_invoice(array $order, array $settings = []): bool {
 
     $to_email = $order['customer_email'] ?? '';
     $to_name  = $order['customer_name'] ?? ($order['shipping_name'] ?? 'Customer');
-    if (empty($to_email)) return false;
+    if (empty($to_email)) {
+        $CI =& get_instance();
+        $CI->load->helper('sk_whatsapp');
+        sk_whatsapp_notify_invoice($order, $settings, (string)($order['order_number'] ?? ''));
+        return false;
+    }
 
     $CI =& get_instance();
     $CI->load->helper(['sk_mailer', 'sk_invoice_pdf']);
@@ -752,6 +757,8 @@ function sk_mail_order_invoice(array $order, array $settings = []): bool {
             'invoice_emailed_at' => date('Y-m-d H:i:s'),
         ]);
     }
+    $CI->load->helper('sk_whatsapp');
+    sk_whatsapp_notify_invoice($order, $settings, (string)($invoice['invoice_no'] ?? ''));
 
     // Admin copy: full order digest (no customer-facing invoice tone); PDF attached when available.
     $currency = sk_currency_symbol($settings);

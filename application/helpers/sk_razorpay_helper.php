@@ -575,6 +575,7 @@ function sk_razorpay_finalize_order_payment(
         sk_mail_order_invoice($order, $settings);
     }
     sk_whatsapp_notify_order_status($order, $order['status'] ?? 'confirmed', $settings);
+    sk_whatsapp_notify_payment_result($order, true, $settings);
 
     $msg = 'Payment successful! Your order is confirmed.';
     return [
@@ -590,6 +591,22 @@ function sk_razorpay_finalize_order_payment(
  */
 function sk_razorpay_handle_webhook_event(array $event, array $settings = null): array {
     $eventName = (string)($event['event'] ?? '');
+    if ($eventName === 'payment.failed') {
+        $failed = $event['payload']['payment']['entity'] ?? null;
+        $failedOrder = is_array($failed) ? (string)($failed['order_id'] ?? '') : '';
+        if ($failedOrder !== '') {
+            $CI =& get_instance();
+            $CI->load->model('Sk_Order_model');
+            $CI->load->helper('sk_whatsapp');
+            $paymentRow = $CI->Sk_Order_model->get_payment_by_rzp_order_id($failedOrder);
+            $shopOrderId = (int)($paymentRow['order_id'] ?? 0);
+            $shopOrder = $shopOrderId > 0 ? $CI->Sk_Order_model->get_by_id($shopOrderId) : null;
+            if ($shopOrder) {
+                sk_whatsapp_notify_payment_result($shopOrder, false, $settings);
+            }
+        }
+        return ['handled' => true, 'type' => 'payment_failed'];
+    }
     $entity = null;
     $paymentId = '';
     $orderId = '';
