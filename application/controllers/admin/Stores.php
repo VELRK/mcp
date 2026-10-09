@@ -60,11 +60,15 @@ class Stores extends Sk_Base {
             'website'   => $this->input->post('social_website', TRUE),
         ];
 
+        $this->load->helper('sk_delivery');
+        $flatRaw = trim((string)$this->input->post('flat_rate'));
+        $freeRaw = trim((string)$this->input->post('free_shipping_above'));
         $delivery = [
-            'free_shipping_above' => $this->input->post('free_shipping_above') ?: null,
-            'flat_rate'           => $this->input->post('flat_rate') ?: null,
+            'free_shipping_above' => $freeRaw === '' ? null : round(max(0, (float)$freeRaw), 2),
+            'flat_rate'           => $flatRaw === '' ? null : round(max(0, (float)$flatRaw), 2),
             'processing_days'     => (int)($this->input->post('processing_days') ?: 2),
             'cod_enabled'         => $this->input->post('cod_enabled') ? 1 : 0,
+            'zones'               => sk_delivery_parse_zones((string)$this->input->post('delivery_zones')),
         ];
 
         $store_data = [

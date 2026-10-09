@@ -161,10 +161,19 @@ $delivery = $store['delivery_settings'] ?? [];
     <div class="card shadow-sm mb-3">
       <div class="card-header fw-semibold">Delivery Settings</div>
       <div class="card-body">
-        <div class="mb-2"><label class="form-label small">Free shipping above (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label><input type="number" step="0.01" name="free_shipping_above" class="form-control form-control-sm" value="<?= htmlspecialchars($delivery['free_shipping_above'] ?? '') ?>"></div>
-        <div class="mb-2"><label class="form-label small">Flat rate (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label><input type="number" step="0.01" name="flat_rate" class="form-control form-control-sm" value="<?= htmlspecialchars($delivery['flat_rate'] ?? '') ?>"></div>
+        <p class="small text-muted">Checkout uses these shop rules. A state line overrides the flat rate. Leave a rate blank to use the platform shipping settings.</p>
+        <div class="mb-2"><label class="form-label small">Free shipping above (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label><input type="number" step="0.01" min="0" name="free_shipping_above" class="form-control form-control-sm" value="<?= htmlspecialchars((string)($delivery['free_shipping_above'] ?? '')) ?>"></div>
+        <div class="mb-2"><label class="form-label small">Flat rate (<?= htmlspecialchars(sk_currency_symbol($settings)) ?>)</label><input type="number" step="0.01" min="0" name="flat_rate" class="form-control form-control-sm" value="<?= htmlspecialchars((string)($delivery['flat_rate'] ?? '')) ?>"></div>
+        <div class="mb-2">
+          <label class="form-label small">State delivery charges</label>
+          <textarea name="delivery_zones" class="form-control form-control-sm" rows="5" placeholder="Johor | 12 | 200&#10;Kuala Lumpur | 8 | 150"><?php
+            $this->load->helper('sk_delivery');
+            echo htmlspecialchars(sk_delivery_zones_text(is_array($delivery['zones'] ?? null) ? $delivery['zones'] : []));
+          ?></textarea>
+          <div class="form-text">One zone per line: State | charge | free above. The last number is optional.</div>
+        </div>
         <div class="mb-2"><label class="form-label small">Processing days</label><input type="number" name="processing_days" class="form-control form-control-sm" value="<?= (int)($delivery['processing_days'] ?? 2) ?>"></div>
-        <div class="form-check"><input type="checkbox" name="cod_enabled" value="1" class="form-check-input" id="cod" <?= !empty($delivery['cod_enabled']) ? 'checked' : '' ?>><label class="form-check-label" for="cod">COD enabled</label></div>
+        <div class="form-check"><input type="checkbox" name="cod_enabled" value="1" class="form-check-input" id="cod" <?= !isset($delivery['cod_enabled']) || !empty($delivery['cod_enabled']) ? 'checked' : '' ?>><label class="form-check-label" for="cod">COD enabled</label></div>
       </div>
     </div>
 

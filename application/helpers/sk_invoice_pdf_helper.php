@@ -209,7 +209,7 @@ function sk_invoice_build_pdf(array $invoice): string {
     }
 
     $ops .= sk_invoice_pdf_text($L, $y, $companyLine, 12, 'F2');
-    $ops .= sk_invoice_pdf_text_right($R, $y, 'INVOICE', 14, 'F2');
+    $ops .= sk_invoice_pdf_text_right($R, $y, (($invoice['invoice_status'] ?? '') === 'void' ? 'VOID INVOICE' : 'INVOICE'), 14, 'F2');
     $y -= 14;
 
     $addrLines = preg_split("/\r\n|\n|\r/", (string)($seller['address'] ?? ''));

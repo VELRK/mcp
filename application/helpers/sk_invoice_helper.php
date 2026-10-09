@@ -161,6 +161,7 @@ function sk_invoice_build(array $order, array $settings = [], ?array $sellerOver
         'wallet_amount'  => (float)($order['wallet_amount'] ?? 0),
         'payment_status' => ucfirst($order['payment_status'] ?? 'pending'),
         'order_status'   => ucfirst($order['status'] ?? 'pending'),
+        'invoice_status' => strtolower((string)($order['invoice_status'] ?? 'active')) === 'void' ? 'void' : 'active',
         'notes'          => $order['notes'] ?? '',
     ];
 }
@@ -495,8 +496,15 @@ function sk_invoice_render_html(array $invoice, bool $forEmail = false): string 
     $invoiceUrl = sk_invoice_public_url($invoiceOrder);
     $invoiceViewUrl = site_url('invoice/view/' . (int)$invoice['order_id'] . '/' . sk_invoice_public_token((int)$invoice['order_id'], (string)$invoice['order_number']));
 
+    $isVoid = ($invoice['invoice_status'] ?? '') === 'void';
+    $pageTitle = $isVoid ? 'Void invoice' : 'Tax Invoice';
+    $invoiceHeading = $isVoid ? 'VOID INVOICE' : 'INVOICE';
+    $voidBanner = $isVoid
+        ? "<div style='background:#991b1b;color:#fff;text-align:center;font-weight:700;letter-spacing:.4px;padding:10px 16px;'>VOID — THIS INVOICE IS INACTIVE</div>"
+        : '';
+
     return "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>Tax Invoice – {$invoice['invoice_no']}</title>
+<title>{$pageTitle} – {$invoice['invoice_no']}</title>
 <style>
   body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1e293b;background:#f1f5f9;}
   .wrap{max-width:820px;margin:20px auto;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.08);border-radius:8px;overflow:hidden;}
@@ -504,6 +512,7 @@ function sk_invoice_render_html(array $invoice, bool $forEmail = false): string 
 </style></head><body>
 {$printBtns}
 <div class='wrap'>
+{$voidBanner}
   <div style='background:#fff;color:#111;padding:24px 32px 18px;border-bottom:2px solid #111;display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;'>
     <div style='flex:1;min-width:260px;'>
       {$logoHtml}
@@ -512,7 +521,7 @@ function sk_invoice_render_html(array $invoice, bool $forEmail = false): string 
       " . ($sellerMetaHtml ? "<div style='margin-top:6px;font-size:12px;color:#333;'>{$sellerMetaHtml}</div>" : '') . "
     </div>
     <div style='text-align:right;min-width:180px;'>
-      <div style='font-size:22px;font-weight:700;letter-spacing:1px;'>INVOICE</div>
+      <div style='font-size:22px;font-weight:700;letter-spacing:1px;'>{$invoiceHeading}</div>
       <div style='margin-top:10px;font-size:12px;color:#555;'>INVOICE NO:</div>
       <div style='font-size:15px;font-weight:700;'>" . htmlspecialchars($invoice['invoice_no']) . "</div>
       <div style='margin-top:8px;font-size:12px;color:#555;'>Order: " . htmlspecialchars($invoice['order_number']) . "</div>
@@ -710,6 +719,10 @@ function sk_mail_order_invoice(array $order, array $settings = []): bool {
         $CI =& get_instance();
         $CI->load->model('Sk_Admin_model');
         $settings = $CI->Sk_Admin_model->get_settings();
+    }
+
+    if (strtolower((string)($order['invoice_status'] ?? 'active')) === 'void') {
+        return false;
     }
 
     $to_email = $order['customer_email'] ?? '';

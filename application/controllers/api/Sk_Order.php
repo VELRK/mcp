@@ -158,9 +158,23 @@ class Sk_Order extends Sk_Base_Api {
         $code_discount = $discount;
 
         $goodsAfterPromo = max(0, $subtotal - $code_discount);
-        $shipping = ($goodsAfterPromo <= 0)
-            ? 0
-            : ($goodsAfterPromo >= ($settings['free_shipping_above'] ?? 999) ? 0 : ($settings['shipping_charge'] ?? 50));
+        $this->load->helper('sk_delivery');
+        $shipGroups = [];
+        foreach ($order_items as $line) {
+            $vid = (int)($line['vendor_id'] ?? 0);
+            $shipGroups[$vid] = ($shipGroups[$vid] ?? 0) + (float)($line['subtotal'] ?? 0);
+        }
+        if ($subtotal > 0 && $goodsAfterPromo < $subtotal) {
+            $ratio = $goodsAfterPromo / $subtotal;
+            foreach ($shipGroups as $vid => $amount) {
+                $shipGroups[$vid] = round($amount * $ratio, 2);
+            }
+        }
+        $shipQuote = sk_delivery_quote_groups($shipGroups ?: [0 => $goodsAfterPromo], $settings, (string)($addr['state'] ?? ''));
+        if ($payment_method === 'cod' && empty($shipQuote['cod_enabled'])) {
+            return $this->error('Cash on delivery is not available for this shop.');
+        }
+        $shipping = ($goodsAfterPromo <= 0) ? 0 : (float)$shipQuote['shipping'];
         $taxable_amount = max(0, $subtotal - $discount);
         // Storefront does not charge/show GST
         $tax      = 0;
@@ -183,6 +197,7 @@ class Sk_Order extends Sk_Base_Api {
             'user_id'          => $user_id,
             'subtotal'         => $subtotal,
             'shipping'         => $shipping,
+            'shipping_detail'  => (string)($shipQuote['detail'] ?? ''),
             'tax'              => $tax,
             'discount'         => $discount,
             'wallet_discount'  => 0,

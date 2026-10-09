@@ -544,7 +544,7 @@ function sk_ai_get_product_variants(int $productId, ?int $tenantId = null): arra
     ];
 }
 
-function sk_ai_calculate_cart(array $items, ?int $tenantId = null): array {
+function sk_ai_calculate_cart(array $items, ?int $tenantId = null, string $state = ''): array {
     $lines = is_array($items) ? $items : [];
     if (empty($lines)) {
         return ['success' => true, 'data' => ['tenant_id' => $tenantId ?? 0, 'subtotal' => 0.0, 'shipping' => 0.0, 'tax' => 0.0, 'total' => 0.0, 'items' => []], 'error' => null];
@@ -586,11 +586,9 @@ function sk_ai_calculate_cart(array $items, ?int $tenantId = null): array {
     if (isset($CI->Sk_Admin_model)) {
         $settings = $CI->Sk_Admin_model->get_settings();
     }
-    $shipping = 0.0;
-    $freeAbove = (float)($settings['free_shipping_above'] ?? 0);
-    if ($freeAbove <= 0 || $subtotal < $freeAbove) {
-        $shipping = (float)($settings['shipping_charge'] ?? 0);
-    }
+    $CI->load->helper(['sk_currency', 'sk_delivery']);
+    $quote = sk_delivery_quote($subtotal, $settings, (int)($tenantId ?? 0), $state);
+    $shipping = (float)$quote['shipping'];
     $tax = 0.0;
     $total = $subtotal + $shipping + $tax;
 
@@ -600,6 +598,7 @@ function sk_ai_calculate_cart(array $items, ?int $tenantId = null): array {
             'tenant_id' => $tenantId ?? 0,
             'subtotal' => round($subtotal, 2),
             'shipping' => round($shipping, 2),
+            'shipping_detail' => (string)($quote['detail'] ?? $quote['source'] ?? ''),
             'tax' => round($tax, 2),
             'total' => round($total, 2),
             'items' => $lines,
@@ -856,7 +855,7 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
         }
     }
 
-    $calc = sk_ai_calculate_cart($itemsIn, $tenantId);
+    $calc = sk_ai_calculate_cart($itemsIn, $tenantId, $state);
     $subtotal = (float)($calc['data']['subtotal'] ?? 0);
     $shipping = (float)($calc['data']['shipping'] ?? 0);
     $tax = (float)($calc['data']['tax'] ?? 0);
@@ -905,6 +904,7 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
         'user_id' => $customerId,
         'subtotal' => $subtotal,
         'shipping' => $shipping,
+        'shipping_detail' => (string)($calc['data']['shipping_detail'] ?? ''),
         'tax' => $tax,
         'discount' => 0,
         'total' => $total,

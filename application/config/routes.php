@@ -406,6 +406,8 @@ $route['shopkart/orders/view/(:num)'] = 'admin/Orders/view/$1';
 $route['shopkart/orders/update_status/(:num)'] = 'admin/Orders/update_status/$1';
 $route['shopkart/orders/invoice/(:num)'] = 'admin/Orders/invoice/$1';
 $route['shopkart/orders/send_invoice/(:num)'] = 'admin/Orders/send_invoice/$1';
+$route['shopkart/orders/void_invoice/(:num)'] = 'admin/Orders/void_invoice/$1';
+$route['shopkart/orders/initiate_refund/(:num)'] = 'admin/Orders/initiate_refund/$1';
 // Public signed invoice (email download → PDF)
 $route['invoice/download/(:num)/(:any)'] = 'Invoice/download/$1/$2';
 $route['invoice/view/(:num)/(:any)'] = 'Invoice/view/$1/$2';

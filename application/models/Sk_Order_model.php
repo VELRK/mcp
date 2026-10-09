@@ -17,6 +17,10 @@ class Sk_Order_model extends CI_Model {
     }
 
     public function create($data, $items, bool $reduceStock = true) {
+        $this->ensure_finance_schema();
+        if (!$this->db->field_exists('shipping_detail', 'orders')) {
+            unset($data['shipping_detail']);
+        }
         $data['created_at'] = date('Y-m-d H:i:s');
         // Temporary unique value until we have insert_id for G2D10001-style number.
         $data['order_number'] = 'TMP' . strtoupper(substr(md5(uniqid((string)mt_rand(), true)), 0, 12));
@@ -434,6 +438,112 @@ class Sk_Order_model extends CI_Model {
         ]);
     }
 
+    /** Invoice void and Razorpay refund columns on orders. */
+    public function ensure_finance_schema(): void {
+        static $done = false;
+        if ($done || !$this->db->table_exists('orders')) {
+            return;
+        }
+        $done = true;
+        $cols = [
+            'invoice_status'    => "VARCHAR(20) NOT NULL DEFAULT 'active'",
+            'invoice_voided_at' => 'DATETIME NULL DEFAULT NULL',
+            'refund_id'         => 'VARCHAR(64) NULL DEFAULT NULL',
+            'refund_status'     => 'VARCHAR(20) NULL DEFAULT NULL',
+            'refund_amount'     => 'DECIMAL(12,2) NULL DEFAULT NULL',
+            'shipping_detail'   => 'VARCHAR(255) NULL DEFAULT NULL',
+        ];
+        foreach ($cols as $col => $def) {
+            if ($this->db->field_exists($col, 'orders')) {
+                continue;
+            }
+            try {
+                $this->db->query("ALTER TABLE `orders` ADD COLUMN `{$col}` {$def}");
+            } catch (Throwable $e) {
+                log_message('error', 'orders finance schema: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Mark the tax invoice void. An unpaid payment invoice becomes inactive.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    public function void_invoice(int $orderId, bool $deactivateUnpaid = true): array {
+        $this->ensure_finance_schema();
+        $order = $this->get_by_id($orderId);
+        if (!$order) {
+            return ['ok' => false, 'message' => 'Order not found.'];
+        }
+        if (strtolower((string)($order['invoice_status'] ?? 'active')) === 'void') {
+            return ['ok' => true, 'message' => 'Invoice is already void and inactive.'];
+        }
+        $upd = [
+            'invoice_status'    => 'void',
+            'invoice_voided_at' => date('Y-m-d H:i:s'),
+        ];
+        $payment = strtolower((string)($order['payment_status'] ?? 'pending'));
+        if ($deactivateUnpaid && in_array($payment, ['pending', ''], true)) {
+            $upd['payment_status'] = 'failed';
+        }
+        $this->db->where('id', $orderId)->update('orders', $upd);
+        $msg = 'Invoice is void and inactive.';
+        if (($upd['payment_status'] ?? '') === 'failed') {
+            $msg = 'Invoice is void. The unpaid payment invoice is inactive.';
+        } elseif ($payment === 'paid') {
+            $msg = 'Invoice is void. Initiate the Razorpay refund to return the payment.';
+        }
+        return ['ok' => true, 'message' => $msg];
+    }
+
+    /**
+     * Start a Razorpay refund and void the invoice so it cannot be paid again.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    public function initiate_refund(int $orderId, array $settings = [], string $reason = 'Refund initiated'): array {
+        $this->ensure_finance_schema();
+        $this->load->helper('sk_currency');
+        $order = $this->get_by_id($orderId);
+        if (!$order) {
+            return ['ok' => false, 'message' => 'Order not found.'];
+        }
+        $refundStatus = strtolower((string)($order['refund_status'] ?? ''));
+        if (trim((string)($order['refund_id'] ?? '')) !== '' && in_array($refundStatus, ['initiated', 'completed'], true)) {
+            return ['ok' => true, 'message' => 'Razorpay refund is already ' . $refundStatus . '.'];
+        }
+        if (strtolower((string)($order['payment_method'] ?? '')) !== 'razorpay') {
+            return ['ok' => false, 'message' => 'This order was not paid with Razorpay.'];
+        }
+        if (strtolower((string)($order['payment_status'] ?? '')) !== 'paid') {
+            return ['ok' => false, 'message' => 'Only a paid Razorpay order can be refunded.'];
+        }
+        $payment = $order['payment'] ?? $this->get_payment($orderId);
+        $paymentId = trim((string)($payment['razorpay_payment_id'] ?? ''));
+        if ($paymentId === '') {
+            return ['ok' => false, 'message' => 'Payment record missing. The refund cannot be started.'];
+        }
+        $amount = round(max(0, (float)($order['total'] ?? 0)), 2);
+        $refund = $this->_razorpay_refund($paymentId, $amount, $settings, $reason);
+        if (empty($refund['ok'])) {
+            $this->db->where('id', $orderId)->update('orders', [
+                'refund_status' => 'failed',
+                'refund_amount' => $amount,
+            ]);
+            return ['ok' => false, 'message' => $refund['message'] ?: 'Razorpay refund failed.'];
+        }
+        $this->db->where('id', $orderId)->update('orders', [
+            'refund_id'     => $refund['refund_id'] ?? null,
+            'refund_status' => $refund['refund_status'] ?? 'initiated',
+            'refund_amount' => $amount,
+            'payment_status'=> 'refunded',
+        ]);
+        $this->void_invoice($orderId, false);
+        $state = ($refund['refund_status'] ?? '') === 'completed' ? 'completed' : 'initiated';
+        return ['ok' => true, 'message' => 'Razorpay refund ' . $state . '. Invoice is void and inactive.'];
+    }
+
     /** One-time stock return flag so cancel/return never double-adds inventory. */
     public function ensure_stock_restored_schema(): void {
         static $done = false;
@@ -481,10 +591,12 @@ class Sk_Order_model extends CI_Model {
             if (!$paymentId) {
                 return ['ok' => false, 'message' => 'Payment record missing. Contact support to cancel this order.'];
             }
-            $refund = $this->_razorpay_refund($paymentId, $onlineRefund, $settings);
+            $refund = $this->initiate_refund($orderId, $settings, $adminForce ? 'Order cancelled by shop' : 'Order cancelled by customer');
             if (!$refund['ok']) {
-                return ['ok' => false, 'message' => $refund['message']];
+                return $refund;
             }
+        } else {
+            $this->void_invoice($orderId, true);
         }
 
         $this->restore_stock_for_order($orderId);
@@ -494,16 +606,16 @@ class Sk_Order_model extends CI_Model {
         // update_status also tries restore; stock_restored_at prevents double add
         $this->update_payment_status($orderId, $newPaymentStatus);
 
-        $msg = 'Order cancelled.';
+        $msg = 'Order cancelled. Invoice is void and inactive.';
         if ($wasPaid) {
-            $msg = 'Order cancelled and refund initiated.';
+            $msg = 'Order cancelled. Invoice is void and the Razorpay refund is initiated.';
         }
 
         return ['ok' => true, 'message' => $msg];
     }
 
-    /** @return array{ok: bool, message: string} */
-    protected function _razorpay_refund(string $paymentId, float $amountRm, array $settings): array {
+    /** @return array{ok: bool, message: string, refund_id?: string, refund_status?: string} */
+    protected function _razorpay_refund(string $paymentId, float $amountRm, array $settings, string $reason = 'Order cancelled'): array {
         if ($amountRm <= 0) {
             return ['ok' => true, 'message' => ''];
         }
@@ -517,7 +629,7 @@ class Sk_Order_model extends CI_Model {
         $payload = json_encode([
             'amount'   => (int)round($amountRm * 100),
             'currency' => $currency,
-            'notes'    => ['reason' => 'Order cancelled by customer'],
+            'notes'    => ['reason' => substr($reason, 0, 180)],
         ]);
 
         $ch = curl_init('https://api.razorpay.com/v1/payments/' . rawurlencode($paymentId) . '/refund');
@@ -537,7 +649,13 @@ class Sk_Order_model extends CI_Model {
 
         $body = json_decode($response ?: '', true);
         if ($httpCode >= 200 && $httpCode < 300 && !empty($body['id'])) {
-            return ['ok' => true, 'message' => ''];
+            $remote = strtolower((string)($body['status'] ?? 'pending'));
+            return [
+                'ok'            => true,
+                'message'       => '',
+                'refund_id'     => (string)$body['id'],
+                'refund_status' => $remote === 'processed' ? 'completed' : 'initiated',
+            ];
         }
 
         $err = is_array($body) ? ($body['error']['description'] ?? $body['error']['reason'] ?? '') : '';

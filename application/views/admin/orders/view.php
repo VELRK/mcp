@@ -188,6 +188,53 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
       </div>
     </div>
 
+    <?php
+      $invoiceVoid = strtolower((string)($order['invoice_status'] ?? 'active')) === 'void';
+      $payState = strtolower((string)($order['payment_status'] ?? 'pending'));
+      $refundState = strtolower((string)($order['refund_status'] ?? ''));
+      $canRefund = strtolower((string)($order['payment_method'] ?? '')) === 'razorpay'
+          && $payState === 'paid'
+          && !in_array($refundState, ['initiated', 'completed'], true);
+    ?>
+    <div class="card sk-table-card shadow-sm mb-3">
+      <div class="card-header bg-white border-0 py-3 fw-semibold">Invoice and refund</div>
+      <div class="card-body">
+        <p class="mb-2 small">
+          Invoice:
+          <span class="badge <?= $invoiceVoid ? 'text-bg-danger' : 'text-bg-success' ?>"><?= $invoiceVoid ? 'Void / inactive' : 'Active' ?></span>
+        </p>
+        <?php if ($invoiceVoid && !empty($order['invoice_voided_at'])): ?>
+        <p class="mb-2 small text-muted">Voided <?= htmlspecialchars(date('d M Y, h:i A', strtotime($order['invoice_voided_at']))) ?></p>
+        <?php endif; ?>
+        <p class="mb-2 small">
+          Payment:
+          <span class="badge text-bg-secondary"><?= htmlspecialchars(ucfirst($payState)) ?></span>
+        </p>
+        <?php if ($refundState !== ''): ?>
+        <p class="mb-2 small">
+          Razorpay refund:
+          <span class="badge text-bg-info"><?= htmlspecialchars(ucfirst($refundState)) ?></span>
+          <?php if (!empty($order['refund_amount'])): ?>
+            <?= $currency . number_format((float)$order['refund_amount'], 2) ?>
+          <?php endif; ?>
+        </p>
+        <?php endif; ?>
+        <?php if (!empty($order['shipping_detail'])): ?>
+        <p class="mb-3 small text-muted">Delivery: <?= htmlspecialchars($order['shipping_detail']) ?></p>
+        <?php endif; ?>
+        <?php if (!$invoiceVoid): ?>
+        <button type="button" class="btn btn-outline-danger w-100 mb-2" onclick="voidInvoice(<?= (int)$order['id'] ?>)">Void invoice</button>
+        <?php endif; ?>
+        <?php if ($canRefund): ?>
+        <button type="button" class="btn btn-outline-dark w-100 mb-2" onclick="initiateRefund(<?= (int)$order['id'] ?>)">Initiate Razorpay refund</button>
+        <?php endif; ?>
+        <?php if (($order['status'] ?? '') !== 'cancelled'): ?>
+        <button type="button" class="btn btn-danger w-100" onclick="cancelOrder(<?= (int)$order['id'] ?>)">Cancel order</button>
+        <p class="small text-muted mt-2 mb-0">Cancel voids the invoice. A paid Razorpay order also starts the refund.</p>
+        <?php endif; ?>
+      </div>
+    </div>
+
     <!-- Customer Info -->
     <div class="card sk-table-card shadow-sm mb-3">
       <div class="card-header bg-white border-0 py-3 fw-semibold">Customer</div>
@@ -242,6 +289,30 @@ function sendInvoice(orderId) {
     if (res.success) location.reload();
   }, 'json').fail(function() {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-envelope me-1"></i> Email Invoice'; }
+    alert('Network error. Please try again.');
+  });
+}
+function postOrderAction(url, orderId, confirmText) {
+  if (confirmText && !confirm(confirmText)) return;
+  $.post(url + '/' + orderId, {}, function(res) {
+    alert(res.message || (res.success ? 'Saved.' : 'Could not update the order.'));
+    if (res.success) location.reload();
+  }, 'json').fail(function() {
+    alert('Network error. Please try again.');
+  });
+}
+function voidInvoice(orderId) {
+  postOrderAction('<?= site_url('shopkart/orders/void_invoice') ?>', orderId, 'Void this invoice? An unpaid payment invoice becomes inactive.');
+}
+function initiateRefund(orderId) {
+  postOrderAction('<?= site_url('shopkart/orders/initiate_refund') ?>', orderId, 'Start a Razorpay refund and void this invoice?');
+}
+function cancelOrder(orderId) {
+  if (!confirm('Cancel this order, void the invoice, and start a Razorpay refund if it was paid?')) return;
+  $.post('<?= site_url('shopkart/orders/update_status') ?>/' + orderId, { status: 'cancelled' }, function(res) {
+    alert(res.message || (res.success ? 'Order cancelled.' : 'Could not cancel the order.'));
+    if (res.success) location.reload();
+  }, 'json').fail(function() {
     alert('Network error. Please try again.');
   });
 }

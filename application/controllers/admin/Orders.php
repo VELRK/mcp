@@ -9,6 +9,7 @@ class Orders extends Sk_Base {
         parent::__construct();
         $this->load->helper('sk_invoice');
         sk_invoice_ensure_vendor_schema();
+        $this->Sk_Order_model->ensure_finance_schema();
     }
 
     public function index() {
@@ -127,10 +128,24 @@ class Orders extends Sk_Base {
         }
         $settings = $this->Sk_Admin_model->get_settings();
         $this->load->helper('sk_mailer');
+        if (strtolower((string)($order['invoice_status'] ?? 'active')) === 'void') {
+            return $this->json(['success' => false, 'message' => 'This invoice is void and inactive.']);
+        }
         $sent = sk_mail_order_invoice($order, $settings);
         if ($sent) {
             return $this->json(['success' => true, 'message' => 'Tax invoice emailed to ' . ($order['customer_email'] ?? 'customer') . '.']);
         }
         return $this->json(['success' => false, 'message' => 'Could not send invoice. Check SMTP settings and customer email.']);
+    }
+
+    public function void_invoice($id) {
+        $result = $this->Sk_Order_model->void_invoice((int)$id, true);
+        return $this->json(['success' => !empty($result['ok']), 'message' => $result['message']]);
+    }
+
+    public function initiate_refund($id) {
+        $settings = $this->Sk_Admin_model->get_settings();
+        $result = $this->Sk_Order_model->initiate_refund((int)$id, $settings, 'Refund initiated by shop');
+        return $this->json(['success' => !empty($result['ok']), 'message' => $result['message']]);
     }
 }

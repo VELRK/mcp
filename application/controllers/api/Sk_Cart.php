@@ -403,6 +403,7 @@ class Sk_Cart extends Sk_Base_Api {
                 'stock'           => $variant ? (int)$variant['stock'] : (int)($thumbRow['stock'] ?? $p['stock'] ?? 0),
                 'quantity'        => (int)$row['quantity'],
                 'subtotal'        => round($effective * $row['quantity'], 2),
+                'vendor_id'       => (int)($p['vendor_id'] ?? 0),
                 'created_at'      => $row['created_at'] ?? null,
                 'added_at'        => $row['created_at'] ?? null,
             ];
@@ -413,18 +414,23 @@ class Sk_Cart extends Sk_Base_Api {
     private function _summary($items) {
         $subtotal = array_sum(array_column($items, 'subtotal'));
         $settings = $this->get_settings();
-        $threshold = (float)($settings['free_shipping_above'] ?? 999);
-        $shipCharge = (float)($settings['shipping_charge'] ?? 50);
-        $eligible = $subtotal > 0 && $subtotal >= $threshold;
-        // Empty cart: no shipping charge (avoid RM50 total with Subtotal RM0)
-        $shipping = ($subtotal <= 0 || empty($items))
-            ? 0
-            : ($eligible ? 0 : $shipCharge);
+        $this->load->helper('sk_delivery');
+        $groups = [];
+        foreach ($items as $item) {
+            $vid = (int)($item['vendor_id'] ?? 0);
+            $groups[$vid] = ($groups[$vid] ?? 0) + (float)($item['subtotal'] ?? 0);
+        }
+        $quote = sk_delivery_quote_groups($groups, $settings, '');
+        $threshold = (float)$quote['threshold'];
+        $shipCharge = (float)$quote['flat_rate'];
+        $eligible = !empty($quote['free']);
+        // Empty cart: no shipping charge (avoid a delivery fee with Subtotal 0)
+        $shipping = ($subtotal <= 0 || empty($items)) ? 0 : (float)$quote['shipping'];
         // Storefront does not charge/show GST
         $tax      = 0;
         $amountToFree = ($subtotal <= 0 || $eligible)
             ? 0.0
-            : round(max(0, $threshold - $subtotal), 2);
+            : (float)$quote['amount_remaining'];
 
         $summary = [
             'subtotal'     => round($subtotal, 2),
@@ -439,12 +445,7 @@ class Sk_Cart extends Sk_Base_Api {
                 'shipping_charge'    => $shipCharge,
                 'amount_remaining'   => $amountToFree,
                 'currency'           => sk_currency_symbol($settings),
-                'message'            => empty($items)
-                    ? null
-                    : ($eligible
-                        ? 'You qualify for free delivery.'
-                        : ('Add ' . sk_currency_symbol($settings) . number_format($amountToFree, 2)
-                            . ' more for free delivery.')),
+                'message'            => empty($items) ? null : ($quote['message'] ?: null),
             ],
         ];
 
