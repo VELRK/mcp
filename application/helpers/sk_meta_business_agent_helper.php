@@ -393,9 +393,9 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "PRODUCT/PRICE: Call search_products exactly once, then answer immediately from the summary (name + ₹ price + stock). "
         . "Mention only the active products in that summary. If it says no matching products, say so. Never mention inactive or draft products, and never list the whole catalog. "
         . "Never invent catalog facts. Infer typos: donu have = do you have; amount/prise = price; kanjivaram = Kanjivaram saree. "
-        . "BUYING: confirm product/qty → name + address → identify_customer or create_customer → update_customer → "
-        . "calculate_order_total → create_order with confirmed=true → handover_to_human for staff approval. "
-        . "Do not create_payment_link until staff confirms. Never hand off for simple product/price questions. "
+        . "BUYING: confirm product, quantity, and total. After the customer agrees, collect name and address, then identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once for that order. "
+        . "After the link is created, confirm again: restate the product, quantity, and total, send the payment link, and ask the customer to confirm this is the order they will pay. "
+        . "One new Razorpay link per order. Never reuse or invent a product payment link. Never hand off for simple product/price questions. "
         . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
         $skill .= ' Extra shop notes: ' . $extra;
@@ -1149,7 +1149,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'order_id'     => $bodyField('integer', 'Order id'),
             'order_number' => $bodyField('string', 'Order number'),
         ]),
-        $tool('create_payment_link', 'Payment link only after human-approved order. Never invent URLs.', [
+        $tool('create_payment_link', 'Create one Razorpay payment link for this confirmed order. Call once after create_order. Then restate the product, quantity, and total, send the link, and ask the customer to confirm before they pay. Never invent a URL.', [
             'order_id' => $bodyField('integer', 'Order id'),
         ], ['order_id']),
         $tool('handover_to_human', 'Notify inbox (soft handoff). Keep chatting after. Not for greetings or product asks.', [

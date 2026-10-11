@@ -52,11 +52,15 @@ $rows = !empty($product_variants)
         <div class="row g-2 align-items-end">
           <div class="col-md-2">
             <label class="form-label small">Image</label>
-            <?php $imgPath = trim($vr['image'] ?? ''); ?>
-            <div class="mb-1 variant-img-preview-wrap<?= $imgPath === '' ? ' d-none' : '' ?>">
-              <img src="<?= $imgPath !== '' ? base_url($imgPath) : '' ?>" alt="" class="rounded border variant-img-preview" style="width:64px;height:64px;object-fit:cover;">
-              <input type="hidden" name="product_variants[<?= $vi ?>][existing_image]" class="variant-existing-image" value="<?= htmlspecialchars($imgPath) ?>">
-            </div>
+            <?php
+              $imgPath = trim((string)($vr['image'] ?? ''));
+              $imgUrl = trim((string)($vr['image_url'] ?? ''));
+              if ($imgUrl === '' && $imgPath !== '') {
+                  $imgUrl = base_url($imgPath);
+              }
+            ?>
+            <input type="hidden" name="product_variants[<?= $vi ?>][existing_image]" class="variant-existing-image" value="<?= htmlspecialchars($imgPath) ?>">
+            <img src="<?= htmlspecialchars($imgUrl) ?>" alt="" class="rounded border variant-img-preview mb-1<?= $imgUrl === '' ? ' d-none' : '' ?>" style="width:72px;height:72px;object-fit:cover;display:<?= $imgUrl === '' ? 'none' : 'block' ?>;">
             <input type="file" name="variant_images[<?= $vi ?>]" class="form-control form-control-sm variant-image-input" accept="image/*">
           </div>
           <div class="col-md-2">
@@ -169,7 +173,7 @@ $rows = !empty($product_variants)
     wrap.className = 'variant-row border rounded p-3 mb-2 bg-light';
     wrap.innerHTML = `
       <div class="row g-2 align-items-end">
-        <div class="col-md-2"><label class="form-label small">Image</label><div class="mb-1 variant-img-preview-wrap d-none"><img src="" alt="" class="rounded border variant-img-preview" style="width:64px;height:64px;object-fit:cover;"><input type="hidden" name="product_variants[${idx}][existing_image]" class="variant-existing-image" value=""></div><input type="file" name="variant_images[${idx}]" class="form-control form-control-sm variant-image-input" accept="image/*"></div>
+        <div class="col-md-2"><label class="form-label small">Image</label><input type="hidden" name="product_variants[${idx}][existing_image]" class="variant-existing-image" value=""><img src="" alt="" class="rounded border variant-img-preview mb-1 d-none" style="width:72px;height:72px;object-fit:cover;display:none;"><input type="file" name="variant_images[${idx}]" class="form-control form-control-sm variant-image-input" accept="image/*"></div>
         <div class="col-md-2"><label class="form-label small">Unit *</label>${unitSelectHtml(idx, defaultUnit)}</div>
         <div class="col-md-1"><label class="form-label small">Qty</label><input type="text" inputmode="decimal" name="product_variants[${idx}][unit_value]" class="form-control form-control-sm" value="${defaultQty}"></div>
         <div class="col-md-2"><label class="form-label small">Label</label><input type="text" name="product_variants[${idx}][label]" class="form-control form-control-sm" placeholder="Auto"></div>
@@ -199,13 +203,13 @@ $rows = !empty($product_variants)
     if (e.target.classList.contains('variant-default')) syncDefaultFlags();
     if (e.target.classList.contains('variant-image-input') && e.target.files && e.target.files[0]) {
       const row = e.target.closest('.variant-row');
-      const wrap = row?.querySelector('.variant-img-preview-wrap');
-      const img = wrap?.querySelector('.variant-img-preview');
-      if (!img || !wrap) return;
+      const img = row?.querySelector('.variant-img-preview');
+      if (!img) return;
       const reader = new FileReader();
       reader.onload = function(ev) {
         img.src = ev.target.result;
-        wrap.classList.remove('d-none');
+        img.classList.remove('d-none');
+        img.style.display = 'block';
       };
       reader.readAsDataURL(e.target.files[0]);
     }

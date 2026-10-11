@@ -70,11 +70,6 @@ $statusBadge = static function (string $status): string {
     </button>
   </td>
   <td class="text-end">
-    <?php if (!empty($p['payment_link'])): ?>
-      <a href="<?= htmlspecialchars($p['payment_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-label-success btn-icon" title="Payment link" aria-label="Payment link">
-        <i class="mdi mdi-credit-card-outline"></i>
-      </a>
-    <?php endif; ?>
     <a href="<?= site_url('shopkart/products/edit/'.$p['id']) ?>" class="btn btn-sm btn-label-primary btn-icon" aria-label="Edit">
       <i class="mdi mdi-pencil-outline"></i>
     </a>

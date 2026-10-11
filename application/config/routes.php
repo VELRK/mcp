@@ -352,8 +352,6 @@ $route['shopkart/products/delete/(:num)'] = 'admin/Products/delete/$1';
 $route['shopkart/products/toggle/(:num)'] = 'admin/Products/toggle/$1';
 $route['shopkart/products/delete_image/(:num)/(:num)'] = 'admin/Products/delete_image/$1/$2';
 $route['shopkart/products/subcategories/(:num)'] = 'admin/Products/subcategories_by_category/$1';
-$route['shopkart/products/create-payment-link'] = 'admin/Products/create_razorpay_payment_link';
-$route['admin/products/create_razorpay_payment_link'] = 'admin/Products/create_razorpay_payment_link';
 // Inventory
 $route['shopkart/inventory'] = 'admin/Inventory/index';
 $route['shopkart/inventory/view/(:num)'] = 'admin/Inventory/view/$1';

@@ -15,9 +15,8 @@ class Sk_Product_model extends CI_Model {
         if (!$this->db->table_exists('products')) {
             return;
         }
-        if (!$this->db->field_exists('payment_link', 'products')) {
-            $this->db->query("ALTER TABLE `products`
-                ADD COLUMN `payment_link` VARCHAR(500) NULL DEFAULT NULL AFTER `thumbnail`");
+        if ($this->db->field_exists('payment_link', 'products')) {
+            $this->db->query('ALTER TABLE `products` DROP COLUMN `payment_link`');
         }
         self::$schema_ready = true;
     }
@@ -376,6 +375,25 @@ class Sk_Product_model extends CI_Model {
             }
             unset($v);
             $product['variants'] = $variants;
+            $gallery = is_array($product['images'] ?? null) ? $product['images'] : [];
+            $knownImages = [];
+            foreach ($gallery as $img) {
+                $knownImages[] = (string)($img['image'] ?? '');
+            }
+            foreach ($variants as $v) {
+                $path = trim((string)($v['image'] ?? ''));
+                if ($path === '' || in_array($path, $knownImages, true)) {
+                    continue;
+                }
+                $gallery[] = [
+                    'image'      => $path,
+                    'image_url'  => (string)($v['image_url'] ?? ''),
+                    'variant_id' => (int)($v['id'] ?? 0),
+                    'alt'        => (string)($v['label'] ?? ''),
+                ];
+                $knownImages[] = $path;
+            }
+            $product['images'] = $gallery;
 
             $product['default_variant_id'] = (int)$display['id'];
             $product['unit_label'] = $display['label'];

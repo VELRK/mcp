@@ -950,8 +950,8 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
             'payment_status' => (string)($order['payment_status'] ?? 'pending'),
             'total' => (float)($order['total'] ?? $total),
             'currency' => 'INR',
-            'human_approval_required' => true,
-            'next_step' => 'Call handover_to_human so a teammate can approve before create_payment_link.',
+            'human_approval_required' => false,
+            'next_step' => 'Call create_payment_link once for this order. Then restate the product, quantity, and total, send the payment link, and ask the customer to confirm before they pay.',
         ],
         'error' => null,
     ];
@@ -977,41 +977,22 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
         return ['success' => false, 'data' => null, 'error' => ['code' => 'ORDER_FORBIDDEN', 'message' => 'That order is not from this shop.']];
     }
     $status = strtolower((string)($order['status'] ?? ''));
-    // Payment link only after human approval (confirmed) — never invent URLs.
-    if (!in_array($status, ['confirmed', 'processing', 'shipped', 'delivered'], true)) {
+    if (in_array($status, ['cancelled', 'refunded'], true)) {
         return [
             'success' => false,
-            'data' => [
-                'order_id' => $orderId,
-                'status' => $status,
-                'human_approval_required' => true,
-            ],
-            'error' => [
-                'code' => 'HUMAN_APPROVAL_REQUIRED',
-                'message' => 'Payment link is available only after a human teammate confirms the order.',
-            ],
+            'data' => ['order_id' => $orderId, 'status' => $status],
+            'error' => ['code' => 'ORDER_CLOSED', 'message' => 'This order is closed, so a payment link cannot be created.'],
         ];
     }
-    $link = '';
-    foreach ((array)($order['items'] ?? []) as $item) {
-        $pid = (int)($item['product_id'] ?? 0);
-        if ($pid <= 0) {
-            continue;
-        }
-        $product = $CI->Sk_Product_model->get_by_id($pid);
-        $plink = trim((string)($product['payment_link'] ?? ''));
-        if ($plink !== '') {
-            $link = $plink;
-            break;
-        }
-    }
+    $CI->Sk_Order_model->ensure_finance_schema();
+    $link = trim((string)($order['payment_link'] ?? ''));
     if ($link === '') {
         $CI->load->helper('sk_razorpay');
         $CI->load->model('Sk_Admin_model');
         $created = sk_razorpay_create_payment_link(
             (float)($order['total'] ?? 0),
             'Order ' . (string)($order['order_number'] ?? $orderId),
-            'ord_' . $orderId . '_' . time(),
+            'ord_' . $orderId,
             ['order_id' => (string)$orderId, 'vendor_id' => (string)$tenantId],
             $CI->Sk_Admin_model->get_settings()
         );
@@ -1023,6 +1004,15 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
             ];
         }
         $link = (string)$created['payment_link'];
+        $CI->db->where('id', $orderId)->update('orders', ['payment_link' => $link]);
+    }
+    $itemNames = [];
+    foreach ((array)($order['items'] ?? []) as $item) {
+        $name = trim((string)($item['product_name'] ?? ''));
+        $qty = (int)($item['quantity'] ?? 1);
+        if ($name !== '') {
+            $itemNames[] = $name . ' x ' . max(1, $qty);
+        }
     }
     return [
         'success' => true,
@@ -1030,9 +1020,11 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
             'tenant_id' => $tenantId,
             'order_id' => $orderId,
             'order_number' => (string)($order['order_number'] ?? ''),
+            'items' => implode(', ', $itemNames),
             'payment_link' => $link,
             'amount' => (float)($order['total'] ?? 0),
             'currency' => 'INR',
+            'confirm_again' => 'Restate the product, quantity, and total, send this payment link, and ask the customer to confirm before they pay.',
         ],
         'error' => null,
     ];
@@ -1328,7 +1320,6 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
             'price'           => $price,
             'mrp'             => ($mrp > $price) ? $mrp : 0,
             'currency'        => 'INR',
-            'payment_link'    => trim((string)($product['payment_link'] ?? '')),
         ];
         if ($tool === 'get_product_price') {
             return [

@@ -452,6 +452,7 @@ class Sk_Order_model extends CI_Model {
             'refund_status'     => 'VARCHAR(20) NULL DEFAULT NULL',
             'refund_amount'     => 'DECIMAL(12,2) NULL DEFAULT NULL',
             'shipping_detail'   => 'VARCHAR(255) NULL DEFAULT NULL',
+            'payment_link'      => 'VARCHAR(500) NULL DEFAULT NULL',
         ];
         foreach ($cols as $col => $def) {
             if ($this->db->field_exists($col, 'orders')) {
