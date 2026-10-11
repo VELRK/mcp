@@ -37,13 +37,24 @@ composer.lock
 # ── Secrets (never commit) ────────────────────────────────────
 application/config/database.php
 application/config/deploy_webhook_secret.php
+application/config/firebase.php
 application/config/firebase-service-account.json
 .env
-.env.local
-.env.*.local
+.env.*
 *.env
 config.local.php
 deploy-keys/
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+
+# Tracked examples and placeholders stay in git
+!.env.example
+!application/config/database.php.example
+!application/config/database.php.server
+!application/config/firebase.php.example
+!application/config/deploy_webhook_secret.php.example
 
 # ── User uploads (live only) ──────────────────────────────────
 assets/uploads/*
@@ -136,3 +147,9 @@ cookies.txt
 out.txt
 dashboard_*.html
 tmp_*.php
+tmp-tpl-check.txt
+/rb_scan.ps1
+/rb_scan.py
+/*.bundle
+/*.tar
+/*.tar.gz

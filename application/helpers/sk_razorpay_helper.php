@@ -66,9 +66,12 @@ function sk_razorpay_create_payment_link(
         'notify'          => ['sms' => false, 'email' => false, 'whatsapp' => false],
         'reminder_enable' => false,
     ];
+    $noteOut = sk_razorpay_apply_commission_notes($noteOut, $amount);
     if ($noteOut) {
         $payload['notes'] = $noteOut;
     }
+    // Route transfers are not attached. A vendor's own Razorpay merchant ID
+    // is not a linked-account ID, and this shop has no approved Route account.
     $ch = curl_init('https://api.razorpay.com/v1/payment_links');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -749,4 +752,117 @@ function sk_razorpay_fetch_order_payments(string $orderId, array $settings = nul
     $decoded = json_decode($response, true);
     $items = $decoded['items'] ?? [];
     return is_array($items) ? $items : [];
+}
+
+/**
+ * Split a customer payment into ShopKart commission and the vendor remainder.
+ * Amounts are integer paise. Rounding: commission is rounded half-up, vendor gets the rest.
+ * This does not create a Razorpay Route transfer.
+ *
+ * @return array{gross_paise:int,commission_paise:int,vendor_paise:int,rate:float}
+ */
+function sk_razorpay_commission_split(float $grossAmount, float $ratePercent): array {
+    $grossPaise = (int)round($grossAmount * 100);
+    if ($grossPaise < 0) {
+        $grossPaise = 0;
+    }
+    $rate = $ratePercent;
+    if ($rate < 0) {
+        $rate = 0.0;
+    }
+    if ($rate > 100) {
+        $rate = 100.0;
+    }
+    $commissionPaise = (int)round($grossPaise * ($rate / 100));
+    if ($commissionPaise > $grossPaise) {
+        $commissionPaise = $grossPaise;
+    }
+    return [
+        'gross_paise'      => $grossPaise,
+        'commission_paise' => $commissionPaise,
+        'vendor_paise'     => $grossPaise - $commissionPaise,
+        'rate'             => $rate,
+    ];
+}
+
+/**
+ * Record the commission split on the payment-link notes.
+ * Looks up the vendor from vendor_id, or from the product when only product_id is present.
+ * Never adds a Razorpay transfers payload.
+ */
+function sk_razorpay_apply_commission_notes(array $notes, float $amount): array {
+    $CI =& get_instance();
+    $vendorId = (int)($notes['vendor_id'] ?? 0);
+    if ($vendorId < 1 && !empty($notes['product_id']) && isset($CI->db)) {
+        $productId = (int)$notes['product_id'];
+        if ($productId > 0 && $CI->db->table_exists('products')) {
+            $product = $CI->db->select('vendor_id')->where('id', $productId)->get('products')->row_array();
+            $vendorId = (int)($product['vendor_id'] ?? 0);
+        }
+    }
+    if ($vendorId < 1 || !isset($CI->db) || !$CI->db->table_exists('vendors')) {
+        return $notes;
+    }
+    $vendor = $CI->db->select('id, commission_rate')->where('id', $vendorId)->get('vendors')->row_array();
+    if (!$vendor) {
+        return $notes;
+    }
+    $split = sk_razorpay_commission_split($amount, (float)($vendor['commission_rate'] ?? 0));
+    $notes['vendor_id'] = (string)$vendorId;
+    $notes['commission_rate'] = (string)$split['rate'];
+    $notes['commission_paise'] = (string)$split['commission_paise'];
+    $notes['vendor_paise'] = (string)$split['vendor_paise'];
+    $notes['route_status'] = 'not_linked';
+    sk_razorpay_ensure_vendor_account((int)$vendorId);
+    return $notes;
+}
+
+/** Linked-account row. Transfers stay blocked until Razorpay Route onboarding exists. */
+function sk_razorpay_ensure_vendor_account(int $vendorId): array {
+    $empty = [
+        'vendor_id'          => $vendorId,
+        'provider'           => 'razorpay',
+        'linked_account_id'  => '',
+        'onboarding_status'  => 'not_linked',
+        'transfer_allowed'   => 0,
+    ];
+    if ($vendorId < 1) {
+        return $empty;
+    }
+    $CI =& get_instance();
+    if (!isset($CI->db)) {
+        return $empty;
+    }
+    if (!$CI->db->table_exists('vendor_razorpay_accounts')) {
+        $CI->db->query(
+            "CREATE TABLE `vendor_razorpay_accounts` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `vendor_id` INT UNSIGNED NOT NULL,
+                `provider` VARCHAR(24) NOT NULL DEFAULT 'razorpay',
+                `linked_account_id` VARCHAR(64) NULL DEFAULT NULL,
+                `onboarding_status` VARCHAR(32) NOT NULL DEFAULT 'not_linked',
+                `transfer_allowed` TINYINT(1) NOT NULL DEFAULT 0,
+                `created_at` DATETIME NOT NULL,
+                `updated_at` DATETIME NOT NULL,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uniq_vendor_provider` (`vendor_id`, `provider`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+    }
+    $row = $CI->db->where('vendor_id', $vendorId)->where('provider', 'razorpay')->get('vendor_razorpay_accounts')->row_array();
+    if ($row) {
+        return $row;
+    }
+    $now = date('Y-m-d H:i:s');
+    $CI->db->insert('vendor_razorpay_accounts', [
+        'vendor_id'         => $vendorId,
+        'provider'          => 'razorpay',
+        'linked_account_id' => null,
+        'onboarding_status' => 'not_linked',
+        'transfer_allowed'  => 0,
+        'created_at'        => $now,
+        'updated_at'        => $now,
+    ]);
+    $empty['id'] = (int)$CI->db->insert_id();
+    return $empty;
 }

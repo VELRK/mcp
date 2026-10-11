@@ -44,6 +44,10 @@ $status_badges = [
         <div class="col-md-6"><small class="text-muted d-block">Email</small><?= htmlspecialchars($vendor['email']) ?></div>
         <div class="col-md-6"><small class="text-muted d-block">Phone</small><?= htmlspecialchars($vendor['phone'] ?: '—') ?></div>
         <div class="col-md-6"><small class="text-muted d-block">Commission</small><?= number_format((float)$vendor['commission_rate'], 2) ?>%</div>
+        <div class="col-md-6"><small class="text-muted d-block">Razorpay Route</small>
+          <?= htmlspecialchars((string)($razorpay_account['onboarding_status'] ?? 'not_linked')) ?>
+          — transfers are blocked until Razorpay links this vendor account
+        </div>
         <div class="col-md-6"><small class="text-muted d-block">Subscription</small><?= ucfirst($vendor['subscription_plan'] ?? 'basic') ?></div>
         <div class="col-md-6"><small class="text-muted d-block">Rating</small><?= number_format((float)$vendor['rating'], 2) ?> (<?= (int)$vendor['rating_count'] ?>)</div>
         <?php if (!empty($vendor['notes'])): ?>

@@ -218,15 +218,6 @@ class Sk_Saas_Billing_model extends CI_Model {
             $defaultVendorId = (int)($settings['saas_default_vendor_id'] ?? 0);
         }
 
-        if ($defaultVendorId < 1) {
-            return [
-                'ok'      => true,
-                'message' => 'Skipped WhatsApp sync: set saas_default_vendor_id in settings.',
-                'synced'  => 0,
-                'skipped' => 0,
-            ];
-        }
-
         if (!$this->db->table_exists('wa_cloud_messages')) {
             return ['ok' => true, 'message' => 'No wa_cloud_messages table.', 'synced' => 0, 'skipped' => 0];
         }
@@ -246,8 +237,17 @@ class Sk_Saas_Billing_model extends CI_Model {
                 $external = 'wa_msg_' . (int)$m['id'];
             }
 
+            $vendorForRow = (int)($m['vendor_id'] ?? 0);
+            if ($vendorForRow < 1) {
+                $vendorForRow = (int)$defaultVendorId;
+            }
+            if ($vendorForRow < 1) {
+                $skipped++;
+                continue;
+            }
+
             $result = $this->log_request([
-                'vendor_id'    => $defaultVendorId,
+                'vendor_id'    => $vendorForRow,
                 'request_type' => 'whatsapp_ai',
                 'source'       => 'whatsapp',
                 'external_id'  => $external,

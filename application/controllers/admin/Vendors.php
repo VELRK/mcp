@@ -182,6 +182,8 @@ class Vendors extends Sk_Base {
         $data['wa_accounts'] = $wa_accounts;
         $data['cfg'] = $cfg;
         $data['webhook_uri'] = sk_wa_meta_webhook_uri();
+        $this->load->helper('sk_razorpay');
+        $data['razorpay_account'] = sk_razorpay_ensure_vendor_account((int)$id);
         $this->render('vendors/view', $data);
     }
 
