@@ -14,15 +14,116 @@ $money = function ($amount) use ($currency) {
 <div class="sk-page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h5 class="sk-page-title mb-0">WhatsApp billing and usage</h5>
-    <small class="text-muted">ShopKart service estimate from saved messages. This is not a Meta invoice and does not include advertising spend.</small>
+    <small class="text-muted">Meta Business Agent charges, conversations, and tool calls. The tables below are the shop’s own message estimate.</small>
   </div>
   <a class="btn btn-sm btn-outline-secondary" href="<?= site_url('admin/whatsapp/billing/export') . ($qs !== '' ? '?' . $qs : '') ?>">Download CSV</a>
 </div>
 
+<?php
+$meta = is_array($meta_report ?? null) ? $meta_report : [];
+$metaTotals = is_array($meta['usage_totals'] ?? null) ? $meta['usage_totals'] : [];
+$metaConv = is_array($meta['conversations'] ?? null) ? $meta['conversations'] : [];
+$returnQs = $qs !== '' ? ('?' . $qs) : '';
+?>
+<div class="card shadow-sm mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span>Meta Business Agent report</span>
+    <?php if (!empty($meta['phone_number_id'])): ?>
+      <small class="text-muted">Phone <?= htmlspecialchars((string)$meta['phone_number_id']) ?></small>
+    <?php endif; ?>
+  </div>
+  <div class="card-body">
+    <?php if (!empty($meta['error'])): ?>
+      <div class="alert alert-warning py-2 mb-3"><?= htmlspecialchars((string)$meta['error']) ?></div>
+    <?php endif; ?>
+    <?php foreach (($meta['notes'] ?? []) as $note): ?>
+      <div class="alert alert-light border py-2 mb-2"><?= htmlspecialchars((string)$note) ?></div>
+    <?php endforeach; ?>
+
+    <?php if ((int)($vendor_id ?? 0) > 0): ?>
+    <form method="post" action="<?= site_url('admin/whatsapp/billing/account') ?>" class="row g-2 align-items-end mb-3">
+      <input type="hidden" name="<?= $this->security->get_csrf_token_name() ?>" value="<?= $this->security->get_csrf_hash() ?>">
+      <input type="hidden" name="vendor_id" value="<?= (int)$vendor_id ?>">
+      <div class="col-md-6">
+        <label class="form-label small mb-1">Meta Business Agent account ID</label>
+        <input type="text" name="ba_account_id" class="form-control form-control-sm" inputmode="numeric"
+               value="<?= htmlspecialchars((string)($meta['ba_account_id'] ?? '')) ?>"
+               placeholder="Billing Hub → Accounts → Meta Business Agent accounts">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-sm btn-warning">Save account</button>
+      </div>
+    </form>
+    <?php endif; ?>
+
+    <div class="row g-3 mb-3">
+      <?php
+      $metaCards = [
+          'Billable messages' => (int)($metaTotals['billable_messages'] ?? 0),
+          'Billable tokens' => (int)($metaTotals['billable_tokens'] ?? 0),
+          'AI conversations' => $metaConv['ai_threads'],
+          'Waiting on staff' => $metaConv['ai_handoffs'],
+      ];
+      foreach ($metaCards as $label => $value): ?>
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100">
+          <div class="text-muted small"><?= htmlspecialchars($label) ?></div>
+          <div class="fs-4 fw-bold"><?= $value === null ? '—' : number_format((int)$value) ?></div>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="mb-3">
+      <div class="text-muted small">Meta charges</div>
+      <div class="fs-5 fw-bold"><?= number_format((float)($metaTotals['cost'] ?? 0), 4) ?></div>
+      <div class="text-muted small">Charges are in the Business Agent account currency. Waiting on staff is the current handoff count, not a total for the dates above.</div>
+    </div>
+
+    <div class="table-responsive mb-3">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Bucket start</th><th>Channel</th><th>Sender</th><th>Messages</th><th>Tokens</th><th>Charge</th></tr></thead>
+        <tbody>
+        <?php if (empty($meta['usage'])): ?>
+          <tr><td colspan="6" class="text-muted">No Meta usage rows for this period.</td></tr>
+        <?php else: foreach ($meta['usage'] as $row): ?>
+          <tr>
+            <td><?= !empty($row['start']) ? htmlspecialchars(date('Y-m-d H:i', (int)$row['start'])) : '—' ?></td>
+            <td><?= htmlspecialchars((string)($row['channel'] ?? '—')) ?></td>
+            <td><?= htmlspecialchars((string)($row['sender_id'] ?? '—')) ?></td>
+            <td><?= (int)($row['billable_messages'] ?? 0) ?></td>
+            <td><?= (int)($row['billable_tokens'] ?? 0) ?></td>
+            <td><?= number_format((float)($row['cost'] ?? 0), 4) ?></td>
+          </tr>
+        <?php endforeach; endif; ?>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Tool</th><th>Conversations</th><th>Avg response ms</th><th>Success</th><th>Errors</th><th>Timeouts</th></tr></thead>
+        <tbody>
+        <?php if (empty($meta['tools'])): ?>
+          <tr><td colspan="6" class="text-muted">No tool calls in this period.</td></tr>
+        <?php else: foreach ($meta['tools'] as $tool): ?>
+          <tr>
+            <td><?= htmlspecialchars((string)($tool['tool_name'] ?? '')) ?></td>
+            <td><?= (int)($tool['thread_count'] ?? 0) ?></td>
+            <td><?= isset($tool['avg_latency_ms']) && $tool['avg_latency_ms'] !== null ? number_format((float)$tool['avg_latency_ms'], 0) : '—' ?></td>
+            <td><?= isset($tool['success_rate']) && $tool['success_rate'] !== null ? number_format((float)$tool['success_rate'] * 100, 1) . '%' : '—' ?></td>
+            <td><?= isset($tool['error_rate']) && $tool['error_rate'] !== null ? number_format((float)$tool['error_rate'] * 100, 1) . '%' : '—' ?></td>
+            <td><?= isset($tool['timeout_rate']) && $tool['timeout_rate'] !== null ? number_format((float)$tool['timeout_rate'] * 100, 1) . '%' : '—' ?></td>
+          </tr>
+        <?php endforeach; endif; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div class="alert alert-warning">
-  Estimated cost uses the WhatsApp AI rate in SaaS Billing (<?= $money($unit_amount) ?> per outbound message that did not fail).
-  Meta has not provided an invoice amount for these messages.
-  Advertising spend is disconnected.
+  The estimate below uses the WhatsApp AI rate in SaaS Billing (<?= $money($unit_amount) ?> per outbound message that did not fail).
+  It is the shop’s own count. Meta’s charges are in the report above.
 </div>
 
 <div class="card shadow-sm mb-3">

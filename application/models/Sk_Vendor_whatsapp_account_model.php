@@ -46,6 +46,9 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
                 ) . "");
             }
         }
+        if (!$this->db->field_exists('ba_account_id', $this->table)) {
+            $this->db->query("ALTER TABLE `{$this->table}` ADD COLUMN `ba_account_id` VARCHAR(64) NULL");
+        }
         foreach (['access_token', 'refresh_token'] as $col) {
             if (!$this->db->field_exists($col, $this->table)) {
                 $this->db->query("ALTER TABLE `{$this->table}` ADD COLUMN `{$col}` MEDIUMTEXT NULL");
@@ -271,5 +274,23 @@ class Sk_Vendor_whatsapp_account_model extends CI_Model {
         $this->db->where('vendor_id', $vendor_id)->update($this->table, ['is_default' => 0]);
         $this->db->where('id', $account_id)->where('vendor_id', $vendor_id)->update($this->table, ['is_default' => 1, 'updated_at' => date('Y-m-d H:i:s')]);
         return $this->db->affected_rows() > 0 || $this->db->where('id', $account_id)->where('vendor_id', $vendor_id)->where('is_default', 1)->count_all_results($this->table) > 0;
+    }
+
+    public function set_ba_account_id(int $vendor_id, string $accountId): bool {
+        $this->ensure_schema();
+        $vendor_id = (int)$vendor_id;
+        $accountId = preg_replace('/\D+/', '', $accountId) ?? '';
+        if ($vendor_id < 1) {
+            return false;
+        }
+        $row = $this->resolve_for_vendor($vendor_id);
+        if (!$row) {
+            return false;
+        }
+        $this->db->where('id', (int)$row['id'])->update($this->table, [
+            'ba_account_id' => $accountId !== '' ? $accountId : null,
+            'updated_at'    => date('Y-m-d H:i:s'),
+        ]);
+        return true;
     }
 }

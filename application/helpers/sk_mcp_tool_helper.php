@@ -989,12 +989,14 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
     if ($link === '') {
         $CI->load->helper('sk_razorpay');
         $CI->load->model('Sk_Admin_model');
+        $returnUrl = sk_razorpay_callback_url() . '?shop_order_id=' . $orderId;
         $created = sk_razorpay_create_payment_link(
             (float)($order['total'] ?? 0),
             'Order ' . (string)($order['order_number'] ?? $orderId),
             'ord_' . $orderId,
             ['order_id' => (string)$orderId, 'vendor_id' => (string)$tenantId],
-            $CI->Sk_Admin_model->get_settings()
+            $CI->Sk_Admin_model->get_settings(),
+            $returnUrl
         );
         if (empty($created['success'])) {
             return [

@@ -297,9 +297,10 @@
               <label class="form-label">Razorpay Webhook Secret</label>
               <input type="password" name="razorpay_webhook_secret" class="form-control font-monospace"
                      value="<?= htmlspecialchars($settings['razorpay_webhook_secret'] ?? '') ?>"
-                     placeholder="whsec_...">
+                     placeholder="Same secret saved in Razorpay">
               <div class="form-text">
-                Webhook URL (Razorpay Dashboard → Webhooks, events: <code>payment.captured</code>, <code>payment.authorized</code>, <code>order.paid</code>):
+                Paste the webhook secret from Razorpay exactly, including a short secret such as demo.
+                Webhook URL (Razorpay Dashboard → Webhooks, events: <code>payment.captured</code>, <code>payment.authorized</code>, <code>order.paid</code>, <code>payment_link.paid</code>):
                 <br><code class="user-select-all"><?= site_url('shopkart-api/payment/razorpay-webhook') ?></code>
                 <br>Optional return URL (Standard Checkout uses the in-page handler; this is a fallback):
                 <br><code class="user-select-all"><?= site_url('shopkart-api/payment/razorpay-return') ?></code>

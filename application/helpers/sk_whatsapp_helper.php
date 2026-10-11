@@ -803,14 +803,39 @@ function sk_whatsapp_notify_invoice(array $order, array $settings = null, string
         'status_trigger' => 'invoice_created',
         'vendor_id'      => $vendorId,
     ];
+    $customerPhones = sk_whatsapp_unique_phones([(string)($order['shipping_phone'] ?? '')]);
     sk_whatsapp_send_shop_event(
         $vendorId,
         'invoice_created',
         $context,
-        sk_whatsapp_unique_phones([(string)($order['shipping_phone'] ?? '')]),
+        $customerPhones,
         $settings,
         $log
     );
+    $CI =& get_instance();
+    $docTpl = sk_whatsapp_pick_event_template($vendorId, 'invoice_created', $doc['id'] !== '');
+    $templateHasPdf = $docTpl && (string)($docTpl['kind'] ?? '') === 'document';
+    if ($doc['id'] !== '' && !$templateHasPdf && $customerPhones) {
+        $settings['vendor_id'] = $vendorId;
+        if (isset($CI->whatsapp_cloud)) {
+            unset($CI->whatsapp_cloud);
+        }
+        $CI->load->library('Whatsapp_cloud', $settings);
+        $caption = 'Invoice ' . ($invoiceNo !== '' ? $invoiceNo : (string)($order['order_number'] ?? ''));
+        foreach ($customerPhones as $phone) {
+            $CI->whatsapp_cloud->send_payload([
+                'messaging_product' => 'whatsapp',
+                'recipient_type'    => 'individual',
+                'to'                => $phone,
+                'type'              => 'document',
+                'document'          => [
+                    'id'       => $doc['id'],
+                    'filename' => $doc['filename'],
+                    'caption'  => trim($caption),
+                ],
+            ]);
+        }
+    }
     sk_whatsapp_send_shop_event($vendorId, 'invoice_shared_admin_alert', $context, sk_whatsapp_owner_phones($vendorId), $settings, $log);
 }
 
@@ -938,6 +963,21 @@ function sk_whatsapp_order_message(array $order, string $status, array $settings
     }
     $lines[] = 'Thank you for shopping with Talk AI Pilot.';
     return implode("\n", $lines);
+}
+
+/** wa.me link that opens this shop's WhatsApp chat on the customer's phone. */
+function sk_whatsapp_shop_chat_url(int $vendorId): string {
+    if ($vendorId < 1) {
+        return '';
+    }
+    $CI =& get_instance();
+    $CI->load->model('Sk_Vendor_whatsapp_account_model');
+    $acct = $CI->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vendorId);
+    $phone = preg_replace('/\D+/', '', (string)($acct['display_phone'] ?? ''));
+    if ($phone === '') {
+        return '';
+    }
+    return 'https://wa.me/' . $phone;
 }
 
 /** Send a session text through the shop's Meta Cloud API. */

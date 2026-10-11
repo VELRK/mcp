@@ -47,7 +47,26 @@ class Whatsapp_billing extends Sk_Base {
         $listed = $this->_messages($range, $vendorId, $data['limit'], $data['offset']);
         $data['messages'] = $listed['rows'];
         $data['total'] = $listed['total'];
+        $data['meta_report'] = $this->_meta_report($range, $vendorId);
         $this->render('whatsapp/billing', $data);
+    }
+
+    public function save_account() {
+        $vendorId = $this->_scoped_vendor_id();
+        if ($this->is_super_admin()) {
+            $posted = (int)$this->input->post('vendor_id');
+            if ($posted > 0) {
+                $vendorId = $posted;
+            }
+        }
+        $accountId = trim((string)$this->input->post('ba_account_id'));
+        $this->load->model('Sk_Vendor_whatsapp_account_model');
+        $ok = $vendorId > 0 && $this->Sk_Vendor_whatsapp_account_model->set_ba_account_id($vendorId, $accountId);
+        $this->session->set_flashdata($ok ? 'success' : 'error', $ok
+            ? 'Meta Business Agent account ID saved.'
+            : 'Choose a vendor that already has a WhatsApp number, then save the account ID.');
+        $qs = $vendorId > 0 ? ('?vendor_id=' . $vendorId) : '';
+        redirect('admin/whatsapp/billing' . $qs);
     }
 
     public function export_csv() {
@@ -131,6 +150,46 @@ class Whatsapp_billing extends Sk_Base {
         } elseif (!$this->is_super_admin()) {
             $this->db->where('m.vendor_id', 0);
         }
+    }
+
+    protected function _meta_report(array $range, int $vendorId): array {
+        $report = [
+            'ready' => false,
+            'error' => $vendorId > 0 ? '' : 'Choose one vendor to load the Meta Business Agent report.',
+            'phone_number_id' => '',
+            'ba_account_id' => '',
+            'usage' => [],
+            'usage_totals' => ['billable_messages' => 0, 'billable_tokens' => 0, 'cost' => 0.0],
+            'conversations' => ['ai_threads' => null, 'ai_handoffs' => null],
+            'tools' => [],
+            'notes' => [],
+        ];
+        if ($vendorId < 1) {
+            return $report;
+        }
+        $this->load->model('Sk_Vendor_whatsapp_account_model');
+        $this->load->helper('sk_meta_business_agent');
+        $account = $this->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vendorId);
+        if (!$account || trim((string)($account['phone_number_id'] ?? '')) === '') {
+            $report['error'] = 'This vendor has no WhatsApp phone number yet.';
+            return $report;
+        }
+        $report['phone_number_id'] = (string)$account['phone_number_id'];
+        $report['ba_account_id'] = (string)($account['ba_account_id'] ?? '');
+        $live = sk_meta_ba_vendor_insights(
+            $report['phone_number_id'],
+            $report['ba_account_id'],
+            $range['from'],
+            $range['to']
+        );
+        $report['ready'] = !empty($live['ok']);
+        $report['usage'] = $live['usage'] ?? [];
+        $report['usage_totals'] = $live['usage_totals'] ?? $report['usage_totals'];
+        $report['conversations'] = $live['conversations'] ?? $report['conversations'];
+        $report['tools'] = $live['tools'] ?? [];
+        $report['notes'] = $live['notes'] ?? [];
+        $report['error'] = (string)($live['error'] ?? '');
+        return $report;
     }
 
     protected function _summary(array $range, int $vendorId, float $unit): array {

@@ -15,7 +15,8 @@ function sk_razorpay_create_payment_link(
     string $description,
     string $referenceId,
     array $notes = [],
-    ?array $settings = null
+    ?array $settings = null,
+    string $callbackUrl = ''
 ): array {
     $fail = static function (string $message): array {
         return ['success' => false, 'payment_link' => '', 'message' => $message, 'id' => '', 'currency' => ''];
@@ -69,6 +70,11 @@ function sk_razorpay_create_payment_link(
     $noteOut = sk_razorpay_apply_commission_notes($noteOut, $amount);
     if ($noteOut) {
         $payload['notes'] = $noteOut;
+    }
+    $callbackUrl = trim($callbackUrl);
+    if ($callbackUrl !== '' && preg_match('#^https://#i', $callbackUrl)) {
+        $payload['callback_url'] = $callbackUrl;
+        $payload['callback_method'] = 'get';
     }
     // Route transfers are not attached. A vendor's own Razorpay merchant ID
     // is not a linked-account ID, and this shop has no approved Route account.
@@ -549,7 +555,8 @@ function sk_razorpay_finalize_order_payment(
             'status'              => 'captured',
         ]);
     } else {
-        $CI->Sk_Order_model->save_payment([
+        $CI->load->helper('sk_whatsapp');
+        $payRow = [
             'order_id'            => $orderId,
             'razorpay_order_id'   => $rzpOrderId,
             'razorpay_payment_id' => $rzpPaymentId,
@@ -557,7 +564,12 @@ function sk_razorpay_finalize_order_payment(
             'amount'              => (float)($order['total'] ?? 0),
             'currency'            => strtoupper((string)($order['currency'] ?? sk_currency_code($settings))),
             'status'              => 'captured',
-        ]);
+        ];
+        $payVendor = sk_whatsapp_order_vendor_id($order);
+        if ($payVendor > 0 && $CI->db->field_exists('vendor_id', 'payments')) {
+            $payRow['vendor_id'] = $payVendor;
+        }
+        $CI->Sk_Order_model->save_payment($payRow);
     }
 
     $CI->Sk_Order_model->update_payment_status($orderId, 'paid');
@@ -579,6 +591,7 @@ function sk_razorpay_finalize_order_payment(
     }
     sk_whatsapp_notify_order_status($order, $order['status'] ?? 'confirmed', $settings);
     sk_whatsapp_notify_payment_result($order, true, $settings);
+    sk_whatsapp_notify_invoice($order, $settings);
 
     $msg = 'Payment successful! Your order is confirmed.';
     return [
@@ -594,6 +607,28 @@ function sk_razorpay_finalize_order_payment(
  */
 function sk_razorpay_handle_webhook_event(array $event, array $settings = null): array {
     $eventName = (string)($event['event'] ?? '');
+    if ($eventName === 'payment_link.paid') {
+        $link = $event['payload']['payment_link']['entity'] ?? null;
+        $paid = $event['payload']['payment']['entity'] ?? null;
+        $notes = is_array($link) && is_array($link['notes'] ?? null) ? $link['notes'] : [];
+        $shopOrderId = (int)($notes['order_id'] ?? 0);
+        $noteVendor = (int)($notes['vendor_id'] ?? 0);
+        $paymentId = is_array($paid) ? (string)($paid['id'] ?? '') : '';
+        $rzpOrderId = is_array($paid) ? (string)($paid['order_id'] ?? '') : '';
+        if ($shopOrderId > 0 && $paymentId !== '' && sk_razorpay_order_vendor_ok($shopOrderId, $noteVendor)) {
+            $result = sk_razorpay_finalize_order_payment(
+                $shopOrderId,
+                $rzpOrderId !== '' ? $rzpOrderId : ('plink_' . $shopOrderId),
+                $paymentId,
+                '',
+                null,
+                $settings,
+                true
+            );
+            return ['handled' => true, 'type' => 'payment_link', 'result' => $result];
+        }
+        return ['handled' => false, 'message' => 'payment_link.paid missing order or vendor mismatch'];
+    }
     if ($eventName === 'payment.failed') {
         $failed = $event['payload']['payment']['entity'] ?? null;
         $failedOrder = is_array($failed) ? (string)($failed['order_id'] ?? '') : '';
@@ -637,6 +672,10 @@ function sk_razorpay_handle_webhook_event(array $event, array $settings = null):
 
     if ($paymentRow) {
         $shopOrderId = (int)($paymentRow['order_id'] ?? 0);
+        $noteVendor = (int)($paymentRow['vendor_id'] ?? 0);
+        if (!sk_razorpay_order_vendor_ok($shopOrderId, $noteVendor)) {
+            return ['handled' => false, 'message' => 'Payment vendor does not match this order.'];
+        }
         $result = sk_razorpay_finalize_order_payment(
             $shopOrderId,
             $orderId,
@@ -649,7 +688,40 @@ function sk_razorpay_handle_webhook_event(array $event, array $settings = null):
         return ['handled' => true, 'type' => 'order', 'result' => $result];
     }
 
+    $notes = is_array($entity) && is_array($entity['notes'] ?? null) ? $entity['notes'] : [];
+    $shopOrderId = (int)($notes['order_id'] ?? 0);
+    $noteVendor = (int)($notes['vendor_id'] ?? 0);
+    if ($shopOrderId > 0 && sk_razorpay_order_vendor_ok($shopOrderId, $noteVendor)) {
+        $result = sk_razorpay_finalize_order_payment(
+            $shopOrderId,
+            $orderId,
+            $paymentId,
+            '',
+            null,
+            $settings,
+            true
+        );
+        return ['handled' => true, 'type' => 'order_notes', 'result' => $result];
+    }
+
     return ['handled' => false, 'message' => 'No matching shop order for ' . $orderId];
+}
+
+function sk_razorpay_order_vendor_ok(int $shopOrderId, int $noteVendorId): bool {
+    if ($shopOrderId < 1) {
+        return false;
+    }
+    if ($noteVendorId < 1) {
+        return true;
+    }
+    $CI =& get_instance();
+    $CI->load->model('Sk_Order_model');
+    $CI->load->helper('sk_whatsapp');
+    $order = $CI->Sk_Order_model->get_by_id($shopOrderId);
+    if (!$order) {
+        return false;
+    }
+    return sk_whatsapp_order_vendor_id($order) === $noteVendorId;
 }
 
 /**

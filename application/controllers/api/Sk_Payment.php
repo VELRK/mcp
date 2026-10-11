@@ -315,6 +315,12 @@ class Sk_Payment extends Sk_Base_Api {
      */
     public function razorpay_return() {
         $this->load->helper('sk_razorpay');
+        $shopOrderId = (int)$this->input->get('shop_order_id');
+        $linkStatus = strtolower(trim((string)$this->input->get('razorpay_payment_link_status')));
+        if ($shopOrderId > 0 && $linkStatus === 'paid') {
+            $this->_return_paid_link_to_whatsapp($shopOrderId);
+            return;
+        }
         $params = sk_razorpay_collect_callback_params();
         $settings = $this->get_settings();
 
@@ -419,6 +425,52 @@ class Sk_Payment extends Sk_Base_Api {
         }
 
         $this->load->view('payment/result', $view);
+    }
+
+    /**
+     * After a WhatsApp payment link is paid, open the same shop chat.
+     */
+    private function _return_paid_link_to_whatsapp(int $shopOrderId): void {
+        $this->load->model('Sk_Order_model');
+        $this->load->helper('sk_whatsapp');
+        $settings = $this->get_settings();
+        $order = $this->Sk_Order_model->get_by_id($shopOrderId);
+        $paymentId = trim((string)$this->input->get('razorpay_payment_id'));
+        if ($order && strtolower((string)($order['payment_status'] ?? '')) !== 'paid' && $paymentId !== '') {
+            $pay = sk_razorpay_fetch_payment($paymentId, $settings);
+            $payStatus = strtolower((string)($pay['status'] ?? ''));
+            if (is_array($pay) && in_array($payStatus, ['captured', 'authorized'], true)) {
+                sk_razorpay_finalize_order_payment(
+                    $shopOrderId,
+                    (string)($pay['order_id'] ?? ('plink_' . $shopOrderId)),
+                    $paymentId,
+                    '',
+                    (int)($order['user_id'] ?? 0) ?: null,
+                    $settings,
+                    true
+                );
+                $order = $this->Sk_Order_model->get_by_id($shopOrderId);
+            }
+        }
+        $vendorId = $order ? (int)($order['vendor_id'] ?? 0) : 0;
+        if ($vendorId < 1 && $order) {
+            $this->load->helper('sk_whatsapp');
+            $vendorId = (int)sk_whatsapp_order_vendor_id($order);
+        }
+        $chat = $vendorId > 0 ? sk_whatsapp_shop_chat_url($vendorId) : '';
+        if ($chat !== '') {
+            redirect($chat);
+            return;
+        }
+        $this->load->view('payment/result', [
+            'success'          => true,
+            'pending'          => false,
+            'message'          => 'Payment received. Return to the WhatsApp chat to continue.',
+            'order_number'     => (string)($order['order_number'] ?? ''),
+            'orders_url'       => rtrim(base_url(), '/') . '/account-orders',
+            'home_url'         => rtrim(base_url(), '/') . '/',
+            'cart_clear_lines' => [],
+        ]);
     }
 
     /**

@@ -126,6 +126,9 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             if (!empty($p['blouse_included'])) {
                 $extra[] = 'blouse included';
             }
+            if (!empty($p['image_url'])) {
+                $extra[] = 'photo available';
+            }
             $lines[] = sprintf(
                 '%s — ₹%s%s, stock %d',
                 (string)($p['name'] ?? 'Product'),
@@ -161,10 +164,21 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             if (strtolower(trim((string)($row['status'] ?? 'active'))) !== 'active') {
                 continue;
             }
+            $image = trim((string)($row['image_url'] ?? ''));
+            if ($image === '') {
+                $image = trim((string)($row['thumbnail'] ?? $row['image'] ?? ''));
+            }
+            if ($image !== '' && !preg_match('#^https?://#i', $image)) {
+                $image = base_url(ltrim($image, '/'));
+            }
+            if (!preg_match('#^https://#i', $image)) {
+                $image = '';
+            }
             $out[] = [
                 'id'               => $id,
                 'name'             => (string)($row['name'] ?? ''),
                 'sku'              => (string)($row['sku'] ?? ''),
+                'image_url'        => $image,
                 'color'            => (string)($row['color'] ?? ''),
                 'length'           => (string)($row['length'] ?? $row['saree_length'] ?? ''),
                 'blouse_included'  => !empty($row['blouse_included']),

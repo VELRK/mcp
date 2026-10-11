@@ -95,11 +95,12 @@ function sk_meta_ba_access_token(string $phoneNumberId = '', ?array $settings = 
     return trim((string)($cloud['access_token'] ?? ''));
 }
 
-function sk_meta_ba_http(string $method, string $url, $body = null, string $token = '', int $timeout = 30): array {
+function sk_meta_ba_http(string $method, string $url, $body = null, string $token = '', int $timeout = 30, string $apiVersion = ''): array {
+    $version = trim($apiVersion) !== '' ? trim($apiVersion) : sk_meta_ba_config_array()['api_version'];
     $headers = [
         'Accept: application/json',
         'Content-Type: application/json',
-        'X-API-Version: ' . sk_meta_ba_config_array()['api_version'],
+        'X-API-Version: ' . $version,
     ];
     if ($token !== '') {
         $headers[] = 'Authorization: Bearer ' . $token;
@@ -201,6 +202,159 @@ function sk_meta_ba_entity_url(string $phoneNumberId, string $path = ''): string
     $phoneNumberId = trim($phoneNumberId);
     $path = ltrim($path, '/');
     return $base . '/' . rawurlencode($phoneNumberId) . ($path !== '' ? '/' . $path : '');
+}
+
+function sk_meta_ba_query_url(string $entityId, string $path, array $query): string {
+    $parts = [];
+    foreach ($query as $key => $value) {
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                $parts[] = rawurlencode((string)$key) . '=' . rawurlencode((string)$item);
+            }
+            continue;
+        }
+        $parts[] = rawurlencode((string)$key) . '=' . rawurlencode((string)$value);
+    }
+    $url = sk_meta_ba_entity_url($entityId, $path);
+    return $parts ? ($url . '?' . implode('&', $parts)) : $url;
+}
+
+/**
+ * Meta Business Agent usage, conversation, and tool-call figures for one vendor phone.
+ *
+ * @return array<string, mixed>
+ */
+function sk_meta_ba_vendor_insights(string $phoneNumberId, string $billableAccountId, string $from, string $to, ?array $settings = null): array {
+    $empty = [
+        'ok' => false,
+        'error' => '',
+        'usage' => [],
+        'usage_totals' => ['billable_messages' => 0, 'billable_tokens' => 0, 'cost' => 0.0],
+        'conversations' => ['ai_threads' => null, 'ai_handoffs' => null],
+        'tools' => [],
+        'notes' => [],
+    ];
+    $phoneNumberId = trim($phoneNumberId);
+    $billableAccountId = trim($billableAccountId);
+    if ($phoneNumberId === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+        $empty['error'] = 'Choose a vendor with a WhatsApp phone number.';
+        return $empty;
+    }
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '') {
+        $empty['error'] = 'Meta access token is missing.';
+        return $empty;
+    }
+
+    $tzName = date_default_timezone_get() ?: 'UTC';
+    try {
+        $tz = new DateTimeZone($tzName);
+    } catch (Exception $e) {
+        $tz = new DateTimeZone('UTC');
+    }
+    $startDt = DateTime::createFromFormat('Y-m-d H:i:s', $from . ' 00:00:00', $tz);
+    $endDt = DateTime::createFromFormat('Y-m-d H:i:s', $to . ' 00:00:00', $tz);
+    if (!$startDt || !$endDt) {
+        $empty['error'] = 'Invalid date range.';
+        return $empty;
+    }
+    $endDt->modify('+1 day');
+    $usageFrom = $from;
+    $spanDays = (int)$startDt->diff(DateTime::createFromFormat('Y-m-d H:i:s', $to . ' 00:00:00', $tz))->days;
+    if ($spanDays > 89) {
+        $usageFromDt = clone $endDt;
+        $usageFromDt->modify('-90 days');
+        $usageFrom = $usageFromDt->format('Y-m-d');
+        $startDt = DateTime::createFromFormat('Y-m-d H:i:s', $usageFrom . ' 00:00:00', $tz);
+        $empty['notes'][] = 'Meta usage and conversations are limited to 90 days, so this report starts on ' . $usageFrom . '.';
+    }
+
+    $report = $empty;
+    $report['ok'] = true;
+    $usageEntity = $billableAccountId !== '' ? $billableAccountId : '';
+    if ($usageEntity === '') {
+        $report['notes'][] = 'Paste the Meta Business Agent account ID from Billing Hub to load billable messages, tokens, and charges.';
+    } else {
+        $usage = sk_meta_ba_http(
+            'GET',
+            sk_meta_ba_query_url($usageEntity, 'business_agent_insights', [
+                'start' => (string)$startDt->getTimestamp(),
+                'end' => (string)$endDt->getTimestamp(),
+                'granularity' => 'DAY',
+                'channels' => ['whatsapp'],
+                'metric_types' => ['billable_messages', 'billable_tokens', 'cost'],
+                'dimensions' => ['channel', 'sender_id'],
+            ]),
+            null,
+            $token,
+            30,
+            '3.0.0'
+        );
+        if (empty($usage['ok'])) {
+            $report['notes'][] = 'Usage insights: ' . (string)($usage['error'] ?? 'request failed');
+        } else {
+            $rows = is_array($usage['data']['usage'] ?? null) ? $usage['data']['usage'] : [];
+            $report['usage'] = $rows;
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $report['usage_totals']['billable_messages'] += (int)($row['billable_messages'] ?? 0);
+                $report['usage_totals']['billable_tokens'] += (int)($row['billable_tokens'] ?? 0);
+                $report['usage_totals']['cost'] += (float)($row['cost'] ?? 0);
+            }
+            $report['usage_totals']['cost'] = round($report['usage_totals']['cost'], 4);
+        }
+    }
+
+    $convTo = $to;
+    $convFrom = $usageFrom;
+    $conv = sk_meta_ba_http(
+        'GET',
+        sk_meta_ba_query_url($phoneNumberId, 'insights/conversations', [
+            'start_date' => $convFrom,
+            'end_date' => $convTo,
+            'metrics' => ['ai_threads', 'ai_handoffs'],
+        ]),
+        null,
+        $token,
+        30,
+        '2.0.0'
+    );
+    if (empty($conv['ok'])) {
+        $report['notes'][] = 'Conversation insights: ' . (string)($conv['error'] ?? 'request failed');
+    } else {
+        $row = is_array($conv['data']['data'][0] ?? null) ? $conv['data']['data'][0] : [];
+        $report['conversations']['ai_threads'] = isset($row['ai_threads']['count']) ? (int)$row['ai_threads']['count'] : null;
+        $report['conversations']['ai_handoffs'] = isset($row['ai_handoffs']['count']) ? (int)$row['ai_handoffs']['count'] : null;
+    }
+
+    $toolFrom = $from;
+    if ($spanDays > 29) {
+        $toolFromDt = DateTime::createFromFormat('Y-m-d H:i:s', $to . ' 00:00:00', $tz);
+        if ($toolFromDt) {
+            $toolFromDt->modify('-29 days');
+            $toolFrom = $toolFromDt->format('Y-m-d');
+            $report['notes'][] = 'Tool call insights cover at most 30 days, from ' . $toolFrom . '.';
+        }
+    }
+    $tools = sk_meta_ba_http(
+        'GET',
+        sk_meta_ba_query_url($phoneNumberId, 'insights/tool_calls', [
+            'start_date' => $toolFrom,
+            'end_date' => $to,
+        ]),
+        null,
+        $token,
+        30,
+        '2.0.0'
+    );
+    if (empty($tools['ok'])) {
+        $report['notes'][] = 'Tool call insights: ' . (string)($tools['error'] ?? 'request failed');
+    } else {
+        $report['tools'] = is_array($tools['data']['data'] ?? null) ? $tools['data']['data'] : [];
+    }
+    return $report;
 }
 
 function sk_meta_ba_check_eligibility(string $phoneNumberId, ?array $settings = null): array {
@@ -391,6 +545,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Never mention AI, tools, databases, APIs, or internal IDs. "
         . "GREETINGS: If they only say hi/hello/hey/vanakkam with no product ask, reply in ONE short sentence. Call NO tools. "
         . "PRODUCT/PRICE: Call search_products exactly once, then answer immediately from the summary (name + ₹ price + stock). "
+        . "Let the enabled UI skills choose the visual before you reply: a product photo or carousel when image_url is present, a choice list when they must pick one item, confirm buttons before the order, and the Pay now button for the payment link. "
         . "Mention only the active products in that summary. If it says no matching products, say so. Never mention inactive or draft products, and never list the whole catalog. "
         . "Never invent catalog facts. Infer typos: donu have = do you have; amount/prise = price; kanjivaram = Kanjivaram saree. "
         . "BUYING: confirm product, quantity, and total. After the customer agrees, collect name and address, then identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once for that order. "
@@ -935,15 +1090,53 @@ function sk_meta_ba_delete_ui_skill(string $phoneNumberId, string $instructionId
 function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''): array {
     $catalogUrl = trim($catalogUrl);
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'Shop';
-    if ($catalogUrl === '' || !preg_match('#^https?://#i', $catalogUrl)) {
-        return [];
+    $defs = [
+        [
+            'title'           => 'product-photo',
+            'component_type'  => 'image',
+            'status'          => 'enabled',
+            'instruction'     => 'When search_products returns exactly one product and that product has image_url, send that image before any other product visual. Caption is the product name, price, and stock from the tool. Use image_url exactly. Never invent an image.',
+        ],
+        [
+            'title'           => 'product-cards',
+            'component_type'  => 'carousel_quick_reply',
+            'status'          => 'enabled',
+            'instruction'     => 'When search_products returns two or more products and at least two have image_url, send a quick-reply carousel. One card per product, maximum 10. Each card image is that product image_url. Card text is the name and price. One button on every card, title "Buy this", id "buy-" plus the product id. Never invent an image or a product.',
+        ],
+        [
+            'title'           => 'product-choice-list',
+            'component_type'  => 'interactive_list',
+            'status'          => 'enabled',
+            'instruction'     => 'When the customer must choose one product, color, or variant from the search results, send an interactive list before create_order. Button text "Choose". One row per option. Row id is the product id. Row title is the product name, at most 24 characters. Row description is the price. Do not send this list after they have already chosen.',
+        ],
+        [
+            'title'           => 'order-confirm-buttons',
+            'component_type'  => 'interactive_reply_buttons',
+            'status'          => 'enabled',
+            'instruction'     => 'Before create_order, send reply buttons. Body restates the product, quantity, and total and asks them to confirm. Two buttons only: id "confirm-order" title "Confirm order", and id "change-order" title "Change". Create the order only after they choose Confirm order.',
+        ],
+        [
+            'title'           => 'delivery-location',
+            'component_type'  => 'location_request',
+            'status'          => 'enabled',
+            'instruction'     => 'When a delivery address is still missing, send a location request. Body text asks them to share the delivery location or type the full address. Save the address with update_customer. Do not ask again after the address is saved or after payment.',
+        ],
+        [
+            'title'           => 'order-payment-cta',
+            'component_type'  => 'cta_url',
+            'status'          => 'enabled',
+            'instruction'     => 'When create_payment_link returns a payment_link, send a CTA URL button in this same chat. Body text must restate the product, quantity, and total and ask the customer to confirm this is the order they will pay. Button label text "Pay now". URL is exactly the payment_link from the tool. Never invent a URL.',
+        ],
+    ];
+    if ($catalogUrl !== '' && preg_match('#^https?://#i', $catalogUrl)) {
+        $defs[] = [
+            'title'           => 'shop-catalog-cta',
+            'component_type'  => 'cta_url',
+            'status'          => 'enabled',
+            'instruction'     => 'When the customer asks for the website, online shop, or catalog link, send a CTA URL button with body text "Browse our catalog online", button label text "' . $shopName . '", and URL ' . $catalogUrl,
+        ];
     }
-    return [[
-        'title'           => 'shop-catalog-cta',
-        'component_type'  => 'cta_url',
-        'status'          => 'enabled',
-        'instruction'     => 'When the customer asks for the website, online shop, or catalog link, send a CTA URL button with body text "Browse our catalog online", button label text "' . $shopName . '", and URL ' . $catalogUrl,
-    ]];
+    return $defs;
 }
 
 function sk_meta_ba_sync_shop_ui_skills(string $phoneNumberId, string $shopName, string $catalogUrl = '', ?array $settings = null): array {
@@ -1106,7 +1299,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
 
     // Keep this list SMALL — Meta latency grows with tool count (19 tools was ~19s; 9 tools ~14s).
     return [
-        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns matching active products only, never inactive, draft, or the whole catalog. Summary has name+price+stock.', [
+        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns matching active products only, never inactive, draft, or the whole catalog. Each product has name, price, stock, and image_url when a photo exists.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
             'limit'  => $bodyField('integer', 'Max results (1-3)'),
