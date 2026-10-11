@@ -548,11 +548,11 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "If the tool returns one product, send the product photo first. Image URL is image_url. Caption is the name and price only. Then send the Shop now reply button. The button title is exactly Shop now. It has no URL. "
         . "If the tool returns two or more products, send the product-shop-cards carousel. A carousel must have 2 to 10 cards, so never use it for one product. Each card image is image_url. Card text is the name and price. The card button is a reply, not a link. Button text is that product name, at most 20 characters. "
         . "When the customer taps Shop now, or taps a product card, they want to buy that product in this chat. Do not send them to a website. "
-        . "If the customer must pick one item, send the choice list. Before create_order, send the confirm buttons. If the address is missing, send the location request. When a payment link exists, send the Pay now button and do not paste the raw link as the only reply. "
+        . "If the customer must pick one item, send the choice list. Before create_order, send the confirm buttons. If the address is missing, send the location request. When a payment link exists, send the Pay now card and no other message. "
         . "The search result is the whole catalog for this shop. Offer only those products, as the photo card or the carousel. Never add a product from another shop or from memory. If there are no matches, say so in one sentence. "
         . "Never invent catalog facts. Infer typos: donu have = do you have; amount/prise = price; kanjivaram = Kanjivaram saree. "
         . "BUYING: confirm product, quantity, and total. After the customer agrees, collect name and address, then identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once for that order. "
-        . "After the link is created, send the Pay now button. The button body restates the product, quantity, and total. Do not send the payment address as plain text. "
+        . "After the link is created, send the Pay now card before any invoice. Use card.body exactly. It already lists the order, product, quantity, item total, delivery charge or Free shipping, and the total. Header image is card.header_image_url. Footer is card.footer. Button label is Pay now. Button URL is the Razorpay payment_link. Do not paste the link as text. "
         . "One new Razorpay link per order. Never reuse or invent a product payment link. Never hand off for simple product/price questions. "
         . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
@@ -1134,7 +1134,7 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'title'           => 'order-payment-cta',
             'component_type'  => 'cta_url',
             'status'          => 'enabled',
-            'instruction'     => 'When create_payment_link returns a payment_link, send a CTA URL button in this same chat. Body text must restate the product, quantity, and total and ask the customer to confirm this is the order they will pay. Button label text "Pay now". URL is exactly the payment_link from the tool. Never invent a URL.',
+            'instruction'     => 'When create_payment_link returns a payment_link, send this CTA and no other message. This is the bill the customer sees before paying. Header media URL is card.header_image_url when it starts with https. Body text is exactly card.body, which lists the order number, product, quantity, item total, Delivery charge or Free shipping, and the total. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link, the Razorpay link. Never invent a URL and never paste the link as text.',
         ],
     ];
     if ($catalogUrl !== '' && preg_match('#^https?://#i', $catalogUrl)) {
@@ -1362,7 +1362,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'order_id'     => $bodyField('integer', 'Order id'),
             'order_number' => $bodyField('string', 'Order number'),
         ]),
-        $tool('create_payment_link', 'Create one Razorpay payment link for this confirmed order. Call once after create_order. Then restate the product, quantity, and total, send the link, and ask the customer to confirm before they pay. Never invent a URL.', [
+        $tool('create_payment_link', 'Create one Razorpay payment link after create_order. The reply is the Pay now card. Use card.body, card.footer, card.header_image_url, and payment_link. The body already has the product, quantity, delivery charge or free shipping, and total. Do not paste the link as text.', [
             'order_id' => $bodyField('integer', 'Order id'),
         ], ['order_id']),
         $tool('handover_to_human', 'Notify inbox (soft handoff). Keep chatting after. Not for greetings or product asks.', [

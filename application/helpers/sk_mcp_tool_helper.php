@@ -1022,25 +1022,88 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
         $link = (string)$created['payment_link'];
         $CI->db->where('id', $orderId)->update('orders', ['payment_link' => $link]);
     }
+    $money = static function ($amount): string {
+        $amount = round((float)$amount, 2);
+        if (abs($amount - round($amount)) < 0.001) {
+            return '₹' . number_format($amount, 0);
+        }
+        return '₹' . number_format($amount, 2);
+    };
     $itemNames = [];
+    $itemLines = [];
+    $image = '';
+    $subtotal = (float)($order['subtotal'] ?? 0);
     foreach ((array)($order['items'] ?? []) as $item) {
         $name = trim((string)($item['product_name'] ?? ''));
-        $qty = (int)($item['quantity'] ?? 1);
-        if ($name !== '') {
-            $itemNames[] = $name . ' x ' . max(1, $qty);
+        $qty = max(1, (int)($item['quantity'] ?? 1));
+        $unit = (float)($item['price'] ?? 0);
+        if ($name === '') {
+            continue;
         }
+        $itemNames[] = $name . ' x ' . $qty;
+        $itemLines[] = $name;
+        $itemLines[] = 'Qty ' . $qty . ' × ' . $money($unit);
+        if ($image === '') {
+            $productId = (int)($item['product_id'] ?? 0);
+            $product = $productId > 0 ? $CI->Sk_Product_model->get_by_id($productId) : null;
+            if (is_array($product)) {
+                $path = sk_mcp_tool_product_image_path($product);
+                if ($path !== '' && !preg_match('#^https?://#i', $path)) {
+                    $path = base_url(ltrim($path, '/'));
+                }
+                if (stripos($path, 'http://') === 0) {
+                    $path = 'https://' . substr($path, 7);
+                }
+                if (preg_match('#^https://#i', $path)) {
+                    $image = $path;
+                }
+            }
+        }
+    }
+    if ($subtotal <= 0) {
+        foreach ((array)($order['items'] ?? []) as $item) {
+            $subtotal += (float)($item['subtotal'] ?? ((float)($item['price'] ?? 0) * max(1, (int)($item['quantity'] ?? 1))));
+        }
+    }
+    $shipping = round((float)($order['shipping'] ?? 0), 2);
+    $total = round((float)($order['total'] ?? ($subtotal + $shipping)), 2);
+    $delivery = $shipping <= 0 ? 'Delivery: Free shipping' : ('Delivery charge ' . $money($shipping));
+    $orderNumber = (string)($order['order_number'] ?? $orderId);
+    $bodyLines = array_merge(
+        ['Order ' . $orderNumber, ''],
+        $itemLines,
+        ['', 'Items ' . $money($subtotal), $delivery, 'Total ' . $money($total), '', 'Tap Pay now to pay this order.']
+    );
+    $body = implode("\n", $bodyLines);
+    if (strlen($body) > 1024) {
+        $body = substr($body, 0, 1021) . '...';
+    }
+    $footer = $shipping <= 0 ? 'Free shipping' : ('Delivery charge ' . $money($shipping));
+    if (strlen($footer) > 60) {
+        $footer = substr($footer, 0, 60);
     }
     return [
         'success' => true,
         'data' => [
             'tenant_id' => $tenantId,
             'order_id' => $orderId,
-            'order_number' => (string)($order['order_number'] ?? ''),
+            'order_number' => $orderNumber,
             'items' => implode(', ', $itemNames),
+            'subtotal' => round($subtotal, 2),
+            'shipping' => $shipping,
+            'delivery' => $delivery,
+            'free_shipping' => $shipping <= 0,
             'payment_link' => $link,
-            'amount' => (float)($order['total'] ?? 0),
+            'amount' => $total,
             'currency' => 'INR',
-            'confirm_again' => 'Restate the product, quantity, and total, send this payment link, and ask the customer to confirm before they pay.',
+            'summary' => 'Send the Pay now card only. Header image is card.header_image_url. Body is exactly card.body. Footer is exactly card.footer. Button label is Pay now. Button URL is payment_link. Do not paste the link as text.',
+            'card' => [
+                'header_image_url' => $image,
+                'body' => $body,
+                'footer' => $footer,
+                'button_label' => 'Pay now',
+                'button_url' => $link,
+            ],
         ],
         'error' => null,
     ];
