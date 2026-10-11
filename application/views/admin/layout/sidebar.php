@@ -76,6 +76,7 @@ $open = static function (array $keys) use ($uri) {
                             <li><a href="<?= site_url('admin/whatsapp/campaigns') ?>">Campaigns</a></li>
                             <li><a href="<?= site_url('admin/whatsapp-report') ?>">Delivery report</a></li>
                             <li><a href="<?= site_url('admin/whatsapp/billing') ?>" class="<?= ($uri === 'whatsapp' && $uri3 === 'billing') ? 'active' : '' ?>">Billing &amp; usage</a></li>
+                            <li><a href="<?= site_url('admin/whatsapp/tokens') ?>" class="<?= ($uri === 'whatsapp' && $uri3 === 'tokens') ? 'active' : '' ?>">Token usage</a></li>
                             <li><a href="<?= site_url('admin/meta/agent') ?>" class="<?= ($uri === 'meta' && $uri3 === 'agent') ? 'active' : '' ?>">Meta Business Agent</a></li>
                             <?php if ($is_super): ?>
                             <li><a href="<?= site_url('admin/whatsapp_requests/pending') ?>">Numbers</a></li>

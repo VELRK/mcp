@@ -66,7 +66,44 @@ class Whatsapp_billing extends Sk_Base {
             ? 'Meta Business Agent account ID saved.'
             : 'Choose a vendor that already has a WhatsApp number, then save the account ID.');
         $qs = $vendorId > 0 ? ('?vendor_id=' . $vendorId) : '';
-        redirect('admin/whatsapp/billing' . $qs);
+        $back = $this->input->post('return') === 'tokens' ? 'admin/whatsapp/tokens' : 'admin/whatsapp/billing';
+        redirect($back . $qs);
+    }
+
+    /**
+     * Meta Business Agent token meter: $2 USD per 1,000,000 tokens.
+     */
+    public function tokens() {
+        $range = $this->_range();
+        $vendorId = $this->_scoped_vendor_id();
+        $report = $this->_meta_report($range, $vendorId);
+        $tokens = (int)($report['usage_totals']['billable_tokens'] ?? 0);
+        $rate = 2.0;
+        $days = [];
+        foreach ((array)($report['usage'] ?? []) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $day = !empty($row['start']) ? date('Y-m-d', (int)$row['start']) : '—';
+            if (!isset($days[$day])) {
+                $days[$day] = ['day' => $day, 'tokens' => 0, 'messages' => 0, 'cost' => 0.0];
+            }
+            $days[$day]['tokens'] += (int)($row['billable_tokens'] ?? 0);
+            $days[$day]['messages'] += (int)($row['billable_messages'] ?? 0);
+            $days[$day]['cost'] += (float)($row['cost'] ?? 0);
+        }
+        ksort($days);
+        $this->render('whatsapp/tokens', [
+            'title' => 'Token usage',
+            'range' => $range,
+            'vendor_id' => $vendorId,
+            'is_super' => $this->is_super_admin(),
+            'vendors' => $this->is_super_admin() ? $this->_vendor_options() : [],
+            'meta_report' => $report,
+            'token_rate' => $rate,
+            'token_estimate' => round($tokens / 1000000 * $rate, 4),
+            'token_days' => array_values($days),
+        ]);
     }
 
     public function export_csv() {
