@@ -544,9 +544,10 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Sound like a real shopkeeper: warm, short, natural. Match the customer's language (Tamil/English/Tanglish). "
         . "Never mention AI, tools, databases, APIs, or internal IDs. "
         . "GREETINGS: If they only say hi/hello/hey/vanakkam with no product ask, reply in ONE short sentence. Call NO tools. "
-        . "PRODUCT/PRICE: Call search_products exactly once. The reply is a visual. Never send a text list, a bullet, or the color, length, blouse, or stock. "
-        . "If the tool returns one product, send product-photo-card and no other message. Header image is that product image_url. Body text is the name and price only. Button label is exactly Shop now. Button URL is exactly product_url. "
-        . "If the tool returns two or more products, send the product-shop-cards carousel. A carousel must have 2 to 10 cards, so never use it for one product. Each card image is image_url, card text is the name and price, button label is exactly Shop now, and button URL is product_url. One short sentence may sit above the carousel. "
+        . "PRODUCT/PRICE: Call search_products exactly once. The reply is a visual. Never send a text list, a bullet, a website, or a product page link. This shop sells only inside this WhatsApp chat. "
+        . "If the tool returns one product, send the product photo first. Image URL is image_url. Caption is the name and price only. Then send the Shop now reply button. The button title is exactly Shop now. It has no URL. "
+        . "If the tool returns two or more products, send the product-shop-cards carousel. A carousel must have 2 to 10 cards, so never use it for one product. Each card image is image_url. Card text is the name and price. The card button is a reply, not a link. Button text is that product name, at most 20 characters. "
+        . "When the customer taps Shop now, or taps a product card, they want to buy that product in this chat. Do not send them to a website. "
         . "If the customer must pick one item, send the choice list. Before create_order, send the confirm buttons. If the address is missing, send the location request. When a payment link exists, send the Pay now button and do not paste the raw link as the only reply. "
         . "The search result is the whole catalog for this shop. Offer only those products, as the photo card or the carousel. Never add a product from another shop or from memory. If there are no matches, say so in one sentence. "
         . "Never invent catalog facts. Infer typos: donu have = do you have; amount/prise = price; kanjivaram = Kanjivaram saree. "
@@ -560,7 +561,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'Greet with no tools. One product is a photo with Shop now. Two or more products are a carousel. Orders use confirm buttons, then the Pay now button.',
+            'description' => 'Greet with no tools. One product is a photo plus a Shop now reply in this chat. Two or more products are a reply carousel. Orders use confirm buttons, then the Pay now button.',
             'skill'       => $skill,
         ],
     ];
@@ -1094,16 +1095,22 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'Shop';
     $defs = [
         [
-            'title'           => 'product-photo-card',
-            'component_type'  => 'cta_url',
+            'title'           => 'product-photo',
+            'component_type'  => 'image',
             'status'          => 'enabled',
-            'instruction'     => 'Use this when search_products returns exactly one product. This message is the whole reply. Do not also send a text list. Header media URL is that product image_url. Body text is the product name and price only, such as "Kanjivaram Silk Saree - Gold Border — ₹329". Do not put color, length, blouse, or stock in the body. Button label text is exactly "Shop now". Button URL is exactly that product product_url. Never invent an image or a URL. If image_url is missing, send the button without a header image.',
+            'instruction'     => 'When search_products returns exactly one product, send this photo before the Shop now button. Image URL is that product image_url. Caption is the product name and price only. Do not put a website or product link in the caption. Never invent an image.',
+        ],
+        [
+            'title'           => 'product-photo-card',
+            'component_type'  => 'interactive_reply_buttons',
+            'status'          => 'enabled',
+            'instruction'     => 'When search_products returns exactly one product, send this after the product photo. Body text is the product name and price only. One button only. Button title is exactly "Shop now". This button replies inside this WhatsApp chat and starts the order. Do not add a URL. Do not mention a website or an online store.',
         ],
         [
             'title'           => 'product-shop-cards',
-            'component_type'  => 'carousel_url',
+            'component_type'  => 'carousel_quick_reply',
             'status'          => 'enabled',
-            'instruction'     => 'Use this only when search_products returns 2 or more products. A carousel must contain 2 to 10 cards, so never use it for a single product. Do not also send a text list. Body text is one short line, such as "Here is what we have". One card per product that has both image_url and product_url. Card image URL is image_url. Card text is the product name and price, at most 160 characters. Button display text is exactly "Shop now". Button URL is exactly product_url. Never invent an image, a product, or a URL.',
+            'instruction'     => 'Use this only when search_products returns 2 or more products. A carousel must contain 2 to 10 cards, so never use it for a single product. Do not also send a text list or a website link. Body text is one short line, such as "Here is what we have". One card per product that has an image_url. Card image URL is image_url. Card text is the product name and price, at most 160 characters. Button text is the product name, at most 20 characters. The button replies in this chat so the customer can buy that product here.',
         ],
         [
             'title'           => 'product-choice-list',
@@ -1312,7 +1319,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
 
     // Keep this list SMALL — Meta latency grows with tool count (19 tools was ~19s; 9 tools ~14s).
     return [
-        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns this shop\'s active products. One product must be sent as product-photo-card. Two or more must be sent as the product-shop-cards carousel. Do not turn the result into a text list.', [
+        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns this shop\'s active products. One product is a photo plus a Shop now reply in this chat. Two or more are a reply carousel. Do not send a website link or a text list.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
             'limit'  => $bodyField('integer', 'Max results (1-3)'),

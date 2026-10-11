@@ -115,25 +115,28 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         $result = sk_mcp_tool_find_products($query, ['tenant' => $vendorId], 8);
         $products = $this->_meta_safe_products($result['results'] ?? [], $vendorId);
         $cards = [];
-        foreach ($products as $p) {
+        foreach ($products as $pIndex => $p) {
             $name = (string)($p['name'] ?? 'Product');
             $price = (string)($p['price'] ?? '0');
+            $button = function_exists('mb_substr') ? mb_substr($name, 0, 20) : substr($name, 0, 20);
             $cards[] = [
-                'name'              => $name,
-                'body'              => $name . ' — ₹' . $price,
-                'header_image_url'  => (string)($p['image_url'] ?? ''),
-                'button_label'      => 'Shop now',
-                'button_url'        => (string)($p['product_url'] ?? ''),
+                'name'         => $name,
+                'body'         => $name . ' — ₹' . $price,
+                'image_url'    => (string)($p['image_url'] ?? ''),
+                'button_label' => $button !== '' ? $button : 'Shop now',
             ];
+            unset($products[$pIndex]['product_url']);
         }
         $count = count($cards);
         if ($count === 1) {
-            $summary = 'Exactly one product. Send product-photo-card only. Header image is cards[0].header_image_url. Body text is cards[0].body. Button label is Shop now. Button URL is cards[0].button_url. Do not send a text list. Do not mention color, length, blouse, or stock.';
+            $cards[0]['button_label'] = 'Shop now';
+            $summary = 'Exactly one product. Send the product photo first, image URL cards[0].image_url, caption cards[0].body. Then send one reply button titled Shop now. Shop now stays in this WhatsApp chat and starts the order. Do not send a website link. There is no online store.';
         } elseif ($count > 1) {
-            $summary = 'Two or more products. Send the product-shop-cards carousel with one card per item in cards. A carousel needs 2 to 10 cards. Do not send a text list. Do not use the carousel for a single product.';
+            $summary = 'Two or more products. Send the product-shop-cards reply carousel, one card per item in cards. Button text is button_label. The tap stays in this chat. Do not send a website link. A carousel needs 2 to 10 cards.';
         } else {
             $summary = 'No matching products in the catalog.';
         }
+        $products = array_values($products);
         $this->success([
             'query'    => $query,
             'count'    => $count,
