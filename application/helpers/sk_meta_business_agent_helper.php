@@ -544,10 +544,11 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Sound like a real shopkeeper: warm, short, natural. Match the customer's language (Tamil/English/Tanglish). "
         . "Never mention AI, tools, databases, APIs, or internal IDs. "
         . "GREETINGS: If they only say hi/hello/hey/vanakkam with no product ask, reply in ONE short sentence. Call NO tools. "
-        . "PRODUCT/PRICE: Call search_products exactly once. Do not answer with a text list of product names and prices. "
-        . "Send the product-shop-cards carousel: each card is that product's photo, name, a View link, and a Shop now button. Use image_url and product_url from the tool. One short sentence above the cards is enough. "
+        . "PRODUCT/PRICE: Call search_products exactly once. The reply is a visual. Never send a text list, a bullet, or the color, length, blouse, or stock. "
+        . "If the tool returns one product, send product-photo-card and no other message. Header image is that product image_url. Body text is the name and price only. Button label is exactly Shop now. Button URL is exactly product_url. "
+        . "If the tool returns two or more products, send the product-shop-cards carousel. A carousel must have 2 to 10 cards, so never use it for one product. Each card image is image_url, card text is the name and price, button label is exactly Shop now, and button URL is product_url. One short sentence may sit above the carousel. "
         . "If the customer must pick one item, send the choice list. Before create_order, send the confirm buttons. If the address is missing, send the location request. When a payment link exists, send the Pay now button and do not paste the raw link as the only reply. "
-        . "The search summary is the whole catalog for this shop. Name only the products written there. If it lists one product, offer only that product. Never add a product from another shop or from memory. If there are no matches, say so in one sentence. "
+        . "The search result is the whole catalog for this shop. Offer only those products, as the photo card or the carousel. Never add a product from another shop or from memory. If there are no matches, say so in one sentence. "
         . "Never invent catalog facts. Infer typos: donu have = do you have; amount/prise = price; kanjivaram = Kanjivaram saree. "
         . "BUYING: confirm product, quantity, and total. After the customer agrees, collect name and address, then identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once for that order. "
         . "After the link is created, send the Pay now button. The button body restates the product, quantity, and total. Do not send the payment address as plain text. "
@@ -559,7 +560,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'Greet with no tools. Products use the shop carousel, not a text list. Orders use confirm buttons, then the Pay now button.',
+            'description' => 'Greet with no tools. One product is a photo with Shop now. Two or more products are a carousel. Orders use confirm buttons, then the Pay now button.',
             'skill'       => $skill,
         ],
     ];
@@ -1093,10 +1094,16 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'Shop';
     $defs = [
         [
+            'title'           => 'product-photo-card',
+            'component_type'  => 'cta_url',
+            'status'          => 'enabled',
+            'instruction'     => 'Use this when search_products returns exactly one product. This message is the whole reply. Do not also send a text list. Header media URL is that product image_url. Body text is the product name and price only, such as "Kanjivaram Silk Saree - Gold Border — ₹329". Do not put color, length, blouse, or stock in the body. Button label text is exactly "Shop now". Button URL is exactly that product product_url. Never invent an image or a URL. If image_url is missing, send the button without a header image.',
+        ],
+        [
             'title'           => 'product-shop-cards',
             'component_type'  => 'carousel_url',
             'status'          => 'enabled',
-            'instruction'     => 'This is how every product answer is sent, including a single product and a list of products. Do not send product names and prices as a text message. Send a URL carousel. One card per product from search_products, maximum 10. Card image is that product image_url. Card title is the product name. Each card has a View link and a Shop now button. Button label text is exactly "Shop now". Button URL is exactly that product product_url. Never invent an image, a product, or a URL. If image_url or product_url is missing, skip that product.',
+            'instruction'     => 'Use this only when search_products returns 2 or more products. A carousel must contain 2 to 10 cards, so never use it for a single product. Do not also send a text list. Body text is one short line, such as "Here is what we have". One card per product that has both image_url and product_url. Card image URL is image_url. Card text is the product name and price, at most 160 characters. Button display text is exactly "Shop now". Button URL is exactly product_url. Never invent an image, a product, or a URL.',
         ],
         [
             'title'           => 'product-choice-list',
@@ -1305,7 +1312,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
 
     // Keep this list SMALL — Meta latency grows with tool count (19 tools was ~19s; 9 tools ~14s).
     return [
-        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns matching active products only. Each product includes name, price, stock, image_url, and product_url for the shop carousel. Do not turn this into a text list.', [
+        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns this shop\'s active products. One product must be sent as product-photo-card. Two or more must be sent as the product-shop-cards carousel. Do not turn the result into a text list.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
             'limit'  => $bodyField('integer', 'Max results (1-3)'),

@@ -114,34 +114,32 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         $vendorId = (int)$tenant['vendor_id'];
         $result = sk_mcp_tool_find_products($query, ['tenant' => $vendorId], 8);
         $products = $this->_meta_safe_products($result['results'] ?? [], $vendorId);
-        $lines = [];
+        $cards = [];
         foreach ($products as $p) {
-            $extra = [];
-            if (!empty($p['color'])) {
-                $extra[] = (string)$p['color'];
-            }
-            if (!empty($p['length'])) {
-                $extra[] = (string)$p['length'] . 'm';
-            }
-            if (!empty($p['blouse_included'])) {
-                $extra[] = 'blouse included';
-            }
-            $lines[] = sprintf(
-                '%s | price ₹%s | stock %d | image_url=%s | product_url=%s%s',
-                (string)($p['name'] ?? 'Product'),
-                (string)($p['price'] ?? '0'),
-                (int)($p['stock'] ?? 0),
-                (string)($p['image_url'] ?? ''),
-                (string)($p['product_url'] ?? ''),
-                $extra ? (' | ' . implode(', ', $extra)) : ''
-            );
+            $name = (string)($p['name'] ?? 'Product');
+            $price = (string)($p['price'] ?? '0');
+            $cards[] = [
+                'name'              => $name,
+                'body'              => $name . ' — ₹' . $price,
+                'header_image_url'  => (string)($p['image_url'] ?? ''),
+                'button_label'      => 'Shop now',
+                'button_url'        => (string)($p['product_url'] ?? ''),
+            ];
+        }
+        $count = count($cards);
+        if ($count === 1) {
+            $summary = 'Exactly one product. Send product-photo-card only. Header image is cards[0].header_image_url. Body text is cards[0].body. Button label is Shop now. Button URL is cards[0].button_url. Do not send a text list. Do not mention color, length, blouse, or stock.';
+        } elseif ($count > 1) {
+            $summary = 'Two or more products. Send the product-shop-cards carousel with one card per item in cards. A carousel needs 2 to 10 cards. Do not send a text list. Do not use the carousel for a single product.';
+        } else {
+            $summary = 'No matching products in the catalog.';
         }
         $this->success([
             'query'    => $query,
-            'count'    => count($products),
-            'summary'  => $products
-                ? ("Send a shop card carousel. Do not reply with a text list.\n" . implode("\n", $lines))
-                : 'No matching products in the catalog.',
+            'count'    => $count,
+            'ui'       => $count === 1 ? 'product-photo-card' : ($count > 1 ? 'product-shop-cards' : 'none'),
+            'summary'  => $summary,
+            'cards'    => $cards,
             'products' => $products,
         ], 'Product search completed.');
     }
