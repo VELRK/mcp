@@ -154,6 +154,68 @@ $webhook = $webhook_uri ?? '';
   </div>
 </div>
 
+<div class="card shadow-sm mt-3">
+  <div class="card-body">
+    <h6 class="mb-1">UI skills</h6>
+    <p class="small text-muted mb-3">
+      These tell the Meta agent when to send a button, image, list, location, carousel, or Flow on this WhatsApp number.
+      The instruction must say when to send it and the exact text, labels, and URLs the component needs.
+      A Flow skill needs a published <code>flow_id</code>. Other types must not send <code>flow_id</code>.
+    </p>
+    <div class="row g-2 align-items-end mb-3">
+      <div class="col-md-4">
+        <label class="form-label small mb-1">WhatsApp phone number</label>
+        <select id="uiSkillPhone" class="form-select form-select-sm">
+          <?php foreach ($rows as $row):
+              $acct = $row['account'] ?? [];
+              $pid = trim((string)($acct['phone_number_id'] ?? ''));
+              if ($pid === '') continue;
+              $label = trim((string)($acct['display_phone'] ?? '')) ?: $pid;
+          ?>
+          <option value="<?= htmlspecialchars($pid) ?>"><?= htmlspecialchars($label) ?> (<?= htmlspecialchars($pid) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="uiSkillLoad">Load from Meta</button>
+      </div>
+    </div>
+    <form id="uiSkillForm" class="row g-2">
+      <div class="col-md-4">
+        <label class="form-label small mb-1">Title</label>
+        <input type="text" name="title" class="form-control form-control-sm" maxlength="190" required placeholder="Shop catalog button">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-1">Component</label>
+        <select name="component_type" id="uiSkillType" class="form-select form-select-sm" required>
+          <?php foreach (['cta_url','image','interactive_list','interactive_reply_buttons','location','location_request','carousel_url','carousel_quick_reply','flow'] as $type): ?>
+          <option value="<?= $type ?>"><?= $type ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Status</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="enabled">enabled</option>
+          <option value="disabled">disabled</option>
+        </select>
+      </div>
+      <div class="col-md-3" id="uiSkillFlowWrap" hidden>
+        <label class="form-label small mb-1">Flow ID</label>
+        <input type="number" name="flow_id" class="form-control form-control-sm" min="1" step="1" placeholder="Published flow id">
+      </div>
+      <div class="col-12">
+        <label class="form-label small mb-1">Instruction</label>
+        <textarea name="instruction" class="form-control form-control-sm" rows="3" required placeholder="If a customer asks for the shop link, send a button with body text &quot;Browse the catalog&quot;, button label &quot;Open shop&quot;, and URL https://example.com"></textarea>
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-sm btn-warning">Create UI skill</button>
+      </div>
+    </form>
+    <div id="uiSkillList" class="mt-3"></div>
+  </div>
+</div>
+
 <div id="mbaResult" class="alert alert-secondary mt-3 d-none small" style="white-space:pre-wrap"></div>
 <p class="small text-muted mt-2 mb-0">Responses stay here until you refresh the page to update the table.</p>
 
@@ -228,6 +290,144 @@ $webhook = $webhook_uri ?? '';
     show(!!x.j.success, x.j.message || 'Done', detail);
   }
 
+  var uiPhone = document.getElementById('uiSkillPhone');
+  var uiForm = document.getElementById('uiSkillForm');
+  var uiList = document.getElementById('uiSkillList');
+  var uiType = document.getElementById('uiSkillType');
+  var uiFlowWrap = document.getElementById('uiSkillFlowWrap');
+
+  function selectedUiPhone() {
+    return uiPhone ? uiPhone.value : '';
+  }
+
+  function toggleFlowField() {
+    if (!uiType || !uiFlowWrap) return;
+    var isFlow = uiType.value === 'flow';
+    uiFlowWrap.hidden = !isFlow;
+    var input = uiFlowWrap.querySelector('input');
+    if (input) input.required = isFlow;
+  }
+  if (uiType) uiType.addEventListener('change', toggleFlowField);
+  toggleFlowField();
+
+  function renderUiSkills(payload) {
+    if (!uiList) return;
+    uiList.textContent = '';
+    var items = (payload && payload.ui_skills) ? payload.ui_skills : [];
+    if (!items.length) {
+      var empty = document.createElement('p');
+      empty.className = 'small text-muted mb-0';
+      empty.textContent = 'No UI skills on this number.';
+      uiList.appendChild(empty);
+      return;
+    }
+    var table = document.createElement('table');
+    table.className = 'table table-sm align-middle mb-0';
+    var head = document.createElement('thead');
+    head.innerHTML = '<tr><th>Title</th><th>Type</th><th>Status</th><th>Instruction</th><th></th></tr>';
+    table.appendChild(head);
+    var body = document.createElement('tbody');
+    items.forEach(function (item) {
+      var tr = document.createElement('tr');
+      function cell(text) {
+        var td = document.createElement('td');
+        td.className = 'small';
+        td.textContent = text || '';
+        return td;
+      }
+      tr.appendChild(cell(item.title));
+      var typeText = item.component_type || '';
+      if (item.flow_id) typeText += ' #' + item.flow_id;
+      tr.appendChild(cell(typeText));
+      tr.appendChild(cell(item.status));
+      var inst = cell(item.instruction || '');
+      inst.style.maxWidth = '360px';
+      tr.appendChild(inst);
+      var actions = document.createElement('td');
+      actions.className = 'text-nowrap';
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'btn btn-sm btn-outline-secondary me-1';
+      toggle.textContent = item.status === 'enabled' ? 'Disable' : 'Enable';
+      toggle.addEventListener('click', function () {
+        var phone = selectedUiPhone();
+        if (!phone || !item.id) return;
+        toggle.disabled = true;
+        postOp(phone, 'update_ui_skill', {
+          instruction_id: item.id,
+          status: item.status === 'enabled' ? 'disabled' : 'enabled'
+        }).then(function (x) {
+          handleResult(x);
+          if (x.j && x.j.success) loadUiSkills();
+        }).finally(function () { toggle.disabled = false; });
+      });
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-sm btn-outline-danger';
+      del.textContent = 'Delete';
+      del.addEventListener('click', function () {
+        var phone = selectedUiPhone();
+        if (!phone || !item.id) return;
+        if (!window.confirm('Delete UI skill "' + (item.title || item.id) + '"?')) return;
+        del.disabled = true;
+        postOp(phone, 'delete_ui_skill', { instruction_id: item.id })
+          .then(function (x) {
+            handleResult(x);
+            if (x.j && x.j.success) loadUiSkills();
+          })
+          .finally(function () { del.disabled = false; });
+      });
+      actions.appendChild(toggle);
+      actions.appendChild(del);
+      tr.appendChild(actions);
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+    uiList.appendChild(table);
+  }
+
+  function loadUiSkills() {
+    var phone = selectedUiPhone();
+    if (!phone) return;
+    postOp(phone, 'list_ui_skills').then(function (x) {
+      handleResult(x);
+      if (x.j && x.j.success) renderUiSkills(x.j.data || {});
+    });
+  }
+
+  var loadBtn = document.getElementById('uiSkillLoad');
+  if (loadBtn) loadBtn.addEventListener('click', loadUiSkills);
+  if (uiForm) {
+    uiForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var phone = selectedUiPhone();
+      if (!phone) {
+        show(false, 'Choose a WhatsApp phone number first.');
+        return;
+      }
+      var data = new FormData(uiForm);
+      var extra = {
+        title: data.get('title'),
+        component_type: data.get('component_type'),
+        status: data.get('status'),
+        instruction: data.get('instruction')
+      };
+      if (extra.component_type === 'flow') extra.flow_id = data.get('flow_id');
+      var submit = uiForm.querySelector('button[type="submit"]');
+      if (submit) submit.disabled = true;
+      postOp(phone, 'create_ui_skill', extra)
+        .then(function (x) {
+          handleResult(x);
+          if (x.j && x.j.success) {
+            uiForm.reset();
+            toggleFlowField();
+            loadUiSkills();
+          }
+        })
+        .finally(function () { if (submit) submit.disabled = false; });
+    });
+  }
+
   document.querySelectorAll('.mba-op').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var tr = btn.closest('tr');
@@ -247,7 +447,13 @@ $webhook = $webhook_uri ?? '';
         extra.to = String(phoneTo).trim();
       }
       postOp(phone, op, extra)
-        .then(handleResult)
+        .then(function (x) {
+          handleResult(x);
+          if (op === 'list_ui_skills' && x.j && x.j.success) {
+            if (uiPhone) uiPhone.value = phone;
+            renderUiSkills(x.j.data || {});
+          }
+        })
         .catch(function (e) { show(false, e.message || 'Request failed'); })
         .finally(function () { btn.disabled = false; });
     });

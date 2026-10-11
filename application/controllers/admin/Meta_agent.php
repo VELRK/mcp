@@ -306,6 +306,66 @@ class Meta_agent extends Sk_Base {
                         'data'    => $res['ok'] ? $res['data'] : $fail['data'],
                     ], $res['ok'] ? 200 : 400);
 
+                case 'get_ui_skill':
+                    $instructionId = trim((string)$this->input->post('instruction_id', TRUE));
+                    $res = sk_meta_ba_get_ui_skill($phoneNumberId, $instructionId, $settings);
+                    $fail = $metaFail($res, 'UI skill not found');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok'] ? 'UI skill loaded.' : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
+                    ], $res['ok'] ? 200 : 400);
+
+                case 'create_ui_skill':
+                    $res = sk_meta_ba_create_ui_skill($phoneNumberId, [
+                        'title'          => $this->input->post('title', TRUE),
+                        'component_type' => $this->input->post('component_type', TRUE),
+                        'status'         => $this->input->post('status', TRUE),
+                        'instruction'    => $this->input->post('instruction', FALSE),
+                        'flow_id'        => $this->input->post('flow_id', TRUE),
+                    ], $settings);
+                    $fail = $metaFail($res, 'Create UI skill failed');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok'] ? 'UI skill created.' : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
+                    ], $res['ok'] ? 201 : 400);
+
+                case 'update_ui_skill':
+                    $instructionId = trim((string)$this->input->post('instruction_id', TRUE));
+                    $patch = [];
+                    foreach (['title', 'status'] as $field) {
+                        $posted = $this->input->post($field, TRUE);
+                        if ($posted !== null && $posted !== '') {
+                            $patch[$field] = $posted;
+                        }
+                    }
+                    $instruction = $this->input->post('instruction', FALSE);
+                    if ($instruction !== null && trim((string)$instruction) !== '') {
+                        $patch['instruction'] = $instruction;
+                    }
+                    $res = sk_meta_ba_update_ui_skill($phoneNumberId, $instructionId, $patch, $settings);
+                    $fail = $metaFail($res, 'Update UI skill failed');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok'] ? 'UI skill updated.' : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? $res['data'] : $fail['data'],
+                    ], $res['ok'] ? 200 : 400);
+
+                case 'delete_ui_skill':
+                    $instructionId = trim((string)$this->input->post('instruction_id', TRUE));
+                    $res = sk_meta_ba_delete_ui_skill($phoneNumberId, $instructionId, $settings);
+                    $fail = $metaFail($res, 'Delete UI skill failed');
+                    return $this->json([
+                        'success' => !empty($res['ok']),
+                        'message' => $res['ok'] ? 'UI skill deleted.' : $fail['message'],
+                        'op'      => $op,
+                        'data'    => $res['ok'] ? ['instruction_id' => $instructionId] : $fail['data'],
+                    ], $res['ok'] ? 200 : 400);
+
                 case 'sync_ui_skills':
                     $prep = $ensurePrepared(false);
                     if (empty($prep['ok'])) {

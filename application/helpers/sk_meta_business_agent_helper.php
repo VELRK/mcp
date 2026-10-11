@@ -800,12 +800,110 @@ function sk_meta_ba_get_ui_skill(string $phoneNumberId, string $instructionId, ?
     return sk_meta_ba_http('GET', sk_meta_ba_ui_skills_url($phoneNumberId, $instructionId), null, $token);
 }
 
+function sk_meta_ba_ui_component_types(): array {
+    return [
+        'carousel_quick_reply',
+        'carousel_url',
+        'cta_url',
+        'flow',
+        'image',
+        'interactive_list',
+        'interactive_reply_buttons',
+        'location',
+        'location_request',
+    ];
+}
+
+/**
+ * Build a create body for POST /{phone_number_id}/agent-ui-skills.
+ * flow_id is required for flow and is omitted for every other type.
+ *
+ * @return array{ok:bool,error:string,body:?array}
+ */
+function sk_meta_ba_prepare_ui_skill_create(array $in): array {
+    $title = trim((string)($in['title'] ?? ''));
+    $type = trim((string)($in['component_type'] ?? ''));
+    $status = trim((string)($in['status'] ?? ''));
+    $instruction = trim((string)($in['instruction'] ?? ''));
+    $errors = [];
+    if ($title === '') {
+        $errors[] = 'Title is required.';
+    }
+    if (!in_array($type, sk_meta_ba_ui_component_types(), true)) {
+        $errors[] = 'Choose a supported component type.';
+    }
+    if (!in_array($status, ['enabled', 'disabled'], true)) {
+        $errors[] = 'Status must be enabled or disabled.';
+    }
+    if ($instruction === '') {
+        $errors[] = 'Instruction is required. Say when to send the component and the values to fill in.';
+    }
+    $body = [
+        'title'          => $title,
+        'component_type' => $type,
+        'status'         => $status,
+        'instruction'    => $instruction,
+    ];
+    $flowRaw = trim((string)($in['flow_id'] ?? ''));
+    if ($type === 'flow') {
+        if ($flowRaw === '' || !preg_match('/^\d+$/', $flowRaw) || (int)$flowRaw < 1) {
+            $errors[] = 'flow_id is required when the component type is flow.';
+        } else {
+            $body['flow_id'] = (int)$flowRaw;
+        }
+    } elseif ($flowRaw !== '') {
+        $errors[] = 'flow_id is only allowed when the component type is flow.';
+    }
+    if ($errors) {
+        return ['ok' => false, 'error' => implode(' ', $errors), 'body' => null];
+    }
+    return ['ok' => true, 'error' => '', 'body' => $body];
+}
+
+/**
+ * Build an update body. Meta accepts title, status, and instruction only.
+ *
+ * @return array{ok:bool,error:string,body:?array}
+ */
+function sk_meta_ba_prepare_ui_skill_update(array $in): array {
+    $body = [];
+    if (array_key_exists('title', $in)) {
+        $title = trim((string)$in['title']);
+        if ($title === '') {
+            return ['ok' => false, 'error' => 'Title cannot be empty.', 'body' => null];
+        }
+        $body['title'] = $title;
+    }
+    if (array_key_exists('status', $in) && trim((string)$in['status']) !== '') {
+        $status = trim((string)$in['status']);
+        if (!in_array($status, ['enabled', 'disabled'], true)) {
+            return ['ok' => false, 'error' => 'Status must be enabled or disabled.', 'body' => null];
+        }
+        $body['status'] = $status;
+    }
+    if (array_key_exists('instruction', $in)) {
+        $instruction = trim((string)$in['instruction']);
+        if ($instruction === '') {
+            return ['ok' => false, 'error' => 'Instruction cannot be empty.', 'body' => null];
+        }
+        $body['instruction'] = $instruction;
+    }
+    if (!$body) {
+        return ['ok' => false, 'error' => 'Nothing to update.', 'body' => null];
+    }
+    return ['ok' => true, 'error' => '', 'body' => $body];
+}
+
 function sk_meta_ba_create_ui_skill(string $phoneNumberId, array $body, ?array $settings = null): array {
     $token = sk_meta_ba_access_token($phoneNumberId, $settings);
     if ($token === '' || $phoneNumberId === '') {
         return ['ok' => false, 'error' => 'Missing phone_number_id or access token.', 'data' => null];
     }
-    return sk_meta_ba_http('POST', sk_meta_ba_ui_skills_url($phoneNumberId), $body, $token);
+    $prepared = sk_meta_ba_prepare_ui_skill_create($body);
+    if (empty($prepared['ok'])) {
+        return ['ok' => false, 'error' => $prepared['error'], 'data' => null];
+    }
+    return sk_meta_ba_http('POST', sk_meta_ba_ui_skills_url($phoneNumberId), $prepared['body'], $token);
 }
 
 function sk_meta_ba_update_ui_skill(string $phoneNumberId, string $instructionId, array $body, ?array $settings = null): array {
@@ -813,7 +911,11 @@ function sk_meta_ba_update_ui_skill(string $phoneNumberId, string $instructionId
     if ($token === '' || $phoneNumberId === '' || $instructionId === '') {
         return ['ok' => false, 'error' => 'Missing UI skill context.', 'data' => null];
     }
-    return sk_meta_ba_http('PUT', sk_meta_ba_ui_skills_url($phoneNumberId, $instructionId), $body, $token);
+    $prepared = sk_meta_ba_prepare_ui_skill_update($body);
+    if (empty($prepared['ok'])) {
+        return ['ok' => false, 'error' => $prepared['error'], 'data' => null];
+    }
+    return sk_meta_ba_http('PUT', sk_meta_ba_ui_skills_url($phoneNumberId, $instructionId), $prepared['body'], $token);
 }
 
 function sk_meta_ba_delete_ui_skill(string $phoneNumberId, string $instructionId, ?array $settings = null): array {
