@@ -114,33 +114,6 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         $vendorId = (int)$tenant['vendor_id'];
         $result = sk_mcp_tool_find_products($query, ['tenant' => $vendorId], 3);
         $products = $this->_meta_safe_products($result['results'] ?? [], $vendorId);
-        // One fast catalog fallback only — avoid multi-query delays that push Meta past 10s.
-        if (!$products) {
-            $listed = $this->Sk_Product_model->get_all(
-                ['status' => 'active', 'vendor_id' => $vendorId, 'sort' => 'newest'],
-                3,
-                0
-            );
-            foreach (($listed['data'] ?? []) as $product) {
-                if ($vendorId > 0 && (int)($product['vendor_id'] ?? 0) !== $vendorId) {
-                    continue;
-                }
-                $products[] = [
-                    'id'               => (int)($product['id'] ?? 0),
-                    'name'             => (string)($product['name'] ?? ''),
-                    'sku'              => (string)($product['sku'] ?? ''),
-                    'color'            => trim((string)($product['color'] ?? '')),
-                    'length'           => trim((string)($product['saree_length'] ?? '')),
-                    'blouse_included'  => !empty($product['blouse_included']),
-                    'pack_of'          => trim((string)($product['pack_of'] ?? '')),
-                    'available'        => ((int)($product['stock'] ?? 0)) > 0,
-                    'stock'            => (int)($product['stock'] ?? 0),
-                    'price'            => (float)($product['effective_price'] ?? $product['price'] ?? 0),
-                    'mrp'              => (float)($product['price'] ?? 0),
-                    'currency'         => 'INR',
-                ];
-            }
-        }
         $lines = [];
         foreach ($products as $p) {
             $extra = [];
@@ -183,6 +156,9 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             }
             $rowVendor = (int)($row['vendor_id'] ?? 0);
             if ($vendorId > 0 && $rowVendor > 0 && $rowVendor !== $vendorId) {
+                continue;
+            }
+            if (strtolower(trim((string)($row['status'] ?? 'active'))) !== 'active') {
                 continue;
             }
             $out[] = [

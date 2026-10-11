@@ -391,6 +391,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Never mention AI, tools, databases, APIs, or internal IDs. "
         . "GREETINGS: If they only say hi/hello/hey/vanakkam with no product ask, reply in ONE short sentence. Call NO tools. "
         . "PRODUCT/PRICE: Call search_products exactly once, then answer immediately from the summary (name + ₹ price + stock). "
+        . "Mention only the active products in that summary. If it says no matching products, say so. Never mention inactive or draft products, and never list the whole catalog. "
         . "Never invent catalog facts. Infer typos: donu have = do you have; amount/prise = price; kanjivaram = Kanjivaram saree. "
         . "BUYING: confirm product/qty → name + address → identify_customer or create_customer → update_customer → "
         . "calculate_order_total → create_order with confirmed=true → handover_to_human for staff approval. "
@@ -1105,7 +1106,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
 
     // Keep this list SMALL — Meta latency grows with tool count (19 tools was ~19s; 9 tools ~14s).
     return [
-        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Summary has name+price+stock.', [
+        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns matching active products only, never inactive, draft, or the whole catalog. Summary has name+price+stock.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
             'limit'  => $bodyField('integer', 'Max results (1-3)'),

@@ -26,6 +26,10 @@ function sk_mcp_tool_resolve_tenant($tenant = null): array {
     ];
 }
 
+function sk_ai_product_is_active(array $product): bool {
+    return strtolower(trim((string)($product['status'] ?? ''))) === 'active';
+}
+
 function sk_mcp_tool_parse_query(?string $query): array {
     $raw = trim((string)$query);
     if ($raw === '') {
@@ -220,6 +224,9 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
         if ($tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== $tenantId) {
             continue;
         }
+        if (strtolower(trim((string)($product['status'] ?? ''))) !== 'active') {
+            continue;
+        }
 
         $matchRows[] = [
             'id' => (int)($product['id'] ?? 0),
@@ -237,6 +244,7 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             'price' => $displayPrice,
             'mrp' => $basePrice > $displayPrice ? $basePrice : 0,
             'currency' => 'INR',
+            'status' => 'active',
             'match_score' => $score,
             'image' => !empty($product['images'][0]['image']) ? $product['images'][0]['image'] : '',
         ];
@@ -526,7 +534,7 @@ function sk_ai_get_product_variants(int $productId, ?int $tenantId = null): arra
         $CI->load->model('Sk_Product_model');
     }
     $product = $CI->Sk_Product_model->get_by_id($productId);
-    if (!$product) {
+    if (!$product || !sk_ai_product_is_active($product)) {
         return ['success' => false, 'data' => null, 'error' => ['code' => 'PRODUCT_NOT_FOUND', 'message' => 'Product not found.']];
     }
 
@@ -563,7 +571,7 @@ function sk_ai_calculate_cart(array $items, ?int $tenantId = null, string $state
             continue;
         }
         $product = $CI->Sk_Product_model->get_by_id($productId);
-        if (!$product) {
+        if (!$product || !sk_ai_product_is_active($product)) {
             continue;
         }
         $variantId = !empty($line['variant_id']) ? (int)$line['variant_id'] : null;
@@ -874,7 +882,7 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
             continue;
         }
         $product = $CI->Sk_Product_model->get_by_id($productId);
-        if (!$product) {
+        if (!$product || !sk_ai_product_is_active($product)) {
             continue;
         }
         if ($tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== (int)$tenantId) {
@@ -1248,6 +1256,9 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
             $CI->load->model('Sk_Product_model');
         }
         $product = $CI->Sk_Product_model->get_by_id($productId);
+        if ($product && !sk_ai_product_is_active($product)) {
+            $product = null;
+        }
         if ($product && $tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== $tenantId) {
             return ['success' => false, 'data' => null, 'error' => ['code' => 'PRODUCT_FORBIDDEN', 'message' => 'That product is not in this shop.']];
         }
@@ -1293,7 +1304,7 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
             $CI->load->model('Sk_Product_model');
         }
         $product = $CI->Sk_Product_model->get_by_id($productId);
-        if (!$product) {
+        if (!$product || !sk_ai_product_is_active($product)) {
             return ['success' => false, 'data' => null, 'error' => ['code' => 'PRODUCT_NOT_FOUND', 'message' => 'Product not found.']];
         }
         // Tenant ownership check when vendor_id is present on product rows.
