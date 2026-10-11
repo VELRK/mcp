@@ -115,6 +115,20 @@ function sk_mcp_tool_parse_query(?string $query): array {
     ];
 }
 
+function sk_mcp_tool_product_image_path(array $product): string {
+    $images = is_array($product['images'] ?? null) ? $product['images'] : [];
+    foreach ($images as $img) {
+        if (!is_array($img)) {
+            continue;
+        }
+        $path = trim((string)($img['image'] ?? ''));
+        if ($path !== '') {
+            return $path;
+        }
+    }
+    return trim((string)($product['thumbnail'] ?? ''));
+}
+
 function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $limit = 5): array {
     $CI =& get_instance();
     if (!isset($CI->Sk_Product_model)) {
@@ -155,6 +169,9 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
     $matchRows = [];
 
     foreach ($items as $product) {
+        if ($tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== $tenantId) {
+            continue;
+        }
         $productName = trim((string)($product['name'] ?? ''));
         $tags = trim((string)($product['tags'] ?? ''));
         $description = trim((string)($product['description'] ?? ''));
@@ -220,17 +237,13 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             $displayPrice = $basePrice;
         }
 
-        // Skip rows that somehow escaped vendor scope.
-        if ($tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== $tenantId) {
-            continue;
-        }
         if (strtolower(trim((string)($product['status'] ?? ''))) !== 'active') {
             continue;
         }
 
         $matchRows[] = [
             'id' => (int)($product['id'] ?? 0),
-            'vendor_id' => (int)($product['vendor_id'] ?? $tenantId),
+            'vendor_id' => (int)($product['vendor_id'] ?? 0),
             'name' => (string)($product['name'] ?? ''),
             'sku' => (string)($product['sku'] ?? ''),
             'color' => trim((string)($product['color'] ?? '')),
@@ -246,7 +259,8 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             'currency' => 'INR',
             'status' => 'active',
             'match_score' => $score,
-            'image' => !empty($product['images'][0]['image']) ? $product['images'][0]['image'] : '',
+            'slug' => (string)($product['slug'] ?? ''),
+            'image' => sk_mcp_tool_product_image_path($product),
         ];
     }
 

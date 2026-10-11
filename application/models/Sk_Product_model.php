@@ -54,6 +54,7 @@ class Sk_Product_model extends CI_Model {
         // Tenant / vendor scope — required for Meta BA + MCP catalog tools.
         if (!empty($filters['vendor_id'])) {
             $this->db->where('p.vendor_id', (int)$filters['vendor_id']);
+            $this->db->where('p.vendor_id >', 0);
         }
         if (!empty($filters['featured'])) {
             $this->db->where('p.featured', 1);

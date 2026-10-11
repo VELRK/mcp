@@ -112,7 +112,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             $this->error('query is required.', 400);
         }
         $vendorId = (int)$tenant['vendor_id'];
-        $result = sk_mcp_tool_find_products($query, ['tenant' => $vendorId], 3);
+        $result = sk_mcp_tool_find_products($query, ['tenant' => $vendorId], 8);
         $products = $this->_meta_safe_products($result['results'] ?? [], $vendorId);
         $lines = [];
         foreach ($products as $p) {
@@ -126,22 +126,21 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             if (!empty($p['blouse_included'])) {
                 $extra[] = 'blouse included';
             }
-            if (!empty($p['image_url'])) {
-                $extra[] = 'photo available';
-            }
             $lines[] = sprintf(
-                '%s — ₹%s%s, stock %d',
+                '%s | price ₹%s | stock %d | image_url=%s | product_url=%s%s',
                 (string)($p['name'] ?? 'Product'),
                 (string)($p['price'] ?? '0'),
-                $extra ? (', ' . implode(', ', $extra)) : '',
-                (int)($p['stock'] ?? 0)
+                (int)($p['stock'] ?? 0),
+                (string)($p['image_url'] ?? ''),
+                (string)($p['product_url'] ?? ''),
+                $extra ? (' | ' . implode(', ', $extra)) : ''
             );
         }
         $this->success([
             'query'    => $query,
             'count'    => count($products),
             'summary'  => $products
-                ? ("Found " . count($products) . " products:\n- " . implode("\n- ", $lines))
+                ? ("Send a shop card carousel. Do not reply with a text list.\n" . implode("\n", $lines))
                 : 'No matching products in the catalog.',
             'products' => $products,
         ], 'Product search completed.');
@@ -158,7 +157,8 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
                 continue;
             }
             $rowVendor = (int)($row['vendor_id'] ?? 0);
-            if ($vendorId > 0 && $rowVendor > 0 && $rowVendor !== $vendorId) {
+            // A blank vendor_id is not this shop. Only rows owned by this vendor may be sent.
+            if ($vendorId > 0 && $rowVendor !== $vendorId) {
                 continue;
             }
             if (strtolower(trim((string)($row['status'] ?? 'active'))) !== 'active') {
@@ -171,14 +171,22 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             if ($image !== '' && !preg_match('#^https?://#i', $image)) {
                 $image = base_url(ltrim($image, '/'));
             }
+            if (stripos($image, 'http://') === 0) {
+                $image = 'https://' . substr($image, 7);
+            }
             if (!preg_match('#^https://#i', $image)) {
                 $image = '';
+            }
+            $productUrl = site_url('shop/product/' . $id);
+            if (stripos($productUrl, 'http://') === 0) {
+                $productUrl = 'https://' . substr($productUrl, 7);
             }
             $out[] = [
                 'id'               => $id,
                 'name'             => (string)($row['name'] ?? ''),
                 'sku'              => (string)($row['sku'] ?? ''),
                 'image_url'        => $image,
+                'product_url'      => $productUrl,
                 'color'            => (string)($row['color'] ?? ''),
                 'length'           => (string)($row['length'] ?? $row['saree_length'] ?? ''),
                 'blouse_included'  => !empty($row['blouse_included']),

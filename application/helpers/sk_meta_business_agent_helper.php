@@ -544,12 +544,13 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Sound like a real shopkeeper: warm, short, natural. Match the customer's language (Tamil/English/Tanglish). "
         . "Never mention AI, tools, databases, APIs, or internal IDs. "
         . "GREETINGS: If they only say hi/hello/hey/vanakkam with no product ask, reply in ONE short sentence. Call NO tools. "
-        . "PRODUCT/PRICE: Call search_products exactly once, then answer immediately from the summary (name + ₹ price + stock). "
-        . "Let the enabled UI skills choose the visual before you reply: a product photo or carousel when image_url is present, a choice list when they must pick one item, confirm buttons before the order, and the Pay now button for the payment link. "
-        . "Mention only the active products in that summary. If it says no matching products, say so. Never mention inactive or draft products, and never list the whole catalog. "
+        . "PRODUCT/PRICE: Call search_products exactly once. Do not answer with a text list of product names and prices. "
+        . "Send the product-shop-cards carousel: each card is that product's photo, name, a View link, and a Shop now button. Use image_url and product_url from the tool. One short sentence above the cards is enough. "
+        . "If the customer must pick one item, send the choice list. Before create_order, send the confirm buttons. If the address is missing, send the location request. When a payment link exists, send the Pay now button and do not paste the raw link as the only reply. "
+        . "The search summary is the whole catalog for this shop. Name only the products written there. If it lists one product, offer only that product. Never add a product from another shop or from memory. If there are no matches, say so in one sentence. "
         . "Never invent catalog facts. Infer typos: donu have = do you have; amount/prise = price; kanjivaram = Kanjivaram saree. "
         . "BUYING: confirm product, quantity, and total. After the customer agrees, collect name and address, then identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once for that order. "
-        . "After the link is created, confirm again: restate the product, quantity, and total, send the payment link, and ask the customer to confirm this is the order they will pay. "
+        . "After the link is created, send the Pay now button. The button body restates the product, quantity, and total. Do not send the payment address as plain text. "
         . "One new Razorpay link per order. Never reuse or invent a product payment link. Never hand off for simple product/price questions. "
         . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
@@ -558,7 +559,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'Greet with no tools. Product/price: search_products once. Orders use customer/order tools then soft handoff.',
+            'description' => 'Greet with no tools. Products use the shop carousel, not a text list. Orders use confirm buttons, then the Pay now button.',
             'skill'       => $skill,
         ],
     ];
@@ -1092,16 +1093,10 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'Shop';
     $defs = [
         [
-            'title'           => 'product-photo',
-            'component_type'  => 'image',
+            'title'           => 'product-shop-cards',
+            'component_type'  => 'carousel_url',
             'status'          => 'enabled',
-            'instruction'     => 'When search_products returns exactly one product and that product has image_url, send that image before any other product visual. Caption is the product name, price, and stock from the tool. Use image_url exactly. Never invent an image.',
-        ],
-        [
-            'title'           => 'product-cards',
-            'component_type'  => 'carousel_quick_reply',
-            'status'          => 'enabled',
-            'instruction'     => 'When search_products returns two or more products and at least two have image_url, send a quick-reply carousel. One card per product, maximum 10. Each card image is that product image_url. Card text is the name and price. One button on every card, title "Buy this", id "buy-" plus the product id. Never invent an image or a product.',
+            'instruction'     => 'This is how every product answer is sent, including a single product and a list of products. Do not send product names and prices as a text message. Send a URL carousel. One card per product from search_products, maximum 10. Card image is that product image_url. Card title is the product name. Each card has a View link and a Shop now button. Button label text is exactly "Shop now". Button URL is exactly that product product_url. Never invent an image, a product, or a URL. If image_url or product_url is missing, skip that product.',
         ],
         [
             'title'           => 'product-choice-list',
@@ -1161,11 +1156,22 @@ function sk_meta_ba_sync_shop_ui_skills(string $phoneNumberId, string $shopName,
             }
         }
     }
+    foreach (['product-photo', 'product-cards'] as $retired) {
+        if (!empty($byTitle[$retired]['id'])) {
+            sk_meta_ba_delete_ui_skill($phoneNumberId, (string)$byTitle[$retired]['id'], $settings);
+        }
+    }
     $results = [];
     $failed = [];
     foreach ($defs as $def) {
         $key = strtolower((string)$def['title']);
         $existing = $byTitle[$key] ?? null;
+        $existingType = strtolower((string)($existing['component_type'] ?? ''));
+        $wantedType = strtolower((string)($def['component_type'] ?? ''));
+        if ($existing && $existingType !== '' && $wantedType !== '' && $existingType !== $wantedType && !empty($existing['id'])) {
+            sk_meta_ba_delete_ui_skill($phoneNumberId, (string)$existing['id'], $settings);
+            $existing = null;
+        }
         if ($existing && !empty($existing['id'])) {
             $res = sk_meta_ba_update_ui_skill($phoneNumberId, (string)$existing['id'], [
                 'title'       => $def['title'],
@@ -1299,7 +1305,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
 
     // Keep this list SMALL — Meta latency grows with tool count (19 tools was ~19s; 9 tools ~14s).
     return [
-        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns matching active products only, never inactive, draft, or the whole catalog. Each product has name, price, stock, and image_url when a photo exists.', [
+        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns matching active products only. Each product includes name, price, stock, image_url, and product_url for the shop carousel. Do not turn this into a text list.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
             'limit'  => $bodyField('integer', 'Max results (1-3)'),
