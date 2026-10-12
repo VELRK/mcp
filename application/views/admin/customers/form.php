@@ -24,6 +24,13 @@ $action = $isEdit
   </div>
 </div>
 
+<?php if (!$isEdit && !empty($vendor_id)): ?>
+<div class="alert alert-light border mb-3 py-2">
+  This customer will be saved to your shop (<code>vendor_id <?= (int)$vendor_id ?></code>).
+  The same shop tag is used when a customer is created from the WhatsApp Business Agent chat.
+</div>
+<?php endif; ?>
+
 <form method="post" action="<?= $action ?>" class="card sk-table-card shadow-sm">
   <?php if (!empty($a['id'])): ?>
   <input type="hidden" name="address_id" value="<?= (int)$a['id'] ?>">

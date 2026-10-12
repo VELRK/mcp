@@ -6,16 +6,7 @@ require_once APPPATH . 'controllers/admin/Sk_Base.php';
 class Customers extends Sk_Base {
 
     public function index() {
-        $filters = [
-            'search'    => trim((string)$this->input->get('search', TRUE)),
-            'status'    => $this->input->get('status', TRUE),
-            'date_from' => trim((string)$this->input->get('date_from', TRUE)),
-            'date_to'   => trim((string)$this->input->get('date_to', TRUE)),
-        ];
-        if ($filters['status'] === null) {
-            $filters['status'] = '';
-        }
-
+        $filters = $this->_customer_filters();
         $page   = max(1, (int)$this->input->get('page'));
         $limit  = 100;
         $offset = ($page - 1) * $limit;
@@ -26,14 +17,17 @@ class Customers extends Sk_Base {
         $data['page']      = $page;
         $data['limit']     = $limit;
         $data['filters']   = $filters;
-        $data['counts']    = $this->Sk_User_model->status_counts();
+        $data['counts']    = $this->Sk_User_model->status_counts($filters);
         $data['search']    = $filters['search'];
+        $data['vendor_id'] = (int)($filters['vendor_id'] ?? 0);
+        $data['is_super']  = $this->is_super_admin();
         $this->render('customers/list', $data);
     }
 
     public function add() {
-        $data['title']   = 'Add Customer';
-        $data['address'] = [];
+        $data['title']     = 'Add Customer';
+        $data['address']   = [];
+        $data['vendor_id'] = (int)($this->current_vendor_id() ?? 0);
         $this->render('customers/form', $data);
     }
 
@@ -53,6 +47,11 @@ class Customers extends Sk_Base {
             'status'   => $parsed['status'],
         ];
         $vid = (int)($this->current_vendor_id() ?? 0);
+        if ($vid < 1 && !$this->is_super_admin()) {
+            $this->session->set_flashdata('error', 'This login has no shop. Customer cannot be saved without vendor_id.');
+            redirect('admin/customers/add');
+            return;
+        }
         if ($vid > 0 && $this->db->field_exists('vendor_id', 'users')) {
             $create['vendor_id'] = $vid;
         }
@@ -70,27 +69,36 @@ class Customers extends Sk_Base {
     }
 
     public function view($id) {
-        $data['title']    = 'Customer Detail';
-        $data['customer'] = $this->Sk_User_model->get_by_id($id);
-        if (!$data['customer']) show_404();
+        $customer = $this->_owned_customer((int)$id);
+        if (!$customer) {
+            show_404();
+        }
+        $data['title']     = 'Customer Detail';
+        $data['customer']  = $customer;
         $data['orders']    = $this->Sk_Order_model->get_user_orders($id);
         $data['addresses'] = $this->Sk_User_model->get_addresses($id);
+        $data['vendor_id'] = (int)($customer['vendor_id'] ?? 0);
         $this->render('customers/view', $data);
     }
 
     public function edit($id) {
-        $customer = $this->Sk_User_model->get_by_id($id);
-        if (!$customer) show_404();
+        $customer = $this->_owned_customer((int)$id);
+        if (!$customer) {
+            show_404();
+        }
         $addresses = $this->Sk_User_model->get_addresses($id);
-        $data['title']    = 'Edit Customer';
-        $data['customer'] = $customer;
-        $data['address']  = $addresses[0] ?? [];
+        $data['title']     = 'Edit Customer';
+        $data['customer']  = $customer;
+        $data['address']   = $addresses[0] ?? [];
+        $data['vendor_id'] = (int)($customer['vendor_id'] ?? 0);
         $this->render('customers/form', $data);
     }
 
     public function update($id) {
-        $customer = $this->Sk_User_model->get_by_id($id);
-        if (!$customer) show_404();
+        $customer = $this->_owned_customer((int)$id);
+        if (!$customer) {
+            show_404();
+        }
 
         $parsed = $this->_parse_customer_post((int)$id);
         if ($parsed['error']) {
@@ -227,7 +235,7 @@ class Customers extends Sk_Base {
     }
 
     public function toggle($id) {
-        $user = $this->Sk_User_model->get_by_id($id);
+        $user = $this->_owned_customer((int)$id);
         if (!$user) {
             return $this->json(['success' => false, 'message' => 'Customer not found.'], 404);
         }
@@ -238,7 +246,7 @@ class Customers extends Sk_Base {
 
     public function delete($id) {
         $id = (int)$id;
-        $customer = $this->Sk_User_model->get_by_id($id);
+        $customer = $this->_owned_customer($id);
         if (!$customer) {
             return $this->json(['success' => false, 'message' => 'Customer not found.'], 404);
         }
@@ -256,16 +264,7 @@ class Customers extends Sk_Base {
     }
 
     public function export() {
-        $filters = [
-            'search'    => trim((string)$this->input->get('search', TRUE)),
-            'status'    => $this->input->get('status', TRUE),
-            'date_from' => trim((string)$this->input->get('date_from', TRUE)),
-            'date_to'   => trim((string)$this->input->get('date_to', TRUE)),
-        ];
-        if ($filters['status'] === null) {
-            $filters['status'] = '';
-        }
-
+        $filters = $this->_customer_filters();
         $rows = $this->Sk_User_model->export_rows($filters);
         $this->activity_log->log_admin('customers', 'export', null, null, [
             'count'   => count($rows),
@@ -277,10 +276,11 @@ class Customers extends Sk_Base {
         $out = fopen('php://output', 'w');
         // UTF-8 BOM so Excel opens columns correctly
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['ID', 'Name', 'Email', 'Phone', 'Status', 'Joined', 'Last Login']);
+        fputcsv($out, ['ID', 'Vendor ID', 'Name', 'Email', 'Phone', 'Status', 'Joined', 'Last Login']);
         foreach ($rows as $r) {
             fputcsv($out, [
                 $r['id'],
+                $r['vendor_id'] ?? '',
                 $r['name'],
                 $r['email'],
                 $r['phone'] ?? '',
@@ -424,13 +424,18 @@ class Customers extends Sk_Base {
             }
 
             try {
-                $this->Sk_User_model->create([
+                $rowCreate = [
                     'name'     => $custName,
                     'email'    => $emailVal,
                     'phone'    => $phoneNorm,
                     'password' => '',
                     'status'   => $status,
-                ]);
+                ];
+                $vid = (int)($this->current_vendor_id() ?? 0);
+                if ($vid > 0 && $this->db->field_exists('vendor_id', 'users')) {
+                    $rowCreate['vendor_id'] = $vid;
+                }
+                $this->Sk_User_model->create($rowCreate);
                 $created++;
             } catch (Exception $e) {
                 $skipped++;
@@ -484,5 +489,50 @@ class Customers extends Sk_Base {
             }
         }
         return true;
+    }
+
+    /**
+     * Vendors always see only their shop. Super admin may pass ?vendor_id=.
+     * Customers created from WhatsApp Business Agent chat use the same vendor_id.
+     */
+    protected function _customer_filters(): array {
+        $filters = [
+            'search'    => trim((string)$this->input->get('search', TRUE)),
+            'status'    => $this->input->get('status', TRUE),
+            'date_from' => trim((string)$this->input->get('date_from', TRUE)),
+            'date_to'   => trim((string)$this->input->get('date_to', TRUE)),
+            'vendor_id' => 0,
+        ];
+        if ($filters['status'] === null) {
+            $filters['status'] = '';
+        }
+        $own = (int)($this->current_vendor_id() ?? 0);
+        if ($own > 0) {
+            $filters['vendor_id'] = $own;
+        } elseif ($this->is_super_admin()) {
+            $filters['vendor_id'] = max(0, (int)$this->input->get('vendor_id'));
+        }
+        return $filters;
+    }
+
+    /** @return array<string, mixed>|null */
+    protected function _owned_customer(int $id): ?array {
+        if ($id < 1) {
+            return null;
+        }
+        $customer = $this->Sk_User_model->get_by_id($id);
+        if (!$customer) {
+            return null;
+        }
+        $own = (int)($this->current_vendor_id() ?? 0);
+        if ($own > 0 && !$this->is_super_admin()) {
+            if (!$this->db->field_exists('vendor_id', 'users')) {
+                return null;
+            }
+            if ((int)($customer['vendor_id'] ?? 0) !== $own) {
+                return null;
+            }
+        }
+        return $customer;
     }
 }

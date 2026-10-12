@@ -20,6 +20,12 @@ $breadcrumb = [
 $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb'));
 ?>
 
+<div class="alert alert-light border mb-3 py-2">
+  <strong>This shop’s customers only.</strong>
+  Customers created from the WhatsApp Business Agent chat are saved with this shop’s <code>vendor_id</code> and appear here.
+  Other vendors’ customers are never shown.
+</div>
+
 <div class="row">
   <div class="col-md-4">
     <div class="card card-h-100">

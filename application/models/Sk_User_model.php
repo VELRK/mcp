@@ -400,14 +400,17 @@ class Sk_User_model extends CI_Model {
             ->result_array();
     }
 
-    public function status_counts(): array {
-        $this->_apply_admin_filters([]);
+    public function status_counts(array $filters = []): array {
+        $base = $filters;
+        unset($base['status']);
+
+        $this->_apply_admin_filters($base);
         $total = (int)$this->db->count_all_results('users');
 
-        $this->_apply_admin_filters(['status' => 1]);
+        $this->_apply_admin_filters(array_merge($base, ['status' => 1]));
         $active = (int)$this->db->count_all_results('users');
 
-        $this->_apply_admin_filters(['status' => 0]);
+        $this->_apply_admin_filters(array_merge($base, ['status' => 0]));
         $blocked = (int)$this->db->count_all_results('users');
 
         return [

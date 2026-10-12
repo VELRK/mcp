@@ -49,6 +49,7 @@
         <h6 class="fw-bold mb-0"><?= htmlspecialchars($customer['name']) ?></h6>
         <p class="text-muted small mb-3"><?= htmlspecialchars($customer['email'] ?? '') ?></p>
         <p class="mb-1"><i class="bi bi-phone me-1"></i><?= htmlspecialchars($customer['phone'] ?? 'N/A') ?></p>
+        <p class="mb-1"><i class="bi bi-shop me-1"></i>Shop vendor_id <?= !empty($customer['vendor_id']) ? (int)$customer['vendor_id'] : '—' ?></p>
         <p class="mb-1"><i class="bi bi-calendar me-1"></i>Joined <?= !empty($customer['created_at']) ? date('d M Y', strtotime($customer['created_at'])) : '-' ?></p>
         <?php if (!empty($customer['last_login'])): ?>
         <p class="mb-1"><i class="bi bi-clock-history me-1"></i>Last login <?= date('d M Y H:i', strtotime($customer['last_login'])) ?></p>
