@@ -647,10 +647,18 @@ function sk_ai_get_customer_by_phone(string $phone, ?int $tenantId = null): arra
         $defaultAddress = $addresses[0];
     }
 
+    $userVendor = (int)($user['vendor_id'] ?? 0);
+    $tenant = (int)($tenantId ?? 0);
+    // A customer tagged to another shop must not be reused in this Business Agent chat.
+    if ($tenant > 0 && $userVendor > 0 && $userVendor !== $tenant) {
+        return ['success' => false, 'data' => null, 'error' => ['code' => 'CUSTOMER_OTHER_SHOP', 'message' => 'Customer not found for this shop.']];
+    }
+
     return [
         'success' => true,
         'data' => [
-            'tenant_id' => $tenantId ?? 0,
+            'tenant_id' => $tenant > 0 ? $tenant : $userVendor,
+            'vendor_id' => $userVendor > 0 ? $userVendor : $tenant,
             'customer_id' => (int)$user['id'],
             'name' => trim((string)($user['name'] ?? $user['full_name'] ?? '')),
             'phone' => trim((string)($user['phone'] ?? $phone)),
@@ -705,9 +713,17 @@ function sk_ai_save_customer(array $data, ?int $tenantId = null): array {
 
     $phone = trim((string)($data['phone'] ?? $data['customer_phone'] ?? ''));
     $name = trim((string)($data['name'] ?? $data['full_name'] ?? ''));
+    $vendorId = (int)($tenantId ?? 0);
+    if ($vendorId < 1) {
+        $vendorId = (int)($data['vendor_id'] ?? $data['tenant_id'] ?? $data['tenant'] ?? 0);
+    }
     if ($phone === '') {
         return ['success' => false, 'data' => null, 'error' => ['code' => 'PHONE_REQUIRED', 'message' => 'Phone number is required.']];
     }
+    if ($vendorId < 1) {
+        return ['success' => false, 'data' => null, 'error' => ['code' => 'VENDOR_REQUIRED', 'message' => 'Shop vendor_id is required to save a customer from chat.']];
+    }
+    $hasVendorCol = $CI->db->field_exists('vendor_id', 'users');
 
     $existing = $CI->Sk_User_model->get_by_phone($phone);
     if ($existing) {
@@ -721,6 +737,15 @@ function sk_ai_save_customer(array $data, ?int $tenantId = null): array {
         if (!empty($data['status'])) {
             $update['status'] = (int)$data['status'];
         }
+        // Attach the shop when the row has no vendor yet. Do not move a customer that already belongs to another shop.
+        if ($hasVendorCol) {
+            $currentVendor = (int)($existing['vendor_id'] ?? 0);
+            if ($currentVendor < 1) {
+                $update['vendor_id'] = $vendorId;
+            } elseif ($currentVendor !== $vendorId) {
+                return ['success' => false, 'data' => null, 'error' => ['code' => 'CUSTOMER_OTHER_SHOP', 'message' => 'This phone already belongs to another shop.']];
+            }
+        }
         if (!empty($update)) {
             $CI->Sk_User_model->update((int)$existing['id'], $update);
         }
@@ -728,21 +753,25 @@ function sk_ai_save_customer(array $data, ?int $tenantId = null): array {
             sk_ai_store_customer_address((int)$existing['id'], $name !== '' ? $name : (string)($existing['name'] ?? ''), $phone, $data['address']);
         }
         $customer = $CI->Sk_User_model->get_by_id((int)$existing['id']);
-        return ['success' => true, 'data' => ['tenant_id' => $tenantId ?? 0, 'customer_id' => (int)$customer['id'], 'name' => trim((string)($customer['name'] ?? $name)), 'phone' => $phone], 'error' => null];
+        return ['success' => true, 'data' => ['tenant_id' => $vendorId, 'vendor_id' => $vendorId, 'customer_id' => (int)$customer['id'], 'name' => trim((string)($customer['name'] ?? $name)), 'phone' => $phone], 'error' => null];
     }
 
-    $newId = $CI->Sk_User_model->create([
+    $create = [
         'name' => $name !== '' ? $name : 'Customer',
         'email' => !empty($data['email']) ? trim((string)$data['email']) : null,
         'phone' => $phone,
         'status' => 1,
-    ]);
+    ];
+    if ($hasVendorCol) {
+        $create['vendor_id'] = $vendorId;
+    }
+    $newId = $CI->Sk_User_model->create($create);
 
     if (is_array($data['address'] ?? null)) {
         sk_ai_store_customer_address((int)$newId, $name, $phone, $data['address']);
     }
 
-    return ['success' => true, 'data' => ['tenant_id' => $tenantId ?? 0, 'customer_id' => (int)$newId, 'name' => $name !== '' ? $name : 'Customer', 'phone' => $phone], 'error' => null];
+    return ['success' => true, 'data' => ['tenant_id' => $vendorId, 'vendor_id' => $vendorId, 'customer_id' => (int)$newId, 'name' => $name !== '' ? $name : 'Customer', 'phone' => $phone], 'error' => null];
 }
 
 function sk_ai_get_product_variants(int $productId, ?int $tenantId = null): array {
@@ -1363,11 +1392,7 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
         $footer = substr($footer, 0, 60);
     }
     $cardCount = count($checkoutCards);
-    if ($cardCount >= 2) {
-        $summary = 'Two or more products. Send the checkout-lines carousel, 2 to 10 cards, one card per checkout_cards item. Each card image is that image_url. Each card text is exactly that body: product name, Variant, Qty, Amount, and Order total. Button label is Pay now. Button URL is payment_link on every card, the same full-order link. Do not send a second Pay card. Never send only "See the details below." Do not paste the link as text.';
-    } else {
-        $summary = 'One product. Send the Pay now card only. Header image is card.header_image_url when it starts with https. Body is exactly card.body: product name, Variant when present, Qty, Amount, then Items, Delivery, and Total. Button label is Pay now. Button URL is payment_link. Never send only "See the details below." Do not paste the link as text.';
-    }
+    $summary = 'Send the total and payment_link as plain text. Do not send a Pay card, a checkout carousel, or any other designed message. The invoice is sent only after payment.';
     return [
         'success' => true,
         'data' => [
@@ -1382,7 +1407,7 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
             'payment_link' => $link,
             'amount' => $total,
             'currency' => 'INR',
-            'ui' => $cardCount >= 2 ? 'checkout-lines' : 'order-payment-cta',
+            'ui' => 'none',
             'summary' => $summary,
             'checkout_cards' => $checkoutCards,
             'card' => [

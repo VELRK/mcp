@@ -421,9 +421,10 @@ class Whatsapp extends Sk_Base {
     }
 
     public function campaigns() {
+        $vid = $this->_resolve_ops_vendor_id();
         $data['title'] = 'WhatsApp Campaigns';
-        $data['campaigns'] = $this->Sk_Whatsapp_cloud_model->list_campaigns();
-        $data['ready'] = sk_wa_cloud_is_ready($this->Sk_Admin_model->get_settings());
+        $data['campaigns'] = $this->Sk_Whatsapp_cloud_model->list_campaigns($vid);
+        $data['ready'] = sk_wa_cloud_is_ready($this->Sk_Admin_model->get_settings(), $vid > 0 ? $vid : null);
         $this->render('whatsapp/campaigns', $data);
     }
 
@@ -436,8 +437,8 @@ class Whatsapp extends Sk_Base {
         $search = trim((string)$this->input->get('q', TRUE));
         $data['title'] = 'New WhatsApp campaign';
         $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates($vid > 0 ? $vid : null);
-        $data['customers'] = $this->Sk_Whatsapp_cloud_model->list_customers_with_phone($search, 250);
-        $data['customer_count'] = $this->Sk_Whatsapp_cloud_model->count_customers_with_phone();
+        $data['customers'] = $this->Sk_Whatsapp_cloud_model->list_customers_with_phone($search, 250, $vid);
+        $data['customer_count'] = $this->Sk_Whatsapp_cloud_model->count_customers_with_phone('', $vid);
         $data['search'] = $search;
         $data['ready'] = sk_wa_cloud_is_ready($settings, $vid > 0 ? $vid : null);
         $data['vendor_id'] = $vid;
@@ -460,11 +461,12 @@ class Whatsapp extends Sk_Base {
         $this->load->helper('sk_whatsapp');
         if ($audience === 'all') {
             $users = $this->Sk_Whatsapp_cloud_model->get_customers_by_ids(
-                $this->Sk_Whatsapp_cloud_model->list_customer_ids_with_phone()
+                $this->Sk_Whatsapp_cloud_model->list_customer_ids_with_phone($vid),
+                $vid
             );
         } else {
             $ids = $this->input->post('customer_ids');
-            $users = $this->Sk_Whatsapp_cloud_model->get_customers_by_ids(is_array($ids) ? $ids : []);
+            $users = $this->Sk_Whatsapp_cloud_model->get_customers_by_ids(is_array($ids) ? $ids : [], $vid);
         }
         $recipients = [];
         $seen = [];
@@ -488,7 +490,7 @@ class Whatsapp extends Sk_Base {
             redirect('admin/whatsapp/campaigns/add');
             return;
         }
-        $id = $this->Sk_Whatsapp_cloud_model->create_campaign($name, $templateId, $recipients);
+        $id = $this->Sk_Whatsapp_cloud_model->create_campaign($name, $templateId, $recipients, $vid);
         $sendNow = (string)$this->input->post('send_now') === '1';
         if ($sendNow) {
             redirect('admin/whatsapp/campaigns/view/' . $id . '?send=1');
@@ -499,7 +501,8 @@ class Whatsapp extends Sk_Base {
     }
 
     public function campaign_view($id = 0) {
-        $campaign = $this->Sk_Whatsapp_cloud_model->get_campaign((int)$id);
+        $vid = $this->_resolve_ops_vendor_id();
+        $campaign = $this->Sk_Whatsapp_cloud_model->get_campaign((int)$id, $vid);
         if (!$campaign) {
             show_404();
         }
@@ -516,7 +519,8 @@ class Whatsapp extends Sk_Base {
 
     public function campaign_send($id = 0) {
         $id = (int)$id;
-        $campaign = $this->Sk_Whatsapp_cloud_model->get_campaign($id);
+        $vid = $this->_resolve_ops_vendor_id();
+        $campaign = $this->Sk_Whatsapp_cloud_model->get_campaign($id, $vid);
         if (!$campaign) {
             return $this->json(['success' => false, 'message' => 'Campaign not found.'], 404);
         }
@@ -593,7 +597,7 @@ class Whatsapp extends Sk_Base {
     }
 
     public function campaign_stats($id = 0) {
-        $campaign = $this->Sk_Whatsapp_cloud_model->get_campaign((int)$id);
+        $campaign = $this->Sk_Whatsapp_cloud_model->get_campaign((int)$id, $this->_resolve_ops_vendor_id());
         if (!$campaign) {
             return $this->json(['success' => false, 'message' => 'Campaign not found.'], 404);
         }

@@ -418,6 +418,21 @@ class Sk_User_model extends CI_Model {
     }
 
     protected function _apply_admin_filters(array $filters): void {
+        $vendorId = (int)($filters['vendor_id'] ?? 0);
+        if ($vendorId < 1) {
+            try {
+                $CI =& get_instance();
+                if (isset($CI->vendor_context) && method_exists($CI->vendor_context, 'vendor_id')) {
+                    $vendorId = (int)($CI->vendor_context->vendor_id() ?? 0);
+                }
+            } catch (Throwable $e) {
+                $vendorId = 0;
+            }
+        }
+        if ($vendorId > 0 && $this->db->field_exists('vendor_id', 'users')) {
+            $this->db->where('vendor_id', $vendorId);
+        }
+
         $search = trim((string)($filters['search'] ?? ''));
         if ($search !== '') {
             $this->db->group_start()

@@ -65,27 +65,36 @@ foreach ($templates as $t) {
         </label>
         <span class="small text-muted" id="waCustPicked">0 selected</span>
       </div>
-      <div class="table-responsive" style="max-height:360px;overflow:auto;">
-        <table class="table table-sm table-hover mb-0">
-          <thead class="sticky-top bg-white">
-            <tr><th></th><th>Name</th><th>Phone</th><th>Email</th></tr>
+      <div class="wa-audience">
+        <table class="wa-audience-table mb-0">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Email</th>
+            </tr>
           </thead>
           <tbody>
-            <?php foreach ($customers as $u): ?>
+            <?php foreach ($customers as $u):
+              $custName = trim((string)($u['name'] ?? ''));
+              $custPhone = trim((string)($u['phone'] ?? ''));
+              $custEmail = trim((string)($u['email'] ?? ''));
+            ?>
             <tr class="wa-cust-row">
               <td><input type="checkbox" class="form-check-input wa-cust-cb" name="customer_ids[]" value="<?= (int)$u['id'] ?>"></td>
-              <td><?= htmlspecialchars($u['name'] ?? '') ?></td>
-              <td><?= htmlspecialchars($u['phone'] ?? '') ?></td>
-              <td><?= htmlspecialchars($u['email'] ?? '') ?></td>
+              <td><?= $custName !== '' ? htmlspecialchars($custName) : '—' ?></td>
+              <td><?= $custPhone !== '' ? htmlspecialchars($custPhone) : '—' ?></td>
+              <td><?= $custEmail !== '' ? htmlspecialchars($custEmail) : '—' ?></td>
             </tr>
             <?php endforeach; ?>
             <?php if (empty($customers)): ?>
-            <tr><td colspan="4" class="text-muted">No customers with a phone number found.</td></tr>
+            <tr><td colspan="4" class="text-muted">No customers with a phone number for this shop.</td></tr>
             <?php endif; ?>
           </tbody>
         </table>
       </div>
-      <div class="form-text">Showing up to 250 customers. Use “All customers with a phone” for the full list.</div>
+      <div class="form-text">Showing up to 250 customers from this shop. Use “All customers with a phone” for the full list.</div>
     </div>
   </div>
   <div class="card-footer d-flex flex-wrap gap-2">

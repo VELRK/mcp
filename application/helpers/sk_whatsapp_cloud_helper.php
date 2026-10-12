@@ -85,6 +85,9 @@ function sk_wa_cloud_ensure_schema_inner($CI): void {
             KEY `idx_status` (`status`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
+    if ($CI->db->table_exists('wa_cloud_campaigns') && !$CI->db->field_exists('vendor_id', 'wa_cloud_campaigns')) {
+        $CI->db->query("ALTER TABLE `wa_cloud_campaigns` ADD COLUMN `vendor_id` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `id`, ADD KEY `idx_wa_camp_vendor` (`vendor_id`)");
+    }
 
     if (!$CI->db->table_exists('wa_cloud_campaign_recipients')) {
         $CI->db->query("CREATE TABLE `wa_cloud_campaign_recipients` (

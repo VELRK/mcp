@@ -10,6 +10,7 @@ class Meta_agent extends Sk_Base {
 
     public function __construct() {
         parent::__construct();
+        $this->vendor_context->require_super_admin();
         $this->load->helper(['sk_whatsapp_cloud', 'sk_meta_business_agent', 'sk_dotenv']);
         $this->load->model(['Sk_Vendor_whatsapp_account_model', 'Sk_Vendor_meta_agent_model', 'Sk_Vendor_model']);
         sk_wa_cloud_ensure_schema();

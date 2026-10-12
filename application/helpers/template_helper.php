@@ -1597,6 +1597,7 @@ function ensure_contact_enquiries_table()
 		'source'        => 'ADD COLUMN `source` VARCHAR(20) NOT NULL DEFAULT \'web\' AFTER `message`',
 		'admin_note'    => 'ADD COLUMN `admin_note` TEXT NULL AFTER `status`',
 		'updated_at'    => 'ADD COLUMN `updated_at` DATETIME NULL DEFAULT NULL AFTER `created_at`',
+		'vendor_id'     => 'ADD COLUMN `vendor_id` INT UNSIGNED NULL DEFAULT NULL AFTER `id`',
 	) as $col => $alter) {
 		if (!$CI->db->field_exists($col, 'contact_enquiries')) {
 			$CI->db->query('ALTER TABLE `contact_enquiries` '.$alter);

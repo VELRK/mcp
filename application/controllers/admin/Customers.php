@@ -45,13 +45,18 @@ class Customers extends Sk_Base {
             return;
         }
 
-        $id = $this->Sk_User_model->create([
+        $create = [
             'name'     => $parsed['name'],
             'email'    => $parsed['email'],
             'phone'    => $parsed['phone'],
             'password' => bin2hex(random_bytes(8)),
             'status'   => $parsed['status'],
-        ]);
+        ];
+        $vid = (int)($this->current_vendor_id() ?? 0);
+        if ($vid > 0 && $this->db->field_exists('vendor_id', 'users')) {
+            $create['vendor_id'] = $vid;
+        }
+        $id = $this->Sk_User_model->create($create);
 
         $this->_save_customer_address((int)$id, $parsed);
 

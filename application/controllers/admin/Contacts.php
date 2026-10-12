@@ -20,6 +20,7 @@ class Contacts extends Sk_Base {
         $search = trim((string)$this->input->get('search', TRUE));
 
         if ($this->db->table_exists('contact_enquiries')) {
+            $this->_scope_vendor();
             if ($status !== '' && in_array($status, ['new', 'read', 'replied', 'closed'], true)) {
                 $this->db->where('status', $status);
             }
@@ -44,6 +45,7 @@ class Contacts extends Sk_Base {
 
         $newCount = 0;
         if ($this->db->table_exists('contact_enquiries')) {
+            $this->_scope_vendor();
             $newCount = (int)$this->db->where('status', 'new')->count_all_results('contact_enquiries');
         }
 
@@ -59,6 +61,9 @@ class Contacts extends Sk_Base {
         if (!in_array($status, ['new', 'read', 'replied', 'closed'], true)) {
             $status = 'read';
         }
+        if (!$this->_owned_contact((int)$id)) {
+            return $this->json(['success' => false, 'message' => 'Contact not found.'], 404);
+        }
         $this->db->where('id', (int)$id)->update('contact_enquiries', [
             'status'     => $status,
             'updated_at' => date('Y-m-d H:i:s'),
@@ -67,12 +72,15 @@ class Contacts extends Sk_Base {
     }
 
     public function delete($id = 0) {
+        if (!$this->_owned_contact((int)$id)) {
+            return $this->json(['success' => false, 'message' => 'Contact not found.'], 404);
+        }
         $this->db->where('id', (int)$id)->delete('contact_enquiries');
         $this->json(['success' => true]);
     }
 
     public function view($id = 0) {
-        $row = $this->db->where('id', (int)$id)->get('contact_enquiries')->row_array();
+        $row = $this->_owned_contact((int)$id);
         if (!$row) {
             show_404();
         }
@@ -90,5 +98,22 @@ class Contacts extends Sk_Base {
 
     private function _ensure_schema(): void {
         ensure_contact_enquiries_table();
+    }
+
+    /** Vendors only see enquiries saved for their shop. Platform enquiries stay with the super admin. */
+    private function _scope_vendor(): void {
+        $vid = (int)($this->current_vendor_id() ?? 0);
+        if ($vid > 0 && !$this->is_super_admin() && $this->db->field_exists('vendor_id', 'contact_enquiries')) {
+            $this->db->where('vendor_id', $vid);
+        }
+    }
+
+    private function _owned_contact(int $id): ?array {
+        if ($id < 1 || !$this->db->table_exists('contact_enquiries')) {
+            return null;
+        }
+        $this->_scope_vendor();
+        $row = $this->db->where('id', $id)->get('contact_enquiries')->row_array();
+        return $row ?: null;
     }
 }

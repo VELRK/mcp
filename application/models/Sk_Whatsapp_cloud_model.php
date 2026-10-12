@@ -302,35 +302,45 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
         $this->db->where('id', $id)->update('wa_cloud_messages', $upd);
     }
 
-    public function list_campaigns(): array {
+    public function list_campaigns(int $vendorId = 0): array {
         if (!$this->db->table_exists('wa_cloud_campaigns')) {
             return [];
         }
-        return $this->db->select('c.*, t.name AS template_name, t.language AS template_language, t.status AS template_status')
+        $this->db->select('c.*, t.name AS template_name, t.language AS template_language, t.status AS template_status')
             ->from('wa_cloud_campaigns c')
-            ->join('wa_cloud_templates t', 't.id = c.template_id', 'left')
-            ->order_by('c.id', 'DESC')
-            ->get()
-            ->result_array();
+            ->join('wa_cloud_templates t', 't.id = c.template_id', 'left');
+        if ($vendorId > 0) {
+            $this->db->group_start()
+                ->where('c.vendor_id', $vendorId)
+                ->or_where('t.vendor_id', $vendorId)
+                ->group_end();
+        }
+        return $this->db->order_by('c.id', 'DESC')->get()->result_array();
     }
 
-    public function get_campaign(int $id): ?array {
+    public function get_campaign(int $id, int $vendorId = 0): ?array {
         if ($id < 1 || !$this->db->table_exists('wa_cloud_campaigns')) {
             return null;
         }
-        $row = $this->db->select('c.*, t.name AS template_name, t.language AS template_language, t.kind AS template_kind, t.body_text, t.variable_map, t.status AS template_status')
+        $this->db->select('c.*, t.name AS template_name, t.language AS template_language, t.kind AS template_kind, t.body_text, t.variable_map, t.status AS template_status, t.vendor_id AS template_vendor_id')
             ->from('wa_cloud_campaigns c')
             ->join('wa_cloud_templates t', 't.id = c.template_id', 'left')
-            ->where('c.id', $id)
-            ->get()
-            ->row_array();
+            ->where('c.id', $id);
+        if ($vendorId > 0) {
+            $this->db->group_start()
+                ->where('c.vendor_id', $vendorId)
+                ->or_where('t.vendor_id', $vendorId)
+                ->group_end();
+        }
+        $row = $this->db->get()->row_array();
         return $row ?: null;
     }
 
-    public function create_campaign(string $name, int $templateId, array $recipients): int {
+    public function create_campaign(string $name, int $templateId, array $recipients, int $vendorId = 0): int {
         $now = date('Y-m-d H:i:s');
         $total = count($recipients);
         $this->db->insert('wa_cloud_campaigns', [
+            'vendor_id'   => $vendorId > 0 ? $vendorId : 0,
             'name'        => $name,
             'template_id' => $templateId,
             'status'      => 'draft',
@@ -474,8 +484,8 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
         ]);
     }
 
-    public function list_customers_with_phone(string $search = '', int $limit = 250): array {
-        $this->_apply_customer_phone_scope($search);
+    public function list_customers_with_phone(string $search = '', int $limit = 250, int $vendorId = 0): array {
+        $this->_apply_customer_phone_scope($search, $vendorId);
         return $this->db->select('id, name, email, phone')
             ->order_by('name', 'ASC')
             ->limit($limit)
@@ -483,36 +493,50 @@ class Sk_Whatsapp_cloud_model extends CI_Model {
             ->result_array();
     }
 
-    public function count_customers_with_phone(string $search = ''): int {
-        $this->_apply_customer_phone_scope($search);
+    public function count_customers_with_phone(string $search = '', int $vendorId = 0): int {
+        $this->_apply_customer_phone_scope($search, $vendorId);
         return (int)$this->db->count_all_results('users');
     }
 
-    public function list_customer_ids_with_phone(): array {
-        $this->_apply_customer_phone_scope('');
+    public function list_customer_ids_with_phone(int $vendorId = 0): array {
+        $this->_apply_customer_phone_scope('', $vendorId);
         $rows = $this->db->select('id')->get('users')->result_array();
         return array_map(static function ($r) {
             return (int)$r['id'];
         }, $rows);
     }
 
-    public function get_customers_by_ids(array $ids): array {
+    public function get_customers_by_ids(array $ids, int $vendorId = 0): array {
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
         if (!$ids) {
             return [];
         }
-        $this->_apply_customer_phone_scope('');
+        $this->_apply_customer_phone_scope('', $vendorId);
         return $this->db->select('id, name, email, phone')
             ->where_in('id', $ids)
             ->get('users')
             ->result_array();
     }
 
-    private function _apply_customer_phone_scope(string $search): void {
+    private function _apply_customer_phone_scope(string $search, int $vendorId = 0): void {
         $this->db->where('phone IS NOT NULL', null, false);
         $this->db->where('phone !=', '');
         if ($this->db->field_exists('deleted_at', 'users')) {
             $this->db->where('deleted_at IS NULL', null, false);
+        }
+        if ($vendorId > 0) {
+            $vendorId = (int)$vendorId;
+            $orderSql = 'SELECT DISTINCT o.user_id FROM orders o'
+                . ' INNER JOIN order_items oi ON oi.order_id = o.id'
+                . ' LEFT JOIN products p ON p.id = oi.product_id'
+                . ' WHERE o.user_id IS NOT NULL AND (oi.vendor_id = ' . $vendorId . ' OR p.vendor_id = ' . $vendorId . ')';
+            $chatSql = 'SELECT phone FROM wa_cloud_conversations WHERE vendor_id = ' . $vendorId
+                . " AND phone IS NOT NULL AND phone != ''";
+            $this->db->group_start()
+                ->where('vendor_id', $vendorId)
+                ->or_where('id IN (' . $orderSql . ')', null, false)
+                ->or_where('phone IN (' . $chatSql . ')', null, false)
+                ->group_end();
         }
         $search = trim($search);
         if ($search !== '') {

@@ -36,6 +36,19 @@
   .wa-main { min-height:420px; }
 }
 
+.wa-audience { max-height: 360px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; }
+.wa-audience-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.wa-audience-table th,
+.wa-audience-table td { padding: 10px 12px !important; vertical-align: middle; text-align: left; font-size: 14px; }
+.wa-audience-table thead th { position: sticky; top: 0; z-index: 1; background: #f8faf8; color: #6b7280; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+.wa-audience-table th:nth-child(1),
+.wa-audience-table td:nth-child(1) { width: 44px; }
+.wa-audience-table th:nth-child(3),
+.wa-audience-table td:nth-child(3) { width: 28%; }
+.wa-audience-table th:nth-child(4),
+.wa-audience-table td:nth-child(4) { width: 32%; }
+.wa-audience-table tbody td { border-bottom: 1px solid #f3f4f6; color: #111827; }
+.wa-audience-table tbody tr:last-child td { border-bottom: 0; }
 .wa-map { display:grid; grid-template-columns:1fr 1fr; gap:16px; background:#f8faf8; border:1px solid #dce8dc; border-radius:10px; padding:16px; }
 .wa-map-title { font-weight:700; margin-bottom:4px; }
 .wa-map-group { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#667781; margin:10px 0 6px; }
