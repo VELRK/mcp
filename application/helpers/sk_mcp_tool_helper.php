@@ -149,6 +149,16 @@ function sk_mcp_tool_product_gallery_paths(array $product): array {
     return array_slice($paths, 0, 10);
 }
 
+function sk_mcp_tool_is_catalog_request(string $query): bool {
+    $q = mb_strtolower(trim($query), 'UTF-8');
+    if (!preg_match('/\b(all|list|products?|items?|catalog|menu|available)\b/u', $q)) {
+        return false;
+    }
+    $stripped = trim((string)preg_replace('/\b(show|me|all|the|your|list|of|products?|items?|catalog|menu|available|what|do|you|have|please|stock|any)\b/u', ' ', $q));
+    $stripped = trim((string)preg_replace('/\s+/u', ' ', $stripped));
+    return $stripped === '';
+}
+
 function sk_mcp_tool_is_gallery_request(string $query): bool {
     return (bool)preg_match('/\b(more\s+(image|images|photo|photos|pic|pics|picture|pictures)|gallery|all\s+(image|images|photo|photos|picture|pictures)|show\s+(me\s+)?(more\s+)?(image|images|photo|photos|picture|pictures)|other\s+(image|images|photo|photos|picture|pictures))\b/i', $query);
 }
@@ -185,6 +195,56 @@ function sk_mcp_tool_whatsapp_image_url(string $path): string {
         return rawurlencode(rawurldecode($segment));
     }, explode('/', $parts['path']));
     return 'https://' . $parts['host'] . implode('/', $segments);
+}
+
+function sk_mcp_tool_plain_text(string $value, int $max = 360): string {
+    $text = trim(html_entity_decode(strip_tags($value), ENT_QUOTES, 'UTF-8'));
+    $text = trim((string)preg_replace('/\s+/u', ' ', $text));
+    if ($text === '') {
+        return '';
+    }
+    if (function_exists('mb_strlen') && mb_strlen($text, 'UTF-8') > $max) {
+        return rtrim(mb_substr($text, 0, $max - 1, 'UTF-8')) . '…';
+    }
+    if (strlen($text) > $max) {
+        return rtrim(substr($text, 0, $max - 3)) . '...';
+    }
+    return $text;
+}
+
+function sk_mcp_tool_product_specs(array $product): string {
+    $parts = [];
+    foreach (['color', 'sizes', 'pack_of', 'saree_length', 'length'] as $key) {
+        $value = trim((string)($product[$key] ?? ''));
+        if ($value !== '' && !in_array($value, $parts, true)) {
+            $parts[] = $value;
+        }
+    }
+    if (!empty($product['blouse_included'])) {
+        $parts[] = 'Blouse included';
+    }
+    return implode(' · ', $parts);
+}
+
+/** Delivery line from the shop's saved charge. No arrival promise is invented. */
+function sk_mcp_tool_delivery_footer(int $vendorId): string {
+    $CI =& get_instance();
+    $CI->load->helper(['sk_currency', 'sk_delivery']);
+    if (!isset($CI->Sk_Admin_model)) {
+        $CI->load->model('Sk_Admin_model');
+    }
+    $settings = isset($CI->Sk_Admin_model) ? $CI->Sk_Admin_model->get_settings() : [];
+    $quote = sk_delivery_quote(1, is_array($settings) ? $settings : [], $vendorId, '');
+    $flat = (float)($quote['flat_rate'] ?? 0);
+    $freeAbove = (float)($quote['threshold'] ?? 0);
+    if ($flat <= 0) {
+        $line = 'Free delivery';
+    } elseif ($freeAbove > 0) {
+        $line = 'delivery ' . sk_mcp_tool_inr($flat) . ' · free over ' . sk_mcp_tool_inr($freeAbove);
+    } else {
+        $line = 'delivery ' . sk_mcp_tool_inr($flat);
+    }
+    return function_exists('mb_substr') ? mb_substr($line, 0, 60, 'UTF-8') : substr($line, 0, 60);
 }
 
 function sk_mcp_tool_inr(float $amount): string {
@@ -272,13 +332,14 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
     $search = preg_replace('/\s+/', ' ', $search);
 
     $tenantId = (int)($tenant['tenant_id'] ?? $tenant['tenant'] ?? 0);
-    $filters = ['status' => 'active', 'search' => $search, 'sort' => 'newest'];
+    $catalog = sk_mcp_tool_is_catalog_request((string)$query);
+    $filters = ['status' => 'active', 'search' => $catalog ? '' : $search, 'sort' => 'newest'];
     if ($tenantId > 0) {
         $filters['vendor_id'] = $tenantId;
     }
 
-    $result = $search !== ''
-        ? $CI->Sk_Product_model->get_all($filters, max(1, min(20, $limit)), 0)
+    $result = ($catalog || $search !== '')
+        ? $CI->Sk_Product_model->get_all($filters, max(1, min(10, $limit)), 0)
         : ['data' => []];
 
     $items = is_array($result['data'] ?? null) ? $result['data'] : [];
@@ -339,6 +400,9 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             $score += 25;
         }
 
+        if ($catalog) {
+            $score = max($score, 1);
+        }
         if ($score <= 0) {
             continue;
         }
@@ -379,6 +443,8 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             'image' => sk_mcp_tool_product_image_path($product),
             'gallery' => sk_mcp_tool_product_gallery_paths($product),
             'variants' => sk_mcp_tool_variant_choices(is_array($product['variants'] ?? null) ? $product['variants'] : []),
+            'description' => sk_mcp_tool_plain_text((string)(($product['short_desc'] ?? '') !== '' ? $product['short_desc'] : ($product['description'] ?? ''))),
+            'specs' => sk_mcp_tool_product_specs($product),
         ];
     }
 

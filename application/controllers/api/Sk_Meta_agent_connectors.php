@@ -129,23 +129,17 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             }
             $searchQuery = $stripped;
         }
-        $result = sk_mcp_tool_find_products($searchQuery, ['tenant' => $vendorId], 8);
+        $result = sk_mcp_tool_find_products($searchQuery, ['tenant' => $vendorId], 10);
         $products = $this->_meta_safe_products($result['results'] ?? [], $vendorId);
         if ($galleryAsk && $products) {
             $this->_send_gallery($query, $products[0]);
             return;
         }
+        $footer = sk_mcp_tool_delivery_footer($vendorId);
         $cards = [];
         $galleryCards = [];
         foreach ($products as $pIndex => $p) {
-            $body = $this->_shop_card_body($p);
-            $cards[] = [
-                'name'          => (string)($p['name'] ?? 'Product'),
-                'body'          => $body,
-                'image_url'     => (string)($p['image_url'] ?? ''),
-                'button_label'  => 'Add to cart',
-                'needs_variant' => count($p['variants'] ?? []) > 0,
-            ];
+            $cards[] = $this->_shop_card($p, $footer, 'Add to cart');
             unset($products[$pIndex]['product_url']);
         }
         $count = count($cards);
@@ -158,79 +152,113 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         $photoCount = count($photoCards);
         $ui = 'none';
         if ($count === 1) {
-            $galleryCards = $this->_gallery_cards($products[0]);
+            $galleryCards = $this->_gallery_cards($products[0], $footer);
             $variantCount = count($products[0]['variants'] ?? []);
             $variantNote = $variantCount > 0
-                ? 'Send the variant list in this same turn, under the photos. Button text is Variants. They must choose one before this product can be added. '
-                : 'This product has no variants. Add to cart sets quantity to 1. ';
+                ? 'Send the variant list under the photos. They must choose one before Add to cart or Buy. '
+                : 'This product has no variants. ';
+            $sheet = 'Then send one reply with body exactly detail, footer exactly footer, and two buttons. First title is Add to cart. Second title is Buy, below Add to cart. Add to cart sets quantity to 1 and keeps shopping. Buy sets quantity to 1, then the delivery questions, one confirmation, and only then the payment link. Do not send an invoice before the payment link. ';
             if (count($galleryCards) >= 2) {
                 $cards = $galleryCards;
                 $ui = 'product-shop-cards';
-                $summary = 'One product with a gallery. Send the product-shop-cards carousel now, one card per gallery photo, 2 to 10 cards. Every card is this same product. Card text is exactly that body: name, price, and stock. Button is Add to cart. ' . $variantNote . 'Quantity starts at 0. Do not create the order. Never send only "See the details below." Do not send a website link.';
+                $summary = 'One product. Send the gallery carousel first, one card per photo. Card text is the short body: name, code and stock, price. Button is Add to cart. ' . $sheet . $variantNote . 'Never send only "See the details below." Do not send a website link. Do not invent delivery days or fabric details.';
             } else {
                 $ui = 'product-photo-card';
-                $summary = 'Exactly one product. The customer must see these lines: ' . str_replace("\n", ' | ', $cards[0]['body']) . '. '
+                $summary = 'Exactly one product. '
                     . ($photoCount === 1
-                        ? 'Send this one photo with that body as the caption, then one Add to cart button. '
-                        : 'There is no WhatsApp photo. Write that body in the text, then one Add to cart button. ')
-                    . $variantNote
-                    . 'Quantity starts at 0. Add to cart sets quantity to 1. Do not create the order. Never send only "See the details below." Do not send a website link.';
+                        ? 'Send the photo first. Caption is the short body: name, code and stock, price. '
+                        : 'There is no photo. ')
+                    . $sheet . $variantNote . 'Never send only "See the details below." Do not send a website link. Do not invent delivery days or fabric details.';
             }
-        } elseif ($count > 1 && $photoCount >= 2) {
-            $ui = 'product-shop-cards';
-            $summary = 'Two or more products. Send the product-shop-cards carousel, one card per product, primary image only. Card text is exactly that body: name, price, and stock. Button is Add to cart. Skip a card with an empty image_url and write that product as text. If the tapped product has variants, send the variant list before adding it. A carousel needs 2 to 10 cards. Never send only "See the details below."';
         } elseif ($count > 1) {
-            $ui = $photoCount === 1 ? 'product-photo-card' : 'none';
-            $summary = 'Write each product body in the chat. '
-                . ($photoCount === 1 ? 'Send one photo for the product that has an image_url, with its body as the caption. ' : '')
-                . 'Button is Add to cart. Do not send a carousel. Never send only "See the details below."';
+            $ui = 'product-photo-card';
+            $summary = 'Product list. Send every card as its own sheet, in order, up to 10. Same design for each. Photo caption is that card body: name, code and stock, price. Then one reply whose body is that card detail and whose footer is footer. Two buttons: Add to cart, then Buy below it. Add to cart sets quantity 1 and keeps shopping. Buy sets quantity 1 for that product, then delivery questions, one confirmation, then the payment link. Do not send an invoice before the payment link. If that product has variants, send the variant list before either button. Do not put different products in one carousel. Never send only "See the details below."';
         } else {
             $summary = 'No matching products in this shop.';
         }
         $products = array_values($products);
+        $sheet = $count === 1 ? ($cards[0] ?? []) : [];
         $this->success([
             'query'    => $query,
             'count'    => $count,
             'ui'       => $ui,
             'summary'  => $summary,
+            'detail'   => (string)($sheet['detail'] ?? ''),
+            'footer'   => (string)($sheet['footer'] ?? $footer),
             'cards'    => $cards,
             'gallery_cards' => $galleryCards,
             'products' => $products,
         ], 'Product search completed.');
     }
 
-    /** Name, price, and stock on the card. The customer reads this without an extra tap. */
+    /** Short lines for the photo: name, code and stock, price. */
     private function _shop_card_body(array $product): string {
         $name = trim((string)($product['name'] ?? ''));
         if ($name === '') {
             $name = 'Product';
         }
-        $price = (float)($product['price'] ?? 0);
-        $priceText = abs($price - round($price)) < 0.001
-            ? (string)(int)round($price)
-            : number_format($price, 2, '.', '');
-        $stock = !empty($product['available']) ? 'In stock' : 'Out of stock';
-        return $name . "\n₹" . $priceText . "\n" . $stock;
+        if (function_exists('mb_substr')) {
+            $name = mb_substr($name, 0, 80);
+        }
+        $sku = trim((string)($product['sku'] ?? ''));
+        $stock = !empty($product['available']) ? 'in stock' : 'out of stock';
+        $meta = $sku !== '' ? ($sku . ' · ' . $stock) : $stock;
+        return $name . "\n" . $meta . "\n" . sk_mcp_tool_inr((float)($product['price'] ?? 0));
+    }
+
+    /** Full product sheet under the photo. */
+    private function _shop_detail_body(array $product): string {
+        $lines = [$this->_shop_card_body($product)];
+        $description = trim((string)($product['description'] ?? ''));
+        if ($description !== '') {
+            $lines[] = '';
+            $lines[] = $description;
+        }
+        $specs = trim((string)($product['specs'] ?? ''));
+        if ($specs !== '') {
+            $lines[] = $specs;
+        }
+        $text = implode("\n", $lines);
+        if (strlen($text) > 1000) {
+            $text = substr($text, 0, 997) . '...';
+        }
+        return $text;
+    }
+
+    /** @return array<string, mixed> */
+    private function _shop_card(array $product, string $footer, string $button = ''): array {
+        $name = trim((string)($product['name'] ?? ''));
+        if ($name === '') {
+            $name = 'Product';
+        }
+        if ($button === '') {
+            $button = function_exists('mb_substr') ? mb_substr($name, 0, 20) : substr($name, 0, 20);
+            if ($button === '') {
+                $button = 'Add to cart';
+            }
+        }
+        return [
+            'name'          => $name,
+            'body'          => $this->_shop_card_body($product),
+            'detail'        => $this->_shop_detail_body($product),
+            'footer'        => $footer,
+            'image_url'     => (string)($product['image_url'] ?? ''),
+            'button_label'  => $button,
+            'needs_variant' => count($product['variants'] ?? []) > 0,
+        ];
     }
 
     /** @return array<int, array<string, mixed>> */
-    private function _gallery_cards(array $product): array {
-        $body = $this->_shop_card_body($product);
-        $name = (string)($product['name'] ?? 'Product');
-        $needsVariant = count($product['variants'] ?? []) > 0;
+    private function _gallery_cards(array $product, string $footer = ''): array {
+        $card = $this->_shop_card($product, $footer, 'Add to cart');
         $cards = [];
         foreach ((array)($product['gallery'] ?? []) as $url) {
             $url = trim((string)$url);
             if ($url === '') {
                 continue;
             }
-            $cards[] = [
-                'name'          => $name,
-                'body'          => $body,
-                'image_url'     => $url,
-                'button_label'  => 'Add to cart',
-                'needs_variant' => $needsVariant,
-            ];
+            $card['image_url'] = $url;
+            $cards[] = $card;
             if (count($cards) >= 10) {
                 break;
             }
@@ -240,28 +268,25 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
 
     /** Extra photos of one product. Cards are the same product, not a new catalog. */
     private function _send_gallery(string $query, array $product): void {
-        $body = $this->_shop_card_body($product);
-        $cards = $this->_gallery_cards($product);
+        $footer = sk_mcp_tool_delivery_footer((int)($product['vendor_id'] ?? 0));
+        $sheet = $this->_shop_card($product, $footer, 'Add to cart');
+        $cards = $this->_gallery_cards($product, $footer);
         $count = count($cards);
         $variantNote = count($product['variants'] ?? []) > 0
             ? ' If variants exist and none is chosen, send the variant list and do not add yet.'
-            : ' Add to cart sets quantity to 1.';
+            : '';
         if ($count >= 2) {
             $ui = 'product-shop-cards';
-            $summary = 'Gallery of one product. These cards are extra photos of the same product, not different products. Send the product-shop-cards carousel with one card per gallery photo, 2 to 10 cards. Each card image is that image_url. Each card text is exactly the body: name, price, and stock. Button is Add to cart.' . $variantNote . ' Never send only "See the details below."';
+            $summary = 'Gallery of one product. Send the carousel, one card per photo. Card text is the short body. Button is Add to cart. Then send detail as the reply body, footer as the footer, and two buttons: Add to cart, then Buy below it. Buy starts confirmation and then the payment link. Do not send an invoice before the payment link.' . $variantNote . ' Never send only "See the details below."';
         } elseif ($count === 1) {
             $ui = 'product-photo-card';
-            $summary = 'This product has one JPEG or PNG photo. Send that photo with the caption as the body, then Add to cart. There are no extra gallery photos.' . $variantNote . ' Never send only "See the details below."';
+            $cards = [$sheet];
+            $summary = 'One photo. Send it with the short body as the caption, then the detail reply with footer and two buttons: Add to cart, then Buy below it. Do not send an invoice before the payment link.' . $variantNote . ' Never send only "See the details below."';
         } else {
             $ui = 'none';
-            $cards = [[
-                'name'          => (string)($product['name'] ?? 'Product'),
-                'body'          => $body,
-                'image_url'     => '',
-                'button_label'  => 'Add to cart',
-                'needs_variant' => count($product['variants'] ?? []) > 0,
-            ]];
-            $summary = 'This product has no extra JPEG or PNG gallery photos. Write the body in the chat: name, price, and stock. Do not send an empty card.' . $variantNote . ' Never send only "See the details below."';
+            $sheet['image_url'] = '';
+            $cards = [$sheet];
+            $summary = 'No extra photos. Send the detail reply with Add to cart and Buy below it. Do not send an invoice before the payment link. Do not send an empty card.' . $variantNote;
         }
         unset($product['product_url']);
         $this->success([
@@ -269,6 +294,8 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             'count'         => 1,
             'ui'            => $ui,
             'summary'       => $summary,
+            'detail'        => (string)$sheet['detail'],
+            'footer'        => $footer,
             'cards'         => $cards,
             'gallery_cards' => $cards,
             'products'      => [$product],
@@ -318,6 +345,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             $variants = sk_mcp_tool_variant_choices(is_array($row['variants'] ?? null) ? $row['variants'] : []);
             $out[] = [
                 'id'               => $id,
+                'vendor_id'        => $rowVendor,
                 'name'             => (string)($row['name'] ?? ''),
                 'sku'              => (string)($row['sku'] ?? ''),
                 'image_url'        => $image,
@@ -332,6 +360,8 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
                 'stock'            => (int)($row['stock'] ?? 0),
                 'price'            => (float)($row['price'] ?? 0),
                 'mrp'              => (float)($row['mrp'] ?? 0),
+                'description'      => (string)($row['description'] ?? ''),
+                'specs'            => (string)($row['specs'] ?? ''),
                 'currency'         => (string)($row['currency'] ?? 'INR'),
             ];
         }
