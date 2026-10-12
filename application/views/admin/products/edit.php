@@ -370,12 +370,24 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
         <div class="card-body">
           <?php if (!empty($p['images'])): ?>
             <div class="d-flex flex-wrap gap-2 mb-3" id="galleryGrid">
-              <?php foreach ($p['images'] as $img): ?>
-                <div class="position-relative" id="imgWrap-<?= $img['id'] ?>" style="width:72px;height:72px;">
-                  <img src="<?= base_url($img['image']) ?>" width="72" height="72"
+              <?php foreach ($p['images'] as $imgIndex => $img):
+                $path = trim((string)($img['image'] ?? ''));
+                $src = trim((string)($img['image_url'] ?? ''));
+                if ($src === '' && $path !== '') {
+                    $src = preg_match('#^https?://#i', $path) ? $path : base_url(ltrim($path, '/'));
+                }
+                if ($src === '') {
+                    continue;
+                }
+                $imageId = (int)($img['id'] ?? 0);
+                $variantId = (int)($img['variant_id'] ?? 0);
+                $wrapId = $imageId > 0 ? ('img-' . $imageId) : ('varimg-' . ($variantId > 0 ? $variantId : $imgIndex));
+              ?>
+                <div class="position-relative" id="imgWrap-<?= htmlspecialchars($wrapId) ?>" style="width:72px;height:72px;">
+                  <img src="<?= htmlspecialchars($src) ?>" width="72" height="72" alt=""
                        class="rounded border" style="object-fit:cover;width:72px;height:72px;">
                   <button type="button"
-                    onclick="deleteGalleryImage(<?= $img['id'] ?>, <?= $p['id'] ?>)"
+                    onclick="deleteGalleryImage(<?= $imageId ?>, <?= (int)$p['id'] ?>, <?= $variantId ?>, '<?= htmlspecialchars($wrapId, ENT_QUOTES) ?>')"
                     class="position-absolute top-0 end-0 btn btn-danger btn-sm p-0 d-flex align-items-center justify-content-center"
                     style="width:20px;height:20px;border-radius:50%;font-size:10px;line-height:1;"
                     title="Remove image">
@@ -418,14 +430,20 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
 </form>
 
 <script>
-function deleteGalleryImage(imageId, productId) {
+function deleteGalleryImage(imageId, productId, variantId, wrapId) {
   if (!confirm('Remove this image from the gallery?')) return;
-  fetch('<?= site_url('admin/products/delete_image') ?>/' + imageId + '/' + productId, { method: 'POST' })
+  var url = variantId
+    ? '<?= site_url('admin/products/delete_variant_image') ?>/' + variantId + '/' + productId
+    : '<?= site_url('admin/products/delete_image') ?>/' + imageId + '/' + productId;
+  fetch(url, { method: 'POST' })
     .then(function(r) { return r.json(); })
     .then(function(res) {
-      if (res.success) {
-        var el = document.getElementById('imgWrap-' + imageId);
-        if (el) el.remove();
+      if (!res || !res.success) return;
+      var el = document.getElementById('imgWrap-' + wrapId);
+      if (el) el.remove();
+      if (variantId) {
+        var row = document.querySelector('.variant-row[data-variant-id="' + variantId + '"]');
+        if (row) row.querySelector('.variant-image-remove')?.click();
       }
     });
 }

@@ -352,6 +352,9 @@ $route['shopkart/products/update/(:num)'] = 'admin/Products/update/$1';
 $route['shopkart/products/delete/(:num)'] = 'admin/Products/delete/$1';
 $route['shopkart/products/toggle/(:num)'] = 'admin/Products/toggle/$1';
 $route['shopkart/products/delete_image/(:num)/(:num)'] = 'admin/Products/delete_image/$1/$2';
+$route['shopkart/products/delete_variant_image/(:num)/(:num)'] = 'admin/Products/delete_variant_image/$1/$2';
+$route['admin/products/delete_image/(:num)/(:num)'] = 'admin/Products/delete_image/$1/$2';
+$route['admin/products/delete_variant_image/(:num)/(:num)'] = 'admin/Products/delete_variant_image/$1/$2';
 $route['shopkart/products/subcategories/(:num)'] = 'admin/Products/subcategories_by_category/$1';
 // Inventory
 $route['shopkart/inventory'] = 'admin/Inventory/index';

@@ -406,6 +406,17 @@ class Products extends Sk_Base {
         $this->json(['success' => true]);
     }
 
+    public function delete_variant_image($variant_id, $product_id) {
+        $product = $this->Sk_Product_model->get_by_id($product_id);
+        $this->assert_product_vendor_access($product);
+        $variant = $this->Sk_Product_variant_model->get_by_id((int)$variant_id);
+        if (!$variant || (int)($variant['product_id'] ?? 0) !== (int)$product_id) {
+            $this->json(['success' => false, 'message' => 'Variant image not found.'], 404);
+        }
+        $this->db->where('id', (int)$variant_id)->where('product_id', (int)$product_id)->update('product_variants', ['image' => null]);
+        $this->json(['success' => true]);
+    }
+
     private function _save_product_variants($product_id, $product = null, $newMainThumb = null) {
         $rows = array_values($this->input->post('product_variants') ?? []);
         $parsed = [];
@@ -435,8 +446,11 @@ class Products extends Sk_Base {
             if (!$unit_id) continue;
 
             $unit_value = (float)($row['unit_value'] ?? 1);
+            $removeImage = !empty($row['remove_image']);
             $image = trim($row['existing_image'] ?? '');
-            if ($image === '') {
+            if ($removeImage) {
+                $image = '';
+            } elseif ($image === '') {
                 $image = trim($existing_images[$this->_variant_image_key($unit_id, $unit_value)] ?? '');
             }
 

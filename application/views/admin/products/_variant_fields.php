@@ -48,7 +48,7 @@ $rows = !empty($product_variants)
 
     <div id="variant-rows-list">
       <?php foreach ($rows as $vi => $vr): ?>
-      <div class="variant-row border rounded p-3 mb-2 bg-light">
+      <div class="variant-row border rounded p-3 mb-2 bg-light" data-variant-id="<?= (int)($vr['id'] ?? 0) ?>">
         <div class="row g-2 align-items-end">
           <div class="col-md-2">
             <label class="form-label small">Image</label>
@@ -56,11 +56,13 @@ $rows = !empty($product_variants)
               $imgPath = trim((string)($vr['image'] ?? ''));
               $imgUrl = trim((string)($vr['image_url'] ?? ''));
               if ($imgUrl === '' && $imgPath !== '') {
-                  $imgUrl = base_url($imgPath);
+                  $imgUrl = preg_match('#^https?://#i', $imgPath) ? $imgPath : base_url(ltrim($imgPath, '/'));
               }
             ?>
             <input type="hidden" name="product_variants[<?= $vi ?>][existing_image]" class="variant-existing-image" value="<?= htmlspecialchars($imgPath) ?>">
+            <input type="hidden" name="product_variants[<?= $vi ?>][remove_image]" class="variant-remove-image" value="0">
             <img src="<?= htmlspecialchars($imgUrl) ?>" alt="" class="rounded border variant-img-preview mb-1<?= $imgUrl === '' ? ' d-none' : '' ?>" style="width:72px;height:72px;object-fit:cover;display:<?= $imgUrl === '' ? 'none' : 'block' ?>;">
+            <button type="button" class="btn btn-link btn-sm text-danger p-0 mb-1 variant-image-remove<?= $imgUrl === '' ? ' d-none' : '' ?>">Remove image</button>
             <input type="file" name="variant_images[<?= $vi ?>]" class="form-control form-control-sm variant-image-input" accept="image/*">
           </div>
           <div class="col-md-2">
@@ -173,7 +175,7 @@ $rows = !empty($product_variants)
     wrap.className = 'variant-row border rounded p-3 mb-2 bg-light';
     wrap.innerHTML = `
       <div class="row g-2 align-items-end">
-        <div class="col-md-2"><label class="form-label small">Image</label><input type="hidden" name="product_variants[${idx}][existing_image]" class="variant-existing-image" value=""><img src="" alt="" class="rounded border variant-img-preview mb-1 d-none" style="width:72px;height:72px;object-fit:cover;display:none;"><input type="file" name="variant_images[${idx}]" class="form-control form-control-sm variant-image-input" accept="image/*"></div>
+        <div class="col-md-2"><label class="form-label small">Image</label><input type="hidden" name="product_variants[${idx}][existing_image]" class="variant-existing-image" value=""><input type="hidden" name="product_variants[${idx}][remove_image]" class="variant-remove-image" value="0"><img src="" alt="" class="rounded border variant-img-preview mb-1 d-none" style="width:72px;height:72px;object-fit:cover;display:none;"><button type="button" class="btn btn-link btn-sm text-danger p-0 mb-1 variant-image-remove d-none">Remove image</button><input type="file" name="variant_images[${idx}]" class="form-control form-control-sm variant-image-input" accept="image/*"></div>
         <div class="col-md-2"><label class="form-label small">Unit *</label>${unitSelectHtml(idx, defaultUnit)}</div>
         <div class="col-md-1"><label class="form-label small">Qty</label><input type="text" inputmode="decimal" name="product_variants[${idx}][unit_value]" class="form-control form-control-sm" value="${defaultQty}"></div>
         <div class="col-md-2"><label class="form-label small">Label</label><input type="text" name="product_variants[${idx}][label]" class="form-control form-control-sm" placeholder="Auto"></div>
@@ -190,6 +192,28 @@ $rows = !empty($product_variants)
   });
 
   document.getElementById('variant-rows-list')?.addEventListener('click', function(e) {
+    const imageBtn = e.target.closest('.variant-image-remove');
+    if (imageBtn) {
+      const row = imageBtn.closest('.variant-row');
+      const img = row?.querySelector('.variant-img-preview');
+      const existing = row?.querySelector('.variant-existing-image');
+      const remove = row?.querySelector('.variant-remove-image');
+      const file = row?.querySelector('.variant-image-input');
+      if (img) {
+        img.src = '';
+        img.classList.add('d-none');
+        img.style.display = 'none';
+      }
+      if (existing) existing.value = '';
+      if (remove) remove.value = '1';
+      if (file) file.value = '';
+      imageBtn.classList.add('d-none');
+      const variantId = row?.getAttribute('data-variant-id') || '';
+      if (variantId && variantId !== '0') {
+        document.getElementById('imgWrap-varimg-' + variantId)?.remove();
+      }
+      return;
+    }
     const btn = e.target.closest('.remove-variant-row');
     if (!btn) return;
     const rows = document.querySelectorAll('.variant-row');
@@ -210,6 +234,10 @@ $rows = !empty($product_variants)
         img.src = ev.target.result;
         img.classList.remove('d-none');
         img.style.display = 'block';
+        const removeBtn = row.querySelector('.variant-image-remove');
+        const removeFlag = row.querySelector('.variant-remove-image');
+        if (removeBtn) removeBtn.classList.remove('d-none');
+        if (removeFlag) removeFlag.value = '0';
       };
       reader.readAsDataURL(e.target.files[0]);
     }
