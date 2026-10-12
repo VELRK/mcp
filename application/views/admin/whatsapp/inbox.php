@@ -82,7 +82,6 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
           </div>
         </div>
         <div class="d-flex flex-wrap gap-1" id="waControlBtns">
-          <button type="button" class="btn btn-sm btn-outline-primary" id="waTakeBtn" disabled>Take control</button>
           <button type="button" class="btn btn-sm btn-outline-success" id="waReleaseBtn" disabled>Release to AI</button>
         </div>
       </div>

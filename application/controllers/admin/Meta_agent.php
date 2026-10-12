@@ -513,6 +513,9 @@ class Meta_agent extends Sk_Base {
 
                 case 'release':
                 case 'take':
+                    if ($op === 'take') {
+                        return $this->json(['success' => false, 'message' => 'Take control is off, so a chat is not frozen. The agent keeps replying.']);
+                    }
                     $to = trim((string)$this->input->post('to', TRUE));
                     $conversationId = (int)$this->input->post('conversation_id');
                     if ($to === '' && $conversationId > 0) {

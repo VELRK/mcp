@@ -200,15 +200,14 @@ class Whatsapp extends Sk_Base {
             'created_at'      => $createdAt,
         ]);
 
-        // Sending from the app takes thread control from Meta Business Agent.
         if ($ok) {
-            $this->Sk_Vendor_meta_agent_model->set_conversation_owner($convId, 'app', 'admin_send');
+            $this->Sk_Vendor_meta_agent_model->set_conversation_owner($convId, 'meta_agent', 'admin_send_released');
         }
 
         return $this->json([
             'success' => $ok,
             'message' => $ok ? 'Sent.' : ($result['message'] ?? 'Send failed.'),
-            'thread_owner' => $ok ? 'app' : ($conv['thread_owner'] ?? 'meta_agent'),
+            'thread_owner' => 'meta_agent',
             'chat_message' => [
                 'id'         => $msgId,
                 'direction'  => 'out',
@@ -227,8 +226,8 @@ class Whatsapp extends Sk_Base {
     public function thread_control() {
         $convId = (int)$this->input->post('conversation_id');
         $action = strtolower(trim((string)$this->input->post('action', TRUE)));
-        if (!in_array($action, ['take', 'release'], true)) {
-            return $this->json(['success' => false, 'message' => 'action must be take or release.']);
+        if ($action !== 'release') {
+            return $this->json(['success' => false, 'message' => 'Take control is off, so a chat is not frozen. The agent keeps replying.']);
         }
         $conv = $this->Sk_Whatsapp_cloud_model->get_conversation($convId);
         if (!$conv) {
