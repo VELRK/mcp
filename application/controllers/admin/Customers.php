@@ -25,17 +25,13 @@ class Customers extends Sk_Base {
     }
 
     public function add() {
-        $data['title']     = 'Add Customer';
-        $data['address']   = [];
-        $data['vendor_id'] = (int)($this->current_vendor_id() ?? 0);
-        $this->render('customers/form', $data);
+        $this->_render_customer_form();
     }
 
     public function store() {
         $parsed = $this->_parse_customer_post();
         if ($parsed['error']) {
-            $this->session->set_flashdata('error', $parsed['error']);
-            redirect('admin/customers/add');
+            $this->_render_customer_form($parsed, null, (string)$parsed['error']);
             return;
         }
 
@@ -48,8 +44,7 @@ class Customers extends Sk_Base {
         ];
         $vid = (int)($this->current_vendor_id() ?? 0);
         if ($vid < 1 && !$this->is_super_admin()) {
-            $this->session->set_flashdata('error', 'This login has no shop. Customer cannot be saved without vendor_id.');
-            redirect('admin/customers/add');
+            $this->_render_customer_form($parsed, null, 'This login has no shop. Customer cannot be saved without a vendors.id.');
             return;
         }
         if ($vid > 0 && $this->db->field_exists('vendor_id', 'users')) {
@@ -87,11 +82,7 @@ class Customers extends Sk_Base {
             show_404();
         }
         $addresses = $this->Sk_User_model->get_addresses($id);
-        $data['title']     = 'Edit Customer';
-        $data['customer']  = $customer;
-        $data['address']   = $addresses[0] ?? [];
-        $data['vendor_id'] = (int)($customer['vendor_id'] ?? 0);
-        $this->render('customers/form', $data);
+        $this->_render_customer_form(null, $customer, '', $addresses[0] ?? []);
     }
 
     public function update($id) {
@@ -102,15 +93,13 @@ class Customers extends Sk_Base {
 
         $parsed = $this->_parse_customer_post((int)$id);
         if ($parsed['error']) {
-            $this->session->set_flashdata('error', $parsed['error']);
-            redirect('admin/customers/edit/' . (int)$id);
+            $this->_render_customer_form($parsed, $customer, (string)$parsed['error']);
             return;
         }
 
         $password = (string)$this->input->post('password', FALSE);
         if ($password !== '' && strlen($password) < 6) {
-            $this->session->set_flashdata('error', 'Password must be at least 6 characters.');
-            redirect('admin/customers/edit/' . (int)$id);
+            $this->_render_customer_form($parsed, $customer, 'Password must be at least 6 characters.');
             return;
         }
 
@@ -142,12 +131,13 @@ class Customers extends Sk_Base {
         $status = $this->input->post('status') ? 1 : 0;
 
         $out = [
-            'error'      => null,
-            'name'       => $name,
-            'email'      => null,
-            'phone'      => null,
-            'status'     => $status,
-            'address_id' => (int)$this->input->post('address_id'),
+            'error'         => null,
+            'name'          => $name,
+            // Keep typed values so failed validation re-renders the form filled in.
+            'email'         => $email,
+            'phone'         => $phone,
+            'status'        => $status,
+            'address_id'    => (int)$this->input->post('address_id'),
             'company_name'  => trim((string)$this->input->post('company_name', TRUE)),
             'address_label' => trim((string)$this->input->post('address_label', TRUE)) ?: 'Home',
             'line1'         => trim((string)$this->input->post('line1', TRUE)),
@@ -164,6 +154,7 @@ class Customers extends Sk_Base {
             return $out;
         }
 
+        $emailOk = null;
         if ($email !== '') {
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $out['error'] = 'Please enter a valid email address.';
@@ -173,11 +164,12 @@ class Customers extends Sk_Base {
                 $out['error'] = 'This email is already used by another customer.';
                 return $out;
             }
-            $out['email'] = strtolower($email);
+            $emailOk = strtolower($email);
         }
 
         $this->load->helper('sk_isms');
         $settings = $this->Sk_Admin_model->get_settings();
+        $phoneOk = null;
         if ($phone !== '') {
             $normalized = sk_isms_normalize_phone($phone, $settings);
             if (!$normalized) {
@@ -188,7 +180,7 @@ class Customers extends Sk_Base {
                 $out['error'] = 'This phone is already used by another customer.';
                 return $out;
             }
-            $out['phone'] = $normalized;
+            $phoneOk = $normalized;
         }
         if ($out['address_phone'] !== '') {
             $addrNorm = sk_isms_normalize_phone($out['address_phone'], $settings);
@@ -199,11 +191,14 @@ class Customers extends Sk_Base {
             $out['address_phone'] = $addrNorm;
         }
 
-        if ($out['email'] === null && $out['phone'] === null) {
+        if ($emailOk === null && $phoneOk === null) {
             $out['error'] = 'Enter at least a phone number or email.';
             return $out;
         }
 
+        // Only overwrite with normalized values after every check passes.
+        $out['email'] = $emailOk;
+        $out['phone'] = $phoneOk;
         return $out;
     }
 
@@ -534,5 +529,60 @@ class Customers extends Sk_Base {
             }
         }
         return $customer;
+    }
+
+    /**
+     * vendor_id is vendors.id for the logged-in shop. On validation failure, keep every posted field.
+     *
+     * @param array<string, mixed>|null $posted
+     * @param array<string, mixed>|null $existing
+     * @param array<string, mixed> $existingAddress
+     */
+    protected function _render_customer_form(?array $posted = null, ?array $existing = null, string $error = '', array $existingAddress = []): void {
+        $vid = (int)($this->current_vendor_id() ?? 0);
+        if ($vid < 1 && is_array($existing)) {
+            $vid = (int)($existing['vendor_id'] ?? 0);
+        }
+        $shopName = '';
+        if ($vid > 0 && $this->db->table_exists('vendors')) {
+            $vendor = $this->db->select('id, business_name, owner_name')->where('id', $vid)->get('vendors')->row_array();
+            if ($vendor) {
+                $shopName = trim((string)($vendor['business_name'] ?? $vendor['owner_name'] ?? ''));
+            }
+        }
+
+        if (is_array($posted)) {
+            $customer = [
+                'id'     => (int)($existing['id'] ?? 0) ?: null,
+                'name'   => (string)($posted['name'] ?? ''),
+                'email'  => (string)($posted['email'] ?? ''),
+                'phone'  => (string)($posted['phone'] ?? ''),
+                'status' => (int)($posted['status'] ?? 1),
+            ];
+            $address = [
+                'id'           => (int)($posted['address_id'] ?? ($existingAddress['id'] ?? 0)) ?: null,
+                'company_name' => (string)($posted['company_name'] ?? ''),
+                'label'        => (string)($posted['address_label'] ?? 'Home'),
+                'line1'        => (string)($posted['line1'] ?? ''),
+                'line2'        => (string)($posted['line2'] ?? ''),
+                'city'         => (string)($posted['city'] ?? ''),
+                'state'        => (string)($posted['state'] ?? ''),
+                'pincode'      => (string)($posted['pincode'] ?? ''),
+                'country'      => (string)($posted['country'] ?? 'India'),
+                'phone'        => (string)($posted['address_phone'] ?? ''),
+            ];
+        } else {
+            $customer = $existing;
+            $address = $existingAddress;
+        }
+
+        $this->render('customers/form', [
+            'title'       => !empty($customer['id']) ? 'Edit Customer' : 'Add Customer',
+            'customer'    => $customer,
+            'address'     => $address,
+            'vendor_id'   => $vid,
+            'vendor_name' => $shopName,
+            'form_error'  => $error,
+        ]);
     }
 }

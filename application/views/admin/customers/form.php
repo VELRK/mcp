@@ -24,10 +24,16 @@ $action = $isEdit
   </div>
 </div>
 
+<?php if (!empty($form_error)): ?>
+<div class="alert alert-danger mb-3 py-2"><?= htmlspecialchars((string)$form_error) ?></div>
+<?php endif; ?>
+
 <?php if (!$isEdit && !empty($vendor_id)): ?>
 <div class="alert alert-light border mb-3 py-2">
-  This customer will be saved to your shop (<code>vendor_id <?= (int)$vendor_id ?></code>).
-  The same shop tag is used when a customer is created from the WhatsApp Business Agent chat.
+  This customer will be saved to your shop
+  <strong><?= htmlspecialchars((string)(($vendor_name ?? '') !== '' ? $vendor_name : ('Shop #' . (int)$vendor_id))) ?></strong>
+  from the <code>vendors</code> table (<code>vendors.id = <?= (int)$vendor_id ?></code>).
+  WhatsApp Business Agent chat uses that same shop id.
 </div>
 <?php endif; ?>
 
@@ -67,7 +73,7 @@ $action = $isEdit
         <label class="form-label">Status</label>
         <div class="form-check form-switch mt-2">
           <input class="form-check-input" type="checkbox" name="status" id="custStatus" value="1"
-            <?= ($isEdit ? !empty($c['status']) : true) ? 'checked' : '' ?>>
+            <?= array_key_exists('status', (array)$c) ? (!empty($c['status']) ? 'checked' : '') : 'checked' ?>>
           <label class="form-check-label" for="custStatus">Active (uncheck to block)</label>
         </div>
       </div>
