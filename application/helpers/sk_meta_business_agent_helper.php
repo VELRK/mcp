@@ -547,13 +547,13 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Follow this order. "
         . "1. GREETING: If they only say hi/hello/hey/vanakkam, reply in ONE short sentence. Call NO tools. "
         . "2. PRODUCTS: On any product, price, or stock question, call search_products exactly once. The tool result is the whole catalog. Offer only those products. If it is empty, say so in one sentence. Never add a product from memory or another shop. Never invent facts. Infer typos such as donu have = do you have and amount/prise = price. "
-        . "3. SHOW THE PRODUCTS: The customer must read the product name and price in the message. Never send only \"See the details below.\" One product with a JPEG or PNG image_url: send that one photo, caption is the name and price, then the Shop now reply button with no URL. Do not send the gallery on this first look. One product with no image_url: write the name and price in the text, then Shop now. Two or more products that have image_url: send the product-shop-cards carousel, 2 to 10 cards, one card per product. Each card text is that product name and price. The button text is the product name, at most 20 characters, and it replies in this chat. A product whose image_url is empty is written as text, not placed on a blank card. Never use the carousel for one product unless they asked for more photos. "
-        . "4. MORE PHOTOS: If they ask for more images, photos, pictures, or the gallery, call search_products again with that product name. Use gallery_cards. Two or more gallery photos: send the product-shop-cards carousel, one card per gallery photo of that same product. Card text is the name and price. Button is Shop now. One photo: send that photo. If gallery_cards is empty, say there are no extra photos and repeat the name and price. Never invent a photo. These cards are extra photos of one product, not different products. "
-        . "5. CART: Shop now adds that product to the cart in this chat. Keep every product they already added. Then send reply buttons Add more and Checkout. Do not create the order yet. If they choose Add more, or name another product, search again and add it the same way. Several products belong in one order. "
+        . "3. SHOW THE PRODUCTS: The customer reads the details on the card. Never send only \"See the details below.\" Card text is exactly three lines: product name, ₹price, and In stock or Out of stock. One product with 2 to 10 JPEG or PNG gallery photos: send that gallery now as the product-shop-cards carousel, one card per photo. Every card is the same product and the same text. Button is Add to cart. One product with one photo: send that photo with those three lines, then the Add to cart button. No photo: write the three lines, then Add to cart. Two or more products: one carousel, one card per product, the primary image only, the same three lines, button Add to cart. A product with no image is text, not a blank card. If variants is not empty, send the variant list in the same turn, under the photos. They must choose a variant before the product can be added. Do not send a website link. "
+        . "4. MORE PHOTOS: If they ask for more images, call search_products again with that product name. Use gallery_cards. Two or more photos: the same carousel, details on every card, button Add to cart. One photo: send that photo with the three lines. No photos: say there are no extra photos and repeat the three lines. Never invent a photo. "
+        . "5. CART: Quantity starts at 0. Add to cart sets quantity to 1 and saves that product and variant. If variants exist and none is chosen, send the variant list again and do not add. Out of stock is not added. The same product and variant updates the existing line. Then send Qty - and Qty +. The text shows Qty and Amount. Qty + from 0 adds quantity 1. Another Qty + increases that line. Qty - decreases it. Quantity 0 removes the line. Do not create the order. Then show the cart. One line: its photo, name, Variant when chosen, Qty, Amount, then Add more and Checkout. Two or more lines: the cart-lines carousel, one card per product, button Change, then Add more and Checkout. Change shows Qty - and Qty + for that line. "
         . "6. DELIVERY DETAILS: When they choose Checkout, do not confirm the order and do not create it. Ask in this chat for each missing item, one at a time, in this order: name, phone number, door number, landmark, street, pincode. A pincode is 6 digits. Do not send a location card, a map, or a link. Do not skip a field. "
         . "7. CUSTOMER: After the name and phone number are known, call identify_customer or create_customer with that name and phone. Then call update_customer. The address text is Door {door number}, {street}. Landmark: {landmark}. Save the pincode. Create the customer only after the name and phone are collected. "
         . "8. CONFIRM ONCE: After the customer and the full address are saved, confirm once. Repeat the name, phone number, door number, landmark, street, pincode, every cart product, each quantity, and the combined total. Buttons are Confirm order and Change. This is the only confirmation. Create the order only after Confirm order. create_order items must include every cart product. The order name, phone, address, and pincode are the ones just confirmed. calculate_order_total uses that same product list. Do not ask for the address again. "
-        . "9. PAY: After that one confirmation, create_order with confirmed=true, then create_payment_link once. Then send the Pay now card and no other message. The visible body is exactly card.body. It lists the order, every product, each quantity, item total, delivery charge or Free shipping, and the total. Use card.header_image_url as the header only when it starts with https. If it is empty, send the card with no header image. Footer is card.footer. Button label is Pay now. Button URL is the Razorpay payment_link. Do not paste the link as text. Never send only \"See the details below.\" One new link per order. Never reuse or invent a link. "
+        . "9. PAY: After that one confirmation, create_order with confirmed=true. Each item is product_id, variant_id, variant_label, and quantity. Then create_payment_link once. One product: send the Pay now card and no other message. Header image is card.header_image_url when it starts with https. Body is exactly card.body, one field per line: product name, Variant, Qty, Amount, Items, Delivery, Total. Button label is Pay now. Button URL is payment_link. Two or more products: send the checkout-lines carousel and no other message. One card per checkout_cards item. Card image is that image_url. Card text is exactly that body: product name, Variant, Qty, Amount, Order total. Button label is Pay now. Button URL is the same payment_link on every card. Do not paste the link as text. Never send only \"See the details below.\" One new link per order. Never reuse or invent a link. "
         . "Do not send the invoice, a catalog, or an address link. The invoice is sent separately after payment. Never hand off for a simple product or price question. "
         . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
@@ -562,7 +562,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'General shop. Show one photo first, the gallery when they ask for more images, add several products to one cart, collect name and the delivery address, confirm that once, then send one Pay now bill.',
+            'description' => 'General shop. Show the gallery with the name, price, and stock on the card, then the variant list and Add to cart. Quantity above zero updates the cart. Confirm the address once, then Pay now.',
             'skill'       => $skill,
         ],
     ];
@@ -1099,37 +1099,55 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'title'           => 'product-photo',
             'component_type'  => 'image',
             'status'          => 'enabled',
-            'instruction'     => 'When search_products returns exactly one product for ' . $shopName . ' and that product has an https JPEG or PNG image_url, send this photo before the Shop now button. Image URL is image_url. Caption is the product name and price. Never use the caption "See the details below." Never invent an image. If image_url is empty, do not send this photo.',
+            'instruction'     => 'When search_products returns exactly one product for ' . $shopName . ' and that product has one https JPEG or PNG image, send this photo. Caption is exactly three lines: product name, ₹price, and In stock or Out of stock. If gallery_cards has 2 or more photos, send the carousel instead of this single photo. Never use the caption "See the details below." Never invent an image. If image_url is empty, do not send this photo.',
         ],
         [
             'title'           => 'product-photo-card',
             'component_type'  => 'interactive_reply_buttons',
             'status'          => 'enabled',
-            'instruction'     => 'When search_products returns exactly one product, send this after the product photo. Body text is the product name and price only. One button only. Button title is exactly "Shop now". This button replies inside this WhatsApp chat and adds the product to the cart. It does not create the order. Do not add a URL. Do not mention a website or an online store.',
+            'instruction'     => 'When one product has a single photo, or no photo, send this under the details. Body text is exactly three lines: product name, ₹price, and In stock or Out of stock. One button. Button title is exactly "Add to cart". It sets quantity to 1 for that product. If variants exist and none is chosen, do not add; the variant list is sent under the photo. Do not create the order. Do not add a URL.',
         ],
         [
             'title'           => 'product-shop-cards',
             'component_type'  => 'carousel_quick_reply',
             'status'          => 'enabled',
-            'instruction'     => 'Use this when at least 2 products have an https JPEG or PNG image_url, one card per product. Also use it when the customer asked for more photos and gallery_cards has 2 to 10 photos of one product. A carousel must contain 2 to 10 cards. Skip an empty image_url. Card image URL is image_url. Card text is the product name and price. For a product list, button text is the product name, at most 20 characters. For a gallery, button text is Shop now and every card is the same product. The button replies in this chat. Never send a card with an empty body, and never send only "See the details below."',
+            'instruction'     => 'Use this for two or more products, one card per product, primary image only. Also use it for one product when gallery_cards has 2 to 10 photos, one card per photo of that same product. A carousel needs 2 to 10 cards. Skip an empty image_url. Card text is exactly three lines: product name, ₹price, and In stock or Out of stock. The details are this card text. Button title is exactly "Add to cart". The button replies in this chat and sets quantity to 1. If that product has variants and none is chosen, do not add. Never send a card with an empty body, and never send only "See the details below."',
         ],
         [
             'title'           => 'product-choice-list',
             'component_type'  => 'interactive_list',
             'status'          => 'enabled',
-            'instruction'     => 'When the customer must choose one product, color, or variant from the search results, send an interactive list before create_order. Button text "Choose". One row per option. Row id is the product id. Row title is the product name, at most 24 characters. Row description is the price. Do not send this list after they have already chosen.',
+            'instruction'     => 'When the product shown has variants, send this list in the same turn, under the photos, before the item is added. Button text is exactly "Variants". One row per variant. Row id is the variant id. Row title is the variant label, at most 24 characters. Row description is the price, such as ₹499. The customer must choose one before Add to cart. Do not send this list when there are no variants. Do not create the order.',
+        ],
+        [
+            'title'           => 'cart-qty-buttons',
+            'component_type'  => 'interactive_reply_buttons',
+            'status'          => 'enabled',
+            'instruction'     => 'After Add to cart, or when they tap Change on a cart line, send the product photo and these two buttons. Caption lines: product name, Variant: {label} only when a variant was chosen, Qty {count}, Amount ₹{unit price times count}. Image is the selected variant JPEG or PNG, otherwise the product image. Buttons: id "qty-less" title "Qty -", and id "qty-more" title "Qty +". Quantity starts at 0. Qty + from 0 adds the line at quantity 1. Another Qty + updates that same line. Qty - decreases it. Quantity 0 removes the line. Each tap resends the photo, the caption, and these two buttons. Do not create the order.',
+        ],
+        [
+            'title'           => 'cart-lines',
+            'component_type'  => 'carousel_quick_reply',
+            'status'          => 'enabled',
+            'instruction'     => 'After Add to cart, when the cart has 2 to 10 products, send this carousel. One card per cart line. Card image is that line JPEG or PNG: the selected variant image, otherwise the product image. Card text is exactly four lines: product name, Variant: {label}, Qty {count}, Amount ₹{line amount}. Skip the Variant line only when that product has no variant. Card button title is exactly "Change". The button replies in this chat. Then send Add more and Checkout as a separate reply. A carousel needs 2 to 10 cards. Never send only "See the details below."',
         ],
         [
             'title'           => 'order-confirm-buttons',
             'component_type'  => 'interactive_reply_buttons',
             'status'          => 'enabled',
-            'instruction'     => 'After Shop now, send reply buttons. Body says that product was added to the cart. Two buttons: id "add-more" title "Add more", and id "checkout" title "Checkout". Do not create the order yet. Checkout does not confirm the order. It starts the delivery questions: name, phone number, door number, landmark, street, and pincode. After those are saved on the customer, send reply buttons once. Body repeats the name, phone, door number, landmark, street, pincode, every product, each quantity, and the total. Two buttons: id "confirm-order" title "Confirm order", and id "change-order" title "Change". Create the order only after Confirm order.',
+            'instruction'     => 'After the cart is showing, send reply buttons. Body says the cart is ready. Two buttons: id "add-more" title "Add more", and id "checkout" title "Checkout". Do not create the order yet. Checkout does not confirm the order. It starts the delivery questions: name, phone number, door number, landmark, street, and pincode. After those are saved on the customer, send reply buttons once. Body repeats the name, phone, door number, landmark, street, pincode, and every cart line as product name, Variant, Qty, and Amount, then the total. Two buttons: id "confirm-order" title "Confirm order", and id "change-order" title "Change". Create the order only after Confirm order.',
+        ],
+        [
+            'title'           => 'checkout-lines',
+            'component_type'  => 'carousel_url',
+            'status'          => 'enabled',
+            'instruction'     => 'When create_payment_link returns 2 or more checkout_cards, send this carousel and no other message. One card per checkout_cards item, 2 to 10 cards. Card image is that image_url. Card text is exactly that body: product name, Variant, Qty, Amount, and Order total. Button label is exactly "Pay now". Button URL is payment_link, the same full-order link on every card. Never invent a URL. Never send only "See the details below." Do not paste the link as text.',
         ],
         [
             'title'           => 'order-payment-cta',
             'component_type'  => 'cta_url',
             'status'          => 'enabled',
-            'instruction'     => 'When create_payment_link returns a payment_link, send this CTA and no other message. Body text is exactly card.body, which lists the order number, every product, each quantity, item total, Delivery charge or Free shipping, and the total. The customer must be able to read that body. Header media URL is card.header_image_url only when it starts with https. If it is empty, do not add a header. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link. Never send only "See the details below." Never invent a URL and never paste the link as text.',
+            'instruction'     => 'When create_payment_link returns one product, send this CTA and no other message. Header image is card.header_image_url only when it starts with https. Body text is exactly card.body, one field per line: product name, Variant when present, Qty, Amount, Items, Delivery, and Total. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link. Never send only "See the details below." Never invent a URL and never paste the link as text.',
         ],
     ];
     return $defs;
@@ -1333,9 +1351,9 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
         $tool('calculate_order_total', 'Compute the combined total for every product in the cart before create_order.', [
             'items' => $bodyField('string', 'JSON array of {product_id, quantity}'),
         ], ['items']),
-        $tool('create_order', 'Create one order only after the address was confirmed once. confirmed must be true. items includes every cart product. name, phone, address, and pincode are the confirmed delivery details.', [
+        $tool('create_order', 'Create one order only after the address was confirmed once. confirmed must be true. items includes every cart line as product_id, variant_id, variant_label, and quantity. name, phone, address, and pincode are the confirmed delivery details.', [
             'confirmed'        => $bodyField('boolean', 'Must be true'),
-            'items'            => $bodyField('string', 'JSON array of {product_id, quantity}'),
+            'items'            => $bodyField('string', 'JSON array of {product_id, variant_id, variant_label, quantity}'),
             'customer_id'      => $bodyField('integer', 'Customer id if known'),
             'phone'            => $bodyField('string', 'Customer phone', $waPhone),
             'name'             => $bodyField('string', 'Customer name'),
@@ -1349,7 +1367,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'order_id'     => $bodyField('integer', 'Order id'),
             'order_number' => $bodyField('string', 'Order number'),
         ]),
-        $tool('create_payment_link', 'Create one Razorpay payment link after create_order. The reply is the Pay now card. Use card.body, card.footer, card.header_image_url, and payment_link. The body already has the product, quantity, delivery charge or free shipping, and total. Do not paste the link as text.', [
+        $tool('create_payment_link', 'Create one Razorpay payment link after create_order. One product uses card.body with the photo, variant, Qty, Amount, and Pay now. Two or more products use checkout_cards, one card per product, each with its image, variant, amount, and the same Pay now link. Do not paste the link as text.', [
             'order_id' => $bodyField('integer', 'Order id'),
         ], ['order_id']),
         $tool('handover_to_human', 'Notify inbox (soft handoff). Keep chatting after. Not for greetings or product asks.', [

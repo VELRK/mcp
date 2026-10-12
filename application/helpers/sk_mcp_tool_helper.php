@@ -187,6 +187,64 @@ function sk_mcp_tool_whatsapp_image_url(string $path): string {
     return 'https://' . $parts['host'] . implode('/', $segments);
 }
 
+function sk_mcp_tool_inr(float $amount): string {
+    $amount = round($amount, 2);
+    if (abs($amount - round($amount)) < 0.001) {
+        return '₹' . number_format($amount, 0);
+    }
+    return '₹' . number_format($amount, 2);
+}
+
+/** One ecommerce line: name, selected variant, quantity, amount. */
+function sk_mcp_tool_line_text(string $name, string $variant, int $qty, float $amount): string {
+    $lines = [trim($name) !== '' ? trim($name) : 'Product'];
+    $variant = trim($variant);
+    if ($variant !== '') {
+        $lines[] = 'Variant: ' . $variant;
+    }
+    $lines[] = 'Qty ' . max(1, $qty);
+    $lines[] = 'Amount ' . sk_mcp_tool_inr($amount);
+    return implode("\n", $lines);
+}
+
+/**
+ * Up to 10 variant rows for the WhatsApp list.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function sk_mcp_tool_variant_choices(array $variants): array {
+    $out = [];
+    foreach ($variants as $variant) {
+        if (!is_array($variant)) {
+            continue;
+        }
+        $id = (int)($variant['id'] ?? 0);
+        $label = trim((string)($variant['label'] ?? ''));
+        if ($id <= 0 || $label === '') {
+            continue;
+        }
+        $price = (float)($variant['effective_price'] ?? 0);
+        if ($price <= 0) {
+            $sale = (float)($variant['sale_price'] ?? 0);
+            $base = (float)($variant['price'] ?? 0);
+            $price = ($sale > 0 && ($base <= 0 || $sale < $base)) ? $sale : $base;
+        }
+        $title = function_exists('mb_substr') ? mb_substr($label, 0, 24) : substr($label, 0, 24);
+        $out[] = [
+            'id'          => $id,
+            'label'       => $label,
+            'title'       => $title,
+            'price'       => $price,
+            'description' => sk_mcp_tool_inr($price),
+            'image_url'   => sk_mcp_tool_whatsapp_image_url((string)($variant['image_url'] ?? $variant['image'] ?? '')),
+        ];
+        if (count($out) >= 10) {
+            break;
+        }
+    }
+    return $out;
+}
+
 function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $limit = 5): array {
     $CI =& get_instance();
     if (!isset($CI->Sk_Product_model)) {
@@ -320,6 +378,7 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             'slug' => (string)($product['slug'] ?? ''),
             'image' => sk_mcp_tool_product_image_path($product),
             'gallery' => sk_mcp_tool_product_gallery_paths($product),
+            'variants' => sk_mcp_tool_variant_choices(is_array($product['variants'] ?? null) ? $product['variants'] : []),
         ];
     }
 
@@ -993,6 +1052,7 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
     $total = (float)($calc['data']['total'] ?? 0);
 
     $orderItems = [];
+    $hasVariantLabel = $CI->db->field_exists('variant_label', 'order_items');
     foreach ($itemsIn as $line) {
         $productId = (int)($line['product_id'] ?? 0);
         $qty = max(1, (int)($line['quantity'] ?? 1));
@@ -1007,17 +1067,46 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
             continue;
         }
         $unit = (float)($product['effective_price'] ?? $product['sale_price'] ?? $product['price'] ?? 0);
-        $orderItems[] = [
+        $variantId = !empty($line['variant_id']) ? (int)$line['variant_id'] : 0;
+        $variantLabel = trim((string)($line['variant_label'] ?? $line['variant'] ?? ''));
+        $thumb = (string)($product['thumbnail'] ?? '');
+        if ($variantId > 0) {
+            foreach (($product['variants'] ?? []) as $variant) {
+                if ((int)($variant['id'] ?? 0) !== $variantId) {
+                    continue;
+                }
+                $variantPrice = (float)($variant['effective_price'] ?? 0);
+                if ($variantPrice <= 0) {
+                    $variantPrice = (float)($variant['sale_price'] ?? $variant['price'] ?? 0);
+                }
+                if ($variantPrice > 0) {
+                    $unit = $variantPrice;
+                }
+                if ($variantLabel === '') {
+                    $variantLabel = trim((string)($variant['label'] ?? ''));
+                }
+                $variantImage = trim((string)($variant['image'] ?? ''));
+                if ($variantImage !== '') {
+                    $thumb = $variantImage;
+                }
+                break;
+            }
+        }
+        $orderRow = [
             'product_id'   => $productId,
             'product_name' => (string)($product['name'] ?? 'Product'),
             'product_sku'  => (string)($product['sku'] ?? ''),
-            'thumbnail'    => (string)($product['thumbnail'] ?? ''),
+            'thumbnail'    => $thumb,
             'price'        => $unit,
             'quantity'     => $qty,
             'subtotal'     => round($unit * $qty, 2),
-            'variant_id'   => !empty($line['variant_id']) ? (int)$line['variant_id'] : null,
+            'variant_id'   => $variantId > 0 ? $variantId : null,
             'vendor_id'    => !empty($product['vendor_id']) ? (int)$product['vendor_id'] : ($tenantId > 0 ? $tenantId : null),
         ];
+        if ($hasVariantLabel && $variantLabel !== '') {
+            $orderRow['variant_label'] = $variantLabel;
+        }
+        $orderItems[] = $orderRow;
     }
     if (!$orderItems) {
         return ['success' => false, 'data' => null, 'error' => ['code' => 'ITEMS_INVALID', 'message' => 'No valid products in items.']];
@@ -1126,15 +1215,8 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
         $link = (string)$created['payment_link'];
         $CI->db->where('id', $orderId)->update('orders', ['payment_link' => $link]);
     }
-    $money = static function ($amount): string {
-        $amount = round((float)$amount, 2);
-        if (abs($amount - round($amount)) < 0.001) {
-            return '₹' . number_format($amount, 0);
-        }
-        return '₹' . number_format($amount, 2);
-    };
     $itemNames = [];
-    $itemLines = [];
+    $checkoutCards = [];
     $image = '';
     $subtotal = (float)($order['subtotal'] ?? 0);
     foreach ((array)($order['items'] ?? []) as $item) {
@@ -1144,23 +1226,47 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
         if ($name === '') {
             continue;
         }
-        $itemNames[] = $name . ' x ' . $qty;
-        $itemLines[] = $name;
-        $itemLines[] = 'Qty ' . $qty . ' × ' . $money($unit);
-        if ($image === '') {
-            $productId = (int)($item['product_id'] ?? 0);
-            $product = $productId > 0 ? $CI->Sk_Product_model->get_by_id($productId) : null;
-            if (is_array($product)) {
+        $variantLabel = trim((string)($item['variant_label'] ?? ''));
+        $lineImage = '';
+        $productId = (int)($item['product_id'] ?? 0);
+        $variantId = (int)($item['variant_id'] ?? 0);
+        $product = $productId > 0 ? $CI->Sk_Product_model->get_by_id($productId) : null;
+        if (is_array($product)) {
+            if ($variantId > 0 && $variantLabel === '') {
+                foreach (($product['variants'] ?? []) as $variant) {
+                    if ((int)($variant['id'] ?? 0) === $variantId) {
+                        $variantLabel = trim((string)($variant['label'] ?? ''));
+                        $lineImage = sk_mcp_tool_whatsapp_image_url((string)($variant['image_url'] ?? $variant['image'] ?? ''));
+                        break;
+                    }
+                }
+            } elseif ($variantId > 0) {
+                foreach (($product['variants'] ?? []) as $variant) {
+                    if ((int)($variant['id'] ?? 0) === $variantId) {
+                        $lineImage = sk_mcp_tool_whatsapp_image_url((string)($variant['image_url'] ?? $variant['image'] ?? ''));
+                        break;
+                    }
+                }
+            }
+            if ($lineImage === '') {
                 $path = sk_mcp_tool_product_image_path($product);
-                if ($path !== '' && !preg_match('#^https?://#i', $path)) {
-                    $path = base_url(ltrim($path, '/'));
-                }
-                if (stripos($path, 'http://') === 0) {
-                    $path = 'https://' . substr($path, 7);
-                }
-                $image = sk_mcp_tool_whatsapp_image_url($path);
+                $lineImage = sk_mcp_tool_whatsapp_image_url($path);
             }
         }
+        if ($image === '' && $lineImage !== '') {
+            $image = $lineImage;
+        }
+        $lineAmount = round($unit * $qty, 2);
+        $itemNames[] = $name . ($variantLabel !== '' ? ' (' . $variantLabel . ')' : '') . ' x ' . $qty;
+        $checkoutCards[] = [
+            'name'         => $name,
+            'variant'      => $variantLabel,
+            'quantity'     => $qty,
+            'amount'       => $lineAmount,
+            'image_url'    => $lineImage,
+            'body'         => sk_mcp_tool_line_text($name, $variantLabel, $qty, $lineAmount),
+            'button_label' => 'Pay now',
+        ];
     }
     if ($subtotal <= 0) {
         foreach ((array)($order['items'] ?? []) as $item) {
@@ -1169,20 +1275,32 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
     }
     $shipping = round((float)($order['shipping'] ?? 0), 2);
     $total = round((float)($order['total'] ?? ($subtotal + $shipping)), 2);
-    $delivery = $shipping <= 0 ? 'Delivery: Free shipping' : ('Delivery charge ' . $money($shipping));
+    $delivery = $shipping <= 0 ? 'Delivery: Free shipping' : ('Delivery charge ' . sk_mcp_tool_inr($shipping));
     $orderNumber = (string)($order['order_number'] ?? $orderId);
+    $lineBlocks = [];
+    foreach ($checkoutCards as $i => $card) {
+        $checkoutCards[$i]['button_url'] = $link;
+        $checkoutCards[$i]['body'] = $card['body'] . "\nOrder total " . sk_mcp_tool_inr($total);
+        $lineBlocks[] = $card['body'];
+    }
     $bodyLines = array_merge(
         ['Order ' . $orderNumber, ''],
-        $itemLines,
-        ['', 'Items ' . $money($subtotal), $delivery, 'Total ' . $money($total), '', 'Tap Pay now to pay this order.']
+        [implode("\n\n", $lineBlocks)],
+        ['', 'Items ' . sk_mcp_tool_inr($subtotal), $delivery, 'Total ' . sk_mcp_tool_inr($total), '', 'Tap Pay now to pay this order.']
     );
     $body = implode("\n", $bodyLines);
     if (strlen($body) > 1024) {
         $body = substr($body, 0, 1021) . '...';
     }
-    $footer = $shipping <= 0 ? 'Free shipping' : ('Delivery charge ' . $money($shipping));
+    $footer = $shipping <= 0 ? 'Free shipping' : ('Delivery charge ' . sk_mcp_tool_inr($shipping));
     if (strlen($footer) > 60) {
         $footer = substr($footer, 0, 60);
+    }
+    $cardCount = count($checkoutCards);
+    if ($cardCount >= 2) {
+        $summary = 'Two or more products. Send the checkout-lines carousel, 2 to 10 cards, one card per checkout_cards item. Each card image is that image_url. Each card text is exactly that body: product name, Variant, Qty, Amount, and Order total. Button label is Pay now. Button URL is payment_link on every card, the same full-order link. Do not send a second Pay card. Never send only "See the details below." Do not paste the link as text.';
+    } else {
+        $summary = 'One product. Send the Pay now card only. Header image is card.header_image_url when it starts with https. Body is exactly card.body: product name, Variant when present, Qty, Amount, then Items, Delivery, and Total. Button label is Pay now. Button URL is payment_link. Never send only "See the details below." Do not paste the link as text.';
     }
     return [
         'success' => true,
@@ -1198,7 +1316,9 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
             'payment_link' => $link,
             'amount' => $total,
             'currency' => 'INR',
-            'summary' => 'Send the Pay now card only. Body is exactly card.body, so the customer can read the order, product, quantity, delivery, and total. Use the header image only when card.header_image_url starts with https. If it is empty, send the card with no header. Button label is Pay now. Button URL is payment_link. Never send only "See the details below." Do not paste the link as text.',
+            'ui' => $cardCount >= 2 ? 'checkout-lines' : 'order-payment-cta',
+            'summary' => $summary,
+            'checkout_cards' => $checkoutCards,
             'card' => [
                 'header_image_url' => $image,
                 'body' => $body,
