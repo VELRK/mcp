@@ -15,9 +15,11 @@ class Whatsapp extends Sk_Base {
     }
 
     public function index() {
+        $vid = $this->_resolve_ops_vendor_id();
         $data['title'] = 'WhatsApp Inbox';
         $data['ready'] = sk_wa_cloud_is_ready($this->Sk_Admin_model->get_settings());
-        $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates();
+        // Inbox dropdown must only list this shop's templates (vendors.id).
+        $data['templates'] = $this->Sk_Whatsapp_cloud_model->list_templates($vid > 0 ? $vid : null);
         $data['webhook_url'] = site_url('shopkart-api/whatsapp/webhook');
         $this->render('whatsapp/inbox', $data);
     }
@@ -141,7 +143,7 @@ class Whatsapp extends Sk_Base {
             $result = $this->whatsapp_cloud->send_text($conv['phone'], $caption);
         } elseif ($type === 'template') {
             $tplId = (int)$this->input->post('template_id');
-            $tpl = $this->Sk_Whatsapp_cloud_model->get_template($tplId);
+            $tpl = $this->Sk_Whatsapp_cloud_model->get_template($tplId, $vid > 0 ? $vid : null);
             if (!$tpl) {
                 return $this->json(['success' => false, 'message' => 'Template not found.']);
             }
