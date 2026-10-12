@@ -372,15 +372,7 @@ class Meta_agent extends Sk_Base {
                         $fail = $metaFail($prep, 'Eligibility/onboard required first');
                         return $this->json(['success' => false, 'message' => $fail['message'], 'op' => $op, 'data' => $fail['data']], 400);
                     }
-                    $catalogUrl = trim((string)$this->input->post('catalog_url', TRUE));
-                    if ($catalogUrl === '' && $vendorId > 0) {
-                        $v = $this->Sk_Vendor_model->get_by_id($vendorId, false);
-                        $slug = trim((string)($v['slug'] ?? ''));
-                        if ($slug !== '') {
-                            $catalogUrl = rtrim(sk_meta_ba_config_array()['connector_base_url'], '/') . '/shop/' . rawurlencode($slug);
-                        }
-                    }
-                    $res = sk_meta_ba_sync_shop_ui_skills($phoneNumberId, $shopName, $catalogUrl, $settings);
+                    $res = sk_meta_ba_sync_shop_ui_skills($phoneNumberId, $shopName, '', $settings);
                     $fail = $metaFail($res, 'UI skill sync failed');
                     $msg = $res['ok']
                         ? (isset($res['data']['skipped']) ? (string)$res['data']['skipped'] : 'Shop UI skills synced.')

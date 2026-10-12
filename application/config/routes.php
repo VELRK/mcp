@@ -706,6 +706,7 @@ $route['shopkart-api/payment/create-order']['POST'] = 'api/Sk_Payment/create_ord
 $route['shopkart-api/payment/verify']['POST'] = 'api/Sk_Payment/verify';
 $route['shopkart-api/payment/order-status']['GET'] = 'api/Sk_Payment/order_payment_status';
 $route['shopkart-api/payment/razorpay-return']['GET'] = 'api/Sk_Payment/razorpay_return';
+$route['shopkart-api/payment/razorpay-return']['HEAD'] = 'api/Sk_Payment/razorpay_return';
 $route['shopkart-api/payment/razorpay-return']['POST'] = 'api/Sk_Payment/razorpay_return';
 $route['shopkart-api/payment/razorpay-webhook']['POST'] = 'api/Sk_Payment/razorpay_webhook';
 // User profile

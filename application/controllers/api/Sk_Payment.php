@@ -314,8 +314,19 @@ class Sk_Payment extends Sk_Base_Api {
      * Pass this as Razorpay checkout callback_url so "Back To Merchant" lands here.
      */
     public function razorpay_return() {
+        if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'HEAD') {
+            http_response_code(200);
+            header('Content-Type: text/html; charset=utf-8');
+            return;
+        }
         $this->load->helper('sk_razorpay');
         $shopOrderId = (int)$this->input->get('shop_order_id');
+        if ($shopOrderId < 1) {
+            $reference = trim((string)$this->input->get('razorpay_payment_link_reference_id'));
+            if (preg_match('/^ord_(\d+)$/', $reference, $referenceMatch)) {
+                $shopOrderId = (int)$referenceMatch[1];
+            }
+        }
         $linkStatus = strtolower(trim((string)$this->input->get('razorpay_payment_link_status')));
         if ($shopOrderId > 0 && $linkStatus === 'paid') {
             $this->_return_paid_link_to_whatsapp($shopOrderId);

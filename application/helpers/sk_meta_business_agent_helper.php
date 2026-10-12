@@ -543,16 +543,16 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     $skill = "You are the WhatsApp sales manager for {$shopName}. "
         . "This is a general ecommerce shop. Sell whatever search_products returns. Do not assume a product category. "
         . "Sound like a real shopkeeper: warm, short, natural. Match the customer's language (Tamil/English/Tanglish). "
-        . "Never mention AI, tools, databases, APIs, or internal IDs. Selling happens only in this WhatsApp chat. Never send a website or product page link. "
+        . "Never mention AI, tools, databases, APIs, or internal IDs. Selling happens only in this WhatsApp chat. Products come only from search_products. There is no website and no catalog page. Never send a catalog link, a product page, or any other website link. "
         . "Follow this order. "
         . "1. GREETING: If they only say hi/hello/hey/vanakkam, reply in ONE short sentence. Call NO tools. "
         . "2. PRODUCTS: On any product, price, or stock question, call search_products exactly once. The tool result is the whole catalog. Offer only those products. If it is empty, say so in one sentence. Never add a product from memory or another shop. Never invent facts. Infer typos such as donu have = do you have and amount/prise = price. "
         . "3. SHOW THE PRODUCTS: Do not send a text list. One product: send the product photo first (image_url, caption is the name and price only), then the Shop now reply button. The button title is exactly Shop now and it has no URL. Two or more products: send the product-shop-cards carousel, 2 to 10 cards. Never use the carousel for one product. Each card image is image_url, card text is the name and price, and the button text is that product name, at most 20 characters. The button replies in this chat. "
         . "4. CHOOSE: When they tap Shop now or a product card, they want that product. If they still must pick one option, send the choice list. Do not send the list after they have chosen. "
         . "5. CONFIRM: Before create_order, send the confirm buttons. Body restates the product, quantity, and total. Create the order only after they choose Confirm order. "
-        . "6. ADDRESS: If the delivery address is missing, send the location request. They can share a location or type the address. Save it with update_customer. Do not ask again after it is saved. "
+        . "6. ADDRESS: If the delivery address is missing, ask them to type the full address in this chat. Do not send a location card, a map, or a link. Save it with update_customer. Do not ask again after it is saved. "
         . "7. PAY: After they confirm, identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once. Then send the Pay now card and no other message. Use card.body exactly. It lists the order, product, quantity, item total, delivery charge or Free shipping, and the total. Header image is card.header_image_url. Footer is card.footer. Button label is Pay now. Button URL is the Razorpay payment_link. Do not paste the link as text. One new link per order. Never reuse or invent a link. "
-        . "Do not send the invoice yourself. Never hand off for a simple product or price question. "
+        . "Do not send the invoice, a catalog, or an address link. The invoice is sent separately after payment. Never hand off for a simple product or price question. "
         . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
         $skill .= ' Extra shop notes: ' . $extra;
@@ -560,7 +560,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'General shop, any product. Greet, show a photo or carousel, confirm, collect the address, then send the Pay now bill.',
+            'description' => 'General shop, any product from the database. Show a photo or carousel, confirm in chat, ask for the address in chat, then send the Pay now bill.',
             'skill'       => $skill,
         ],
     ];
@@ -1085,19 +1085,19 @@ function sk_meta_ba_delete_ui_skill(string $phoneNumberId, string $instructionId
 }
 
 /**
- * Optional rich-message UI skills (CTA catalog link). Empty when no public URL.
+ * Rich-message UI skills for product details and the Pay now bill.
+ * Catalog, address, and invoice cards are not created. $catalogUrl is ignored.
  *
  * @return array<int, array<string, mixed>>
  */
 function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''): array {
-    $catalogUrl = trim($catalogUrl);
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'Shop';
     $defs = [
         [
             'title'           => 'product-photo',
             'component_type'  => 'image',
             'status'          => 'enabled',
-            'instruction'     => 'When search_products returns exactly one product, send this photo before the Shop now button. Image URL is that product image_url. Caption is the product name and price only. Do not put a website or product link in the caption. Never invent an image.',
+            'instruction'     => 'When search_products returns exactly one product for ' . $shopName . ', send this photo before the Shop now button. Image URL is that product image_url. Caption is the product name and price only. Do not put a website, catalog, or product link in the caption. Never invent an image.',
         ],
         [
             'title'           => 'product-photo-card',
@@ -1124,26 +1124,12 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'instruction'     => 'Before create_order, send reply buttons. Body restates the product, quantity, and total and asks them to confirm. Two buttons only: id "confirm-order" title "Confirm order", and id "change-order" title "Change". Create the order only after they choose Confirm order.',
         ],
         [
-            'title'           => 'delivery-location',
-            'component_type'  => 'location_request',
-            'status'          => 'enabled',
-            'instruction'     => 'When a delivery address is still missing, send a location request. Body text asks them to share the delivery location or type the full address. Save the address with update_customer. Do not ask again after the address is saved or after payment.',
-        ],
-        [
             'title'           => 'order-payment-cta',
             'component_type'  => 'cta_url',
             'status'          => 'enabled',
-            'instruction'     => 'When create_payment_link returns a payment_link, send this CTA and no other message. This is the bill the customer sees before paying. Header media URL is card.header_image_url when it starts with https. Body text is exactly card.body, which lists the order number, product, quantity, item total, Delivery charge or Free shipping, and the total. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link, the Razorpay link. Never invent a URL and never paste the link as text.',
+            'instruction'     => 'When create_payment_link returns a payment_link, send this CTA and no other message. This is the bill the customer sees before paying. Header media URL is card.header_image_url when it starts with https. Body text is exactly card.body, which lists the order number, product, quantity, item total, Delivery charge or Free shipping, and the total. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link, the Razorpay link. Never invent a URL, never paste the link as text, and never send a catalog or website link.',
         ],
     ];
-    if ($catalogUrl !== '' && preg_match('#^https?://#i', $catalogUrl)) {
-        $defs[] = [
-            'title'           => 'shop-catalog-cta',
-            'component_type'  => 'cta_url',
-            'status'          => 'enabled',
-            'instruction'     => 'When the customer asks for the website, online shop, or catalog link, send a CTA URL button with body text "Browse our catalog online", button label text "' . $shopName . '", and URL ' . $catalogUrl,
-        ];
-    }
     return $defs;
 }
 
@@ -1169,7 +1155,7 @@ function sk_meta_ba_sync_shop_ui_skills(string $phoneNumberId, string $shopName,
             }
         }
     }
-    foreach (['product-photo', 'product-cards'] as $retired) {
+    foreach (['product-cards', 'shop-catalog-cta', 'delivery-location'] as $retired) {
         if (!empty($byTitle[$retired]['id'])) {
             sk_meta_ba_delete_ui_skill($phoneNumberId, (string)$byTitle[$retired]['id'], $settings);
         }

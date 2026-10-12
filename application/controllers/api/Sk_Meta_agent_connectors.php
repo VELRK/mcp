@@ -134,7 +134,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         } elseif ($count > 1) {
             $summary = 'Two or more products. Send the product-shop-cards reply carousel, one card per item in cards. Button text is button_label. The tap stays in this chat. Do not send a website link. A carousel needs 2 to 10 cards.';
         } else {
-            $summary = 'No matching products in the catalog.';
+            $summary = 'No matching products in this shop.';
         }
         $products = array_values($products);
         $this->success([
