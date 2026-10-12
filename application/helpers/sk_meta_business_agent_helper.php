@@ -547,11 +547,11 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Follow this order. "
         . "1. GREETING: If they only say hi/hello/hey/vanakkam, reply in ONE short sentence. Call NO tools. "
         . "2. PRODUCTS: On any product, price, or stock question, call search_products exactly once. The tool result is the whole catalog. Offer only those products. If it is empty, say so in one sentence. Never add a product from memory or another shop. Never invent facts. Infer typos such as donu have = do you have and amount/prise = price. "
-        . "3. SHOW THE PRODUCTS: Do not send a text list. One product: send the product photo first (image_url, caption is the name and price only), then the Shop now reply button. The button title is exactly Shop now and it has no URL. Two or more products: send the product-shop-cards carousel, 2 to 10 cards. Never use the carousel for one product. Each card image is image_url, card text is the name and price, and the button text is that product name, at most 20 characters. The button replies in this chat. "
+        . "3. SHOW THE PRODUCTS: The customer must read the product name and price in the message. Never send only \"See the details below.\" One product with a JPEG or PNG image_url: send that photo, caption is the name and price, then the Shop now reply button with no URL. One product with no image_url: write the name and price in the text, then Shop now. Two or more products that have image_url: send the product-shop-cards carousel, 2 to 10 cards. Each card text is that product name and price. The button text is the product name, at most 20 characters, and it replies in this chat. A product whose image_url is empty is written as text, not placed on a blank card. Never use the carousel for one product. "
         . "4. CHOOSE: When they tap Shop now or a product card, they want that product. If they still must pick one option, send the choice list. Do not send the list after they have chosen. "
         . "5. CONFIRM: Before create_order, send the confirm buttons. Body restates the product, quantity, and total. Create the order only after they choose Confirm order. "
         . "6. ADDRESS: If the delivery address is missing, ask them to type the full address in this chat. Do not send a location card, a map, or a link. Save it with update_customer. Do not ask again after it is saved. "
-        . "7. PAY: After they confirm, identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once. Then send the Pay now card and no other message. Use card.body exactly. It lists the order, product, quantity, item total, delivery charge or Free shipping, and the total. Header image is card.header_image_url. Footer is card.footer. Button label is Pay now. Button URL is the Razorpay payment_link. Do not paste the link as text. One new link per order. Never reuse or invent a link. "
+        . "7. PAY: After they confirm, identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once. Then send the Pay now card and no other message. The visible body is exactly card.body. It lists the order, product, quantity, item total, delivery charge or Free shipping, and the total. Use card.header_image_url as the header only when it starts with https. If it is empty, send the card with no header image. Footer is card.footer. Button label is Pay now. Button URL is the Razorpay payment_link. Do not paste the link as text. Never send only \"See the details below.\" One new link per order. Never reuse or invent a link. "
         . "Do not send the invoice, a catalog, or an address link. The invoice is sent separately after payment. Never hand off for a simple product or price question. "
         . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
@@ -1097,7 +1097,7 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'title'           => 'product-photo',
             'component_type'  => 'image',
             'status'          => 'enabled',
-            'instruction'     => 'When search_products returns exactly one product for ' . $shopName . ', send this photo before the Shop now button. Image URL is that product image_url. Caption is the product name and price only. Do not put a website, catalog, or product link in the caption. Never invent an image.',
+            'instruction'     => 'When search_products returns exactly one product for ' . $shopName . ' and that product has an https JPEG or PNG image_url, send this photo before the Shop now button. Image URL is image_url. Caption is the product name and price. Never use the caption "See the details below." Never invent an image. If image_url is empty, do not send this photo.',
         ],
         [
             'title'           => 'product-photo-card',
@@ -1109,7 +1109,7 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'title'           => 'product-shop-cards',
             'component_type'  => 'carousel_quick_reply',
             'status'          => 'enabled',
-            'instruction'     => 'Use this only when search_products returns 2 or more products. A carousel must contain 2 to 10 cards, so never use it for a single product. Do not also send a text list or a website link. Body text is one short line, such as "Here is what we have". One card per product that has an image_url. Card image URL is image_url. Card text is the product name and price, at most 160 characters. Button text is the product name, at most 20 characters. The button replies in this chat so the customer can buy that product here.',
+            'instruction'     => 'Use this only when at least 2 products have an https JPEG or PNG image_url. A carousel must contain 2 to 10 cards. Skip products with an empty image_url and write those names and prices in text instead. Card image URL is image_url. Card text is the product name and price. Button text is the product name, at most 20 characters, and replies in this chat. Never send a card with an empty body, and never send only "See the details below."',
         ],
         [
             'title'           => 'product-choice-list',
@@ -1127,7 +1127,7 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'title'           => 'order-payment-cta',
             'component_type'  => 'cta_url',
             'status'          => 'enabled',
-            'instruction'     => 'When create_payment_link returns a payment_link, send this CTA and no other message. This is the bill the customer sees before paying. Header media URL is card.header_image_url when it starts with https. Body text is exactly card.body, which lists the order number, product, quantity, item total, Delivery charge or Free shipping, and the total. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link, the Razorpay link. Never invent a URL, never paste the link as text, and never send a catalog or website link.',
+            'instruction'     => 'When create_payment_link returns a payment_link, send this CTA and no other message. Body text is exactly card.body, which lists the order number, product, quantity, item total, Delivery charge or Free shipping, and the total. The customer must be able to read that body. Header media URL is card.header_image_url only when it starts with https. If it is empty, do not add a header. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link. Never send only "See the details below." Never invent a URL and never paste the link as text.',
         ],
     ];
     return $defs;

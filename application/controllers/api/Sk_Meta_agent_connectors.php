@@ -128,11 +128,29 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             unset($products[$pIndex]['product_url']);
         }
         $count = count($cards);
+        $photoCards = [];
+        $detailLines = [];
+        foreach ($cards as $card) {
+            $detailLines[] = (string)$card['body'];
+            if ((string)$card['image_url'] !== '') {
+                $photoCards[] = $card;
+            }
+        }
+        $details = implode("\n", $detailLines);
+        $photoCount = count($photoCards);
         if ($count === 1) {
             $cards[0]['button_label'] = 'Shop now';
-            $summary = 'Exactly one product. Send the product photo first, image URL cards[0].image_url, caption cards[0].body. Then send one reply button titled Shop now. Shop now stays in this WhatsApp chat and starts the order. Do not send a website link. There is no online store.';
+            $summary = 'Exactly one product. The customer must see this line in the message: ' . $cards[0]['body'] . '. '
+                . ($photoCount === 1
+                    ? 'Send the product photo with that line as the caption, then one Shop now reply button. '
+                    : 'There is no WhatsApp photo for this product. Write that line in the text, then one Shop now reply button. Do not send an empty card. ')
+                . 'Never send only "See the details below." Shop now stays in this chat. Do not send a website link.';
+        } elseif ($count > 1 && $photoCount >= 2) {
+            $summary = 'Two or more products. Send the product-shop-cards carousel only for cards that have an image_url. Each card text must be that card body, which is the name and price. Button text is button_label. Also readable in this result: ' . str_replace("\n", ' | ', $details) . '. Never send only "See the details below." A carousel needs 2 to 10 cards.';
         } elseif ($count > 1) {
-            $summary = 'Two or more products. Send the product-shop-cards reply carousel, one card per item in cards. Button text is button_label. The tap stays in this chat. Do not send a website link. A carousel needs 2 to 10 cards.';
+            $summary = 'Write these product lines in the chat so the customer can read them: ' . str_replace("\n", ' | ', $details) . '. '
+                . ($photoCount === 1 ? 'Send one photo for the product that has an image_url, with its body as the caption. ' : '')
+                . 'Do not send a carousel. Never send only "See the details below."';
         } else {
             $summary = 'No matching products in this shop.';
         }
@@ -165,18 +183,9 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             if (strtolower(trim((string)($row['status'] ?? 'active'))) !== 'active') {
                 continue;
             }
-            $image = trim((string)($row['image_url'] ?? ''));
+            $image = sk_mcp_tool_whatsapp_image_url((string)($row['image_url'] ?? ''));
             if ($image === '') {
-                $image = trim((string)($row['thumbnail'] ?? $row['image'] ?? ''));
-            }
-            if ($image !== '' && !preg_match('#^https?://#i', $image)) {
-                $image = base_url(ltrim($image, '/'));
-            }
-            if (stripos($image, 'http://') === 0) {
-                $image = 'https://' . substr($image, 7);
-            }
-            if (!preg_match('#^https://#i', $image)) {
-                $image = '';
+                $image = sk_mcp_tool_whatsapp_image_url((string)($row['thumbnail'] ?? $row['image'] ?? ''));
             }
             $productUrl = site_url('shop/product/' . $id);
             if (stripos($productUrl, 'http://') === 0) {

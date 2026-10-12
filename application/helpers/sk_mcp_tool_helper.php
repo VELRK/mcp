@@ -129,6 +129,35 @@ function sk_mcp_tool_product_image_path(array $product): string {
     return trim((string)($product['thumbnail'] ?? ''));
 }
 
+/**
+ * WhatsApp card photos must be a public JPEG or PNG. WebP and other files are omitted
+ * so the card text still sends instead of a blank card.
+ */
+function sk_mcp_tool_whatsapp_image_url(string $path): string {
+    $path = trim($path);
+    if ($path === '') {
+        return '';
+    }
+    if (!preg_match('#^https?://#i', $path)) {
+        $path = function_exists('base_url') ? base_url(ltrim($path, '/')) : $path;
+    }
+    if (stripos($path, 'http://') === 0) {
+        $path = 'https://' . substr($path, 7);
+    }
+    $parts = parse_url($path);
+    if (empty($parts['host']) || empty($parts['path'])) {
+        return '';
+    }
+    $ext = strtolower(pathinfo($parts['path'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+        return '';
+    }
+    $segments = array_map(static function ($segment) {
+        return rawurlencode(rawurldecode($segment));
+    }, explode('/', $parts['path']));
+    return 'https://' . $parts['host'] . implode('/', $segments);
+}
+
 function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $limit = 5): array {
     $CI =& get_instance();
     if (!isset($CI->Sk_Product_model)) {
@@ -1054,9 +1083,7 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
                 if (stripos($path, 'http://') === 0) {
                     $path = 'https://' . substr($path, 7);
                 }
-                if (preg_match('#^https://#i', $path)) {
-                    $image = $path;
-                }
+                $image = sk_mcp_tool_whatsapp_image_url($path);
             }
         }
     }
@@ -1096,7 +1123,7 @@ function sk_ai_create_payment_link_tool(array $params, int $tenantId): array {
             'payment_link' => $link,
             'amount' => $total,
             'currency' => 'INR',
-            'summary' => 'Send the Pay now card only. Header image is card.header_image_url. Body is exactly card.body. Footer is exactly card.footer. Button label is Pay now. Button URL is payment_link. Do not paste the link as text.',
+            'summary' => 'Send the Pay now card only. Body is exactly card.body, so the customer can read the order, product, quantity, delivery, and total. Use the header image only when card.header_image_url starts with https. If it is empty, send the card with no header. Button label is Pay now. Button URL is payment_link. Never send only "See the details below." Do not paste the link as text.',
             'card' => [
                 'header_image_url' => $image,
                 'body' => $body,
