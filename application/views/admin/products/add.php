@@ -180,7 +180,7 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
                     <input type="color" name="color_variants[0][hex]" class="form-control form-control-color form-control-sm w-100" value="#cc0000" title="Hex">
                   </div>
                   <div style="flex:3">
-                    <input type="file" name="color_variant_images[]" class="form-control form-control-sm" accept="image/*" title="Swatch image for this color">
+                    <input type="file" name="color_variant_images[]" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,image/jpeg,image/png" title="Swatch image for this color">
                   </div>
                 </div>
               </div>
@@ -332,9 +332,9 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
                class="img-fluid rounded mb-2 border" style="display:none;max-height:200px;object-fit:contain;">
           <div class="border-2 border-dashed rounded p-3 bg-light">
             <i class="bi bi-cloud-upload fs-2 text-muted d-block mb-1"></i>
-            <small class="text-muted">JPG, PNG, WebP · Max 2MB</small>
+            <small class="text-muted">JPEG or PNG only, max 8MB</small>
             <input type="file" name="thumbnail" class="form-control form-control-sm mt-2 sk-img-preview-input"
-                   data-target="#thumbPreview" accept="image/*">
+                   data-target="#thumbPreview" accept=".jpg,.jpeg,.png,image/jpeg,image/png">
           </div>
         </div>
       </div>
@@ -344,7 +344,8 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
         <div class="card-header bg-white border-0 py-3 fw-semibold">Gallery Images</div>
         <div class="card-body">
           <small class="text-muted d-block mb-2">Add multiple product photos</small>
-          <input type="file" name="images[]" class="form-control form-control-sm" multiple accept="image/*">
+          <input type="file" name="images[]" class="form-control form-control-sm" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png">
+          <small class="text-muted">JPEG or PNG only</small>
         </div>
       </div>
 

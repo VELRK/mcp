@@ -30,7 +30,7 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
 <form action="<?= site_url('admin/products/update/'.$p['id']) ?>" method="POST" enctype="multipart/form-data">
   <?php /* First file input so PHP max_file_uploads cannot drop the main photo behind variant/color files. */ ?>
   <input type="file" name="thumbnail" id="productThumbnail" class="sk-img-preview-input"
-         data-target="#thumbPreview" accept="image/*"
+         data-target="#thumbPreview" accept=".jpg,.jpeg,.png,image/jpeg,image/png"
          style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
 
   <div class="row g-3">
@@ -193,7 +193,7 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
                         <small class="text-muted text-truncate" style="max-width:120px"><?= basename($cv['image']) ?></small>
                       </div>
                     <?php endif; ?>
-                    <input type="file" name="color_variant_images[]" class="form-control form-control-sm" accept="image/*">
+                    <input type="file" name="color_variant_images[]" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,image/jpeg,image/png">
                     <input type="hidden" name="color_variants[<?= $ci ?>][existing_image]" value="<?= htmlspecialchars($cv['image'] ?? '') ?>">
                   </div>
                   <?php if ($ci > 0): ?>
@@ -207,7 +207,7 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
                 <div class="color-variant-row d-flex gap-2 align-items-end mb-2">
                   <div style="flex:2"><input type="text" name="color_variants[0][name]" class="form-control form-control-sm" placeholder="Color name"></div>
                   <div style="flex:0 0 44px"><input type="color" name="color_variants[0][hex]" class="form-control form-control-color form-control-sm w-100" value="#cccccc"></div>
-                  <div style="flex:3"><input type="file" name="color_variant_images[]" class="form-control form-control-sm" accept="image/"></div>
+                  <div style="flex:3"><input type="file" name="color_variant_images[]" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,image/jpeg,image/png"></div>
                 </div>
                 <?php endif; ?>
               </div>
@@ -361,7 +361,7 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
                   onclick="document.getElementById('productThumbnail').click()">
             Choose image
           </button>
-          <small class="text-muted">JPG, PNG, GIF or WebP, max 8MB. Leave blank to keep current.</small>
+          <small class="text-muted">JPEG or PNG only, max 8MB. Leave blank to keep the current image.</small>
         </div>
       </div>
 
@@ -399,8 +399,8 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
           <?php else: ?>
             <p class="text-muted small mb-2">No gallery images yet.</p>
           <?php endif; ?>
-          <input type="file" name="images[]" class="form-control form-control-sm" multiple accept="image/*">
-          <small class="text-muted">Add new images to the gallery</small>
+          <input type="file" name="images[]" class="form-control form-control-sm" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png">
+          <small class="text-muted">JPEG or PNG only. Add new images to the gallery.</small>
         </div>
       </div>
 

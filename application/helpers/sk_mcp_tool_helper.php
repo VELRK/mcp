@@ -129,6 +129,35 @@ function sk_mcp_tool_product_image_path(array $product): string {
     return trim((string)($product['thumbnail'] ?? ''));
 }
 
+/** Main image, gallery rows, and variant photos, in that order, without duplicates. */
+function sk_mcp_tool_product_gallery_paths(array $product): array {
+    $paths = [];
+    $push = static function (string $path) use (&$paths): void {
+        $path = trim($path);
+        if ($path === '' || in_array($path, $paths, true)) {
+            return;
+        }
+        $paths[] = $path;
+    };
+    $push((string)($product['thumbnail'] ?? ''));
+    foreach (is_array($product['images'] ?? null) ? $product['images'] : [] as $img) {
+        if (!is_array($img)) {
+            continue;
+        }
+        $push((string)($img['image'] ?? ''));
+    }
+    return array_slice($paths, 0, 10);
+}
+
+function sk_mcp_tool_is_gallery_request(string $query): bool {
+    return (bool)preg_match('/\b(more\s+(image|images|photo|photos|pic|pics|picture|pictures)|gallery|all\s+(image|images|photo|photos|picture|pictures)|show\s+(me\s+)?(more\s+)?(image|images|photo|photos|picture|pictures)|other\s+(image|images|photo|photos|picture|pictures))\b/i', $query);
+}
+
+function sk_mcp_tool_strip_gallery_words(string $query): string {
+    $stripped = preg_replace('/\b(more|all|other|show|me|the|images|image|photos|photo|pictures|picture|pics|pic|gallery|of|please)\b/i', ' ', $query);
+    return trim((string)preg_replace('/\s+/', ' ', (string)$stripped));
+}
+
 /**
  * WhatsApp card photos must be a public JPEG or PNG. WebP and other files are omitted
  * so the card text still sends instead of a blank card.
@@ -173,7 +202,7 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
         if (strlen($term) < 3) {
             continue;
         }
-        if (in_array($term, ['the', 'and', 'for', 'are', 'you', 'stock', 'available', 'price', 'product', 'this', 'that', 'with', 'from', 'have', 'has', 'sticks'], true)) {
+        if (in_array($term, ['the', 'and', 'for', 'are', 'you', 'stock', 'available', 'price', 'product', 'this', 'that', 'with', 'from', 'have', 'has', 'sticks', 'more', 'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'gallery', 'show', 'please'], true)) {
             continue;
         }
         $useful[] = $term;
@@ -216,7 +245,7 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             if (strlen($term) < 3) {
                 continue;
             }
-            if (in_array($term, ['the', 'and', 'for', 'are', 'you', 'stock', 'available', 'price', 'product', 'this', 'that', 'with', 'from', 'have', 'has'], true)) {
+            if (in_array($term, ['the', 'and', 'for', 'are', 'you', 'stock', 'available', 'price', 'product', 'this', 'that', 'with', 'from', 'have', 'has', 'more', 'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'gallery', 'show', 'please'], true)) {
                 continue;
             }
             if (stripos($haystack, $term) !== false) {
@@ -290,6 +319,7 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             'match_score' => $score,
             'slug' => (string)($product['slug'] ?? ''),
             'image' => sk_mcp_tool_product_image_path($product),
+            'gallery' => sk_mcp_tool_product_gallery_paths($product),
         ];
     }
 
@@ -508,6 +538,40 @@ function sk_ai_get_customer_by_phone(string $phone, ?int $tenantId = null): arra
     ];
 }
 
+function sk_ai_store_customer_address(int $userId, string $name, string $phone, array $addr): void {
+    $line1 = trim((string)($addr['line1'] ?? ''));
+    $pincode = preg_replace('/\D+/', '', (string)($addr['pincode'] ?? '')) ?? '';
+    if ($userId < 1 || $line1 === '' || strlen($pincode) !== 6) {
+        return;
+    }
+    $CI =& get_instance();
+    if (!isset($CI->Sk_User_model)) {
+        $CI->load->model('Sk_User_model');
+    }
+    $existing = $CI->db->where('user_id', $userId)
+        ->where('address_type', 'shipping')
+        ->order_by('is_default', 'DESC')
+        ->order_by('id', 'DESC')
+        ->limit(1)
+        ->get('addresses')
+        ->row_array();
+    $CI->Sk_User_model->save_address([
+        'id'           => (int)($existing['id'] ?? 0),
+        'user_id'      => $userId,
+        'full_name'    => $name !== '' ? $name : 'Customer',
+        'phone'        => $phone,
+        'line1'        => $line1,
+        'line2'        => trim((string)($addr['line2'] ?? '')),
+        'city'         => trim((string)($addr['city'] ?? '')) ?: 'NA',
+        'state'        => trim((string)($addr['state'] ?? '')) ?: 'NA',
+        'pincode'      => $pincode,
+        'country'      => 'India',
+        'label'        => 'Home',
+        'address_type' => 'shipping',
+        'is_default'   => 1,
+    ]);
+}
+
 function sk_ai_save_customer(array $data, ?int $tenantId = null): array {
     $CI =& get_instance();
     if (!isset($CI->Sk_User_model)) {
@@ -535,6 +599,9 @@ function sk_ai_save_customer(array $data, ?int $tenantId = null): array {
         if (!empty($update)) {
             $CI->Sk_User_model->update((int)$existing['id'], $update);
         }
+        if (is_array($data['address'] ?? null)) {
+            sk_ai_store_customer_address((int)$existing['id'], $name !== '' ? $name : (string)($existing['name'] ?? ''), $phone, $data['address']);
+        }
         $customer = $CI->Sk_User_model->get_by_id((int)$existing['id']);
         return ['success' => true, 'data' => ['tenant_id' => $tenantId ?? 0, 'customer_id' => (int)$customer['id'], 'name' => trim((string)($customer['name'] ?? $name)), 'phone' => $phone], 'error' => null];
     }
@@ -546,22 +613,8 @@ function sk_ai_save_customer(array $data, ?int $tenantId = null): array {
         'status' => 1,
     ]);
 
-    if (!empty($data['address'])) {
-        $addr = $data['address'];
-        $CI->Sk_User_model->save_address([
-            'user_id' => (int)$newId,
-            'full_name' => $name !== '' ? $name : 'Customer',
-            'phone' => $phone,
-            'line1' => trim((string)($addr['line1'] ?? $addr['address_line1'] ?? '')),
-            'line2' => trim((string)($addr['line2'] ?? $addr['address_line2'] ?? '')),
-            'city' => trim((string)($addr['city'] ?? '')),
-            'state' => trim((string)($addr['state'] ?? '')),
-            'pincode' => trim((string)($addr['pincode'] ?? $addr['postal_code'] ?? '')),
-            'country' => trim((string)($addr['country'] ?? 'India')) ?: 'India',
-            'label' => 'Home',
-            'address_type' => 'shipping',
-            'is_default' => 1,
-        ]);
+    if (is_array($data['address'] ?? null)) {
+        sk_ai_store_customer_address((int)$newId, $name, $phone, $data['address']);
     }
 
     return ['success' => true, 'data' => ['tenant_id' => $tenantId ?? 0, 'customer_id' => (int)$newId, 'name' => $name !== '' ? $name : 'Customer', 'phone' => $phone], 'error' => null];
@@ -846,6 +899,27 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
         $state = trim((string)($params['state'] ?? ''));
         $pincode = trim((string)($params['pincode'] ?? ''));
     }
+    $door = trim((string)($params['door_number'] ?? $params['door'] ?? ''));
+    $street = trim((string)($params['street'] ?? ''));
+    $landmark = trim((string)($params['landmark'] ?? ''));
+    if ($line1 === '' && ($door !== '' || $street !== '')) {
+        $bits = [];
+        if ($door !== '') {
+            $bits[] = 'Door ' . $door;
+        }
+        if ($street !== '') {
+            $bits[] = $street;
+        }
+        $line1 = implode(', ', $bits);
+    }
+    $line2 = trim((string)($params['shipping_line2'] ?? $params['line2'] ?? ''));
+    if ($line2 === '' && is_array($params['address'] ?? null)) {
+        $line2 = trim((string)($params['address']['line2'] ?? ''));
+    }
+    if ($line2 === '' && $landmark !== '') {
+        $line2 = 'Landmark: ' . $landmark;
+    }
+    $pincode = preg_replace('/\D+/', '', $pincode) ?? '';
 
     $CI =& get_instance();
     if (!isset($CI->Sk_User_model)) {
@@ -868,6 +942,7 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
             'email' => trim((string)($params['email'] ?? '')),
             'address' => $line1 !== '' ? [
                 'line1' => $line1,
+                'line2' => $line2,
                 'city' => $city,
                 'state' => $state,
                 'pincode' => $pincode,
@@ -882,11 +957,11 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
         }
     }
 
-    if ($line1 === '' || $name === '') {
+    if ($name === '' || $phone === '' || $line1 === '' || strlen($pincode) !== 6) {
         return [
             'success' => false,
             'data' => ['customer_id' => $customerId],
-            'error' => ['code' => 'ADDRESS_REQUIRED', 'message' => 'Customer name and delivery address are required before creating an order.'],
+            'error' => ['code' => 'ADDRESS_REQUIRED', 'message' => 'Collect name, phone number, door number, street, and a 6 digit pincode. Confirm that address once before creating the order.'],
         ];
     }
 
@@ -973,10 +1048,10 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
         'shipping_name' => $name,
         'shipping_phone' => $phone !== '' ? $phone : (string)($params['shipping_phone'] ?? ''),
         'shipping_line1' => $line1,
-        'shipping_line2' => trim((string)($params['shipping_line2'] ?? '')),
+        'shipping_line2' => $line2,
         'shipping_city' => $city !== '' ? $city : 'NA',
         'shipping_state' => $state !== '' ? $state : 'NA',
-        'shipping_pincode' => $pincode !== '' ? $pincode : '000000',
+        'shipping_pincode' => $pincode,
         'shipping_country' => 'India',
     ];
 
@@ -994,7 +1069,7 @@ function sk_ai_create_order_tool(array $params, int $tenantId): array {
             'total' => (float)($order['total'] ?? $total),
             'currency' => 'INR',
             'human_approval_required' => false,
-            'next_step' => 'Call create_payment_link once for this order. Then restate the product, quantity, and total, send the payment link, and ask the customer to confirm before they pay.',
+            'next_step' => 'Call create_payment_link once for this order. The Pay now card lists every product in the order.',
         ],
         'error' => null,
     ];

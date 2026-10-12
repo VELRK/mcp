@@ -112,8 +112,29 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             $this->error('query is required.', 400);
         }
         $vendorId = (int)$tenant['vendor_id'];
-        $result = sk_mcp_tool_find_products($query, ['tenant' => $vendorId], 8);
+        $galleryAsk = function_exists('sk_mcp_tool_is_gallery_request') && sk_mcp_tool_is_gallery_request($query);
+        $searchQuery = $query;
+        if ($galleryAsk && function_exists('sk_mcp_tool_strip_gallery_words')) {
+            $stripped = sk_mcp_tool_strip_gallery_words($query);
+            if ($stripped === '') {
+                $this->success([
+                    'query'    => $query,
+                    'count'    => 0,
+                    'ui'       => 'none',
+                    'summary'  => 'The customer asked for more photos but did not name a product. Ask which product. Do not invent images.',
+                    'cards'    => [],
+                    'gallery_cards' => [],
+                    'products' => [],
+                ], 'Product search completed.');
+            }
+            $searchQuery = $stripped;
+        }
+        $result = sk_mcp_tool_find_products($searchQuery, ['tenant' => $vendorId], 8);
         $products = $this->_meta_safe_products($result['results'] ?? [], $vendorId);
+        if ($galleryAsk && $products) {
+            $this->_send_gallery($query, $products[0]);
+            return;
+        }
         $cards = [];
         foreach ($products as $pIndex => $p) {
             $name = (string)($p['name'] ?? 'Product');
@@ -140,11 +161,13 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         $photoCount = count($photoCards);
         if ($count === 1) {
             $cards[0]['button_label'] = 'Shop now';
+            $galleryCount = count($products[0]['gallery'] ?? []);
             $summary = 'Exactly one product. The customer must see this line in the message: ' . $cards[0]['body'] . '. '
                 . ($photoCount === 1
-                    ? 'Send the product photo with that line as the caption, then one Shop now reply button. '
+                    ? 'Send this one product photo with that line as the caption, then one Shop now reply button. Do not send the gallery yet. '
                     : 'There is no WhatsApp photo for this product. Write that line in the text, then one Shop now reply button. Do not send an empty card. ')
-                . 'Never send only "See the details below." Shop now stays in this chat. Do not send a website link.';
+                . ($galleryCount > 1 ? ('This product has ' . $galleryCount . ' JPEG or PNG photos in gallery. Send those only when the customer asks for more images. ') : '')
+                . 'Shop now adds this product to the cart. Never send only "See the details below." Shop now stays in this chat. Do not send a website link.';
         } elseif ($count > 1 && $photoCount >= 2) {
             $summary = 'Two or more products. Send the product-shop-cards carousel only for cards that have an image_url. Each card text must be that card body, which is the name and price. Button text is button_label. Also readable in this result: ' . str_replace("\n", ' | ', $details) . '. Never send only "See the details below." A carousel needs 2 to 10 cards.';
         } elseif ($count > 1) {
@@ -161,8 +184,60 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             'ui'       => $count === 1 ? 'product-photo-card' : ($count > 1 ? 'product-shop-cards' : 'none'),
             'summary'  => $summary,
             'cards'    => $cards,
+            'gallery_cards' => [],
             'products' => $products,
         ], 'Product search completed.');
+    }
+
+    /** Extra photos of one product. Cards are the same product, not a new catalog. */
+    private function _send_gallery(string $query, array $product): void {
+        $name = (string)($product['name'] ?? 'Product');
+        $price = (string)($product['price'] ?? '0');
+        $body = $name . ' — ₹' . $price;
+        $gallery = [];
+        foreach ((array)($product['gallery'] ?? []) as $url) {
+            $url = trim((string)$url);
+            if ($url !== '' && !in_array($url, $gallery, true)) {
+                $gallery[] = $url;
+            }
+        }
+        $gallery = array_slice($gallery, 0, 10);
+        $cards = [];
+        foreach ($gallery as $url) {
+            $cards[] = [
+                'name'         => $name,
+                'body'         => $body,
+                'image_url'    => $url,
+                'button_label' => 'Shop now',
+            ];
+        }
+        $count = count($cards);
+        if ($count >= 2) {
+            $ui = 'product-shop-cards';
+            $summary = 'Gallery of one product. These cards are extra photos of the same product, not different products. Send the product-shop-cards carousel with one card per gallery photo, 2 to 10 cards. Each card image is that image_url. Each card text is: ' . $body . '. Button is Shop now. Tapping any card adds this one product to the cart. Never send only "See the details below."';
+        } elseif ($count === 1) {
+            $ui = 'product-photo-card';
+            $summary = 'This product has one JPEG or PNG photo. Send that photo with the caption ' . $body . ', then Shop now. There are no extra gallery photos. Never send only "See the details below."';
+        } else {
+            $ui = 'none';
+            $cards = [[
+                'name'         => $name,
+                'body'         => $body,
+                'image_url'    => '',
+                'button_label' => 'Shop now',
+            ]];
+            $summary = 'This product has no extra JPEG or PNG gallery photos. Write this line in the chat: ' . $body . '. Do not send an empty card. Never send only "See the details below."';
+        }
+        unset($product['product_url']);
+        $this->success([
+            'query'         => $query,
+            'count'         => 1,
+            'ui'            => $ui,
+            'summary'       => $summary,
+            'cards'         => $cards,
+            'gallery_cards' => $cards,
+            'products'      => [$product],
+        ], 'Product gallery completed.');
     }
 
     private function _meta_safe_products(array $rows, int $vendorId = 0): array {
@@ -183,10 +258,24 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             if (strtolower(trim((string)($row['status'] ?? 'active'))) !== 'active') {
                 continue;
             }
-            $image = sk_mcp_tool_whatsapp_image_url((string)($row['image_url'] ?? ''));
-            if ($image === '') {
-                $image = sk_mcp_tool_whatsapp_image_url((string)($row['thumbnail'] ?? $row['image'] ?? ''));
+            $gallery = [];
+            $rawGallery = is_array($row['gallery'] ?? null) ? $row['gallery'] : [];
+            if (!$rawGallery) {
+                $fallback = trim((string)($row['image_url'] ?? $row['thumbnail'] ?? $row['image'] ?? ''));
+                if ($fallback !== '') {
+                    $rawGallery = [$fallback];
+                }
             }
+            foreach ($rawGallery as $path) {
+                $url = sk_mcp_tool_whatsapp_image_url((string)$path);
+                if ($url !== '' && !in_array($url, $gallery, true)) {
+                    $gallery[] = $url;
+                }
+                if (count($gallery) >= 10) {
+                    break;
+                }
+            }
+            $image = $gallery[0] ?? '';
             $productUrl = site_url('shop/product/' . $id);
             if (stripos($productUrl, 'http://') === 0) {
                 $productUrl = 'https://' . substr($productUrl, 7);
@@ -196,6 +285,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
                 'name'             => (string)($row['name'] ?? ''),
                 'sku'              => (string)($row['sku'] ?? ''),
                 'image_url'        => $image,
+                'gallery'          => $gallery,
                 'product_url'      => $productUrl,
                 'color'            => (string)($row['color'] ?? ''),
                 'length'           => (string)($row['length'] ?? $row['saree_length'] ?? ''),

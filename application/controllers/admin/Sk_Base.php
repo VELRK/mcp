@@ -203,19 +203,27 @@ class Sk_Base extends CI_Controller {
         exit;
     }
 
-    protected function upload_file($field, $dir = 'products') {
+    protected function upload_file($field, $dir = 'products', $allowedTypes = null) {
         if (empty($_FILES[$field]['name'])) {
             return null;
         }
+        $allowedTypes = $allowedTypes ?: 'jpg|jpeg|png|gif|webp';
+        $jpegPngOnly = $allowedTypes === 'jpg|jpeg|png';
         if ((int)($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             $code = (int)$_FILES[$field]['error'];
             $msg = 'Image upload failed.';
             if ($code === UPLOAD_ERR_INI_SIZE || $code === UPLOAD_ERR_FORM_SIZE) {
-                $msg = 'Image is too large. Use JPG, PNG, GIF or WebP under 8MB.';
+                $msg = $jpegPngOnly
+                    ? 'Image is too large. Use a JPEG or PNG under 8MB.'
+                    : 'Image is too large. Use JPG, PNG, GIF or WebP under 8MB.';
             } elseif ($code === UPLOAD_ERR_PARTIAL) {
                 $msg = 'Image upload was incomplete. Please try again.';
             }
             $this->session->set_flashdata('error', $msg);
+            return null;
+        }
+        if ($jpegPngOnly && !$this->is_jpeg_or_png_upload($_FILES[$field]['tmp_name'] ?? '')) {
+            $this->session->set_flashdata('error', 'Use a JPEG or PNG image. Other formats are not accepted.');
             return null;
         }
 
@@ -224,7 +232,7 @@ class Sk_Base extends CI_Controller {
 
         $config = [
             'upload_path'   => $path,
-            'allowed_types' => 'jpg|jpeg|png|gif|webp',
+            'allowed_types' => $allowedTypes,
             'max_size'      => 8192,
             'file_name'     => uniqid($dir . '_'),
         ];
@@ -235,10 +243,23 @@ class Sk_Base extends CI_Controller {
             return 'assets/uploads/' . $dir . '/' . $this->upload->data('file_name');
         }
         $err = strip_tags((string)$this->upload->display_errors('', ''));
+        $fallback = $jpegPngOnly
+            ? 'Image upload failed. Use a JPEG or PNG under 8MB.'
+            : 'Image upload failed. Use JPG, PNG, GIF or WebP under 8MB.';
         $this->session->set_flashdata(
             'error',
-            $err !== '' ? $err : 'Image upload failed. Use JPG, PNG, GIF or WebP under 8MB.'
+            $err !== '' ? $err : $fallback
         );
         return null;
+    }
+
+    /** True when the uploaded file is a real JPEG or PNG. */
+    protected function is_jpeg_or_png_upload($tmp): bool {
+        if (!is_string($tmp) || $tmp === '' || !is_uploaded_file($tmp)) {
+            return false;
+        }
+        $info = @getimagesize($tmp);
+        $type = (int)($info[2] ?? 0);
+        return in_array($type, [IMAGETYPE_JPEG, IMAGETYPE_PNG], true);
     }
 }

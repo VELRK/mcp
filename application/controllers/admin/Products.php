@@ -111,7 +111,7 @@ class Products extends Sk_Base {
             redirect('admin/products/add');
         }
 
-        $thumbnail = $this->upload_file('thumbnail', 'products');
+        $thumbnail = $this->upload_file('thumbnail', 'products', 'jpg|jpeg|png');
 
         $data = [
             'name'             => $this->input->post('name', TRUE),
@@ -267,7 +267,7 @@ class Products extends Sk_Base {
         $product['sale_end_at'] = $rawRow['sale_end_at'] ?? ($product['sale_end_at'] ?? null);
 
         $hadThumbUpload = !empty($_FILES['thumbnail']['name']);
-        $uploadedThumb = $this->upload_file('thumbnail', 'products');
+        $uploadedThumb = $this->upload_file('thumbnail', 'products', 'jpg|jpeg|png');
         $thumbUploadFailed = $hadThumbUpload && !$uploadedThumb;
         $thumbnail = $uploadedThumb ?? $product['thumbnail'];
 
@@ -536,7 +536,7 @@ class Products extends Sk_Base {
             'size'     => $_FILES['variant_images']['size'][$seq],
         ];
 
-        return $this->upload_file('variant_image_single', 'products');
+        return $this->upload_file('variant_image_single', 'products', 'jpg|jpeg|png');
     }
 
     private function _variant_upload_attempted($seq) {
@@ -565,7 +565,7 @@ class Products extends Sk_Base {
                 'error'    => $_FILES['images']['error'][$i],
                 'size'     => $_FILES['images']['size'][$i],
             ];
-            $img = $this->upload_file('image_single', 'products');
+            $img = $this->upload_file('image_single', 'products', 'jpg|jpeg|png');
             if ($img) {
                 $this->Sk_Product_model->save_images($product_id, [['image' => $img, 'sort_order' => $i]]);
             }
@@ -611,7 +611,7 @@ class Products extends Sk_Base {
                     'error'    => $_FILES['color_variant_images']['error'][$file_idx],
                     'size'     => $_FILES['color_variant_images']['size'][$file_idx],
                 ];
-                $uploaded = $this->upload_file('cv_img_single', 'products');
+                $uploaded = $this->upload_file('cv_img_single', 'products', 'jpg|jpeg|png');
                 if ($uploaded) $image = $uploaded;
             }
             $file_idx++;
@@ -753,7 +753,7 @@ class Products extends Sk_Base {
         row.innerHTML =
           '<div style="flex:2"><input type="text" name="color_variants['+idx+'][name]" class="form-control form-control-sm" placeholder="Color name"></div>' +
           '<div style="flex:0 0 44px"><input type="color" name="color_variants['+idx+'][hex]" class="form-control form-control-color form-control-sm w-100" value="#cccccc"></div>' +
-          '<div style="flex:3"><input type="file" name="color_variant_images[]" class="form-control form-control-sm" accept="image/*"></div>' +
+          '<div style="flex:3"><input type="file" name="color_variant_images[]" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,image/jpeg,image/png"></div>' +
           '<button type="button" class="btn btn-sm btn-outline-danger remove-color-row" style="flex:0 0 auto"><i class="bi bi-trash"></i></button>';
         colorList.appendChild(row);
         if (countInput) countInput.value = getNextIndex();

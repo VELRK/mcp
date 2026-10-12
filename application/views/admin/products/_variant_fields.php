@@ -63,7 +63,7 @@ $rows = !empty($product_variants)
             <input type="hidden" name="product_variants[<?= $vi ?>][remove_image]" class="variant-remove-image" value="0">
             <img src="<?= htmlspecialchars($imgUrl) ?>" alt="" class="rounded border variant-img-preview mb-1<?= $imgUrl === '' ? ' d-none' : '' ?>" style="width:72px;height:72px;object-fit:cover;display:<?= $imgUrl === '' ? 'none' : 'block' ?>;">
             <button type="button" class="btn btn-link btn-sm text-danger p-0 mb-1 variant-image-remove<?= $imgUrl === '' ? ' d-none' : '' ?>">Remove image</button>
-            <input type="file" name="variant_images[<?= $vi ?>]" class="form-control form-control-sm variant-image-input" accept="image/*">
+            <input type="file" name="variant_images[<?= $vi ?>]" class="form-control form-control-sm variant-image-input" accept=".jpg,.jpeg,.png,image/jpeg,image/png">
           </div>
           <div class="col-md-2">
             <label class="form-label small">Unit <span class="text-danger">*</span></label>
@@ -175,7 +175,7 @@ $rows = !empty($product_variants)
     wrap.className = 'variant-row border rounded p-3 mb-2 bg-light';
     wrap.innerHTML = `
       <div class="row g-2 align-items-end">
-        <div class="col-md-2"><label class="form-label small">Image</label><input type="hidden" name="product_variants[${idx}][existing_image]" class="variant-existing-image" value=""><input type="hidden" name="product_variants[${idx}][remove_image]" class="variant-remove-image" value="0"><img src="" alt="" class="rounded border variant-img-preview mb-1 d-none" style="width:72px;height:72px;object-fit:cover;display:none;"><button type="button" class="btn btn-link btn-sm text-danger p-0 mb-1 variant-image-remove d-none">Remove image</button><input type="file" name="variant_images[${idx}]" class="form-control form-control-sm variant-image-input" accept="image/*"></div>
+        <div class="col-md-2"><label class="form-label small">Image</label><input type="hidden" name="product_variants[${idx}][existing_image]" class="variant-existing-image" value=""><input type="hidden" name="product_variants[${idx}][remove_image]" class="variant-remove-image" value="0"><img src="" alt="" class="rounded border variant-img-preview mb-1 d-none" style="width:72px;height:72px;object-fit:cover;display:none;"><button type="button" class="btn btn-link btn-sm text-danger p-0 mb-1 variant-image-remove d-none">Remove image</button><input type="file" name="variant_images[${idx}]" class="form-control form-control-sm variant-image-input" accept=".jpg,.jpeg,.png,image/jpeg,image/png"></div>
         <div class="col-md-2"><label class="form-label small">Unit *</label>${unitSelectHtml(idx, defaultUnit)}</div>
         <div class="col-md-1"><label class="form-label small">Qty</label><input type="text" inputmode="decimal" name="product_variants[${idx}][unit_value]" class="form-control form-control-sm" value="${defaultQty}"></div>
         <div class="col-md-2"><label class="form-label small">Label</label><input type="text" name="product_variants[${idx}][label]" class="form-control form-control-sm" placeholder="Auto"></div>

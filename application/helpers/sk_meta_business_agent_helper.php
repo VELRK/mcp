@@ -547,11 +547,13 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Follow this order. "
         . "1. GREETING: If they only say hi/hello/hey/vanakkam, reply in ONE short sentence. Call NO tools. "
         . "2. PRODUCTS: On any product, price, or stock question, call search_products exactly once. The tool result is the whole catalog. Offer only those products. If it is empty, say so in one sentence. Never add a product from memory or another shop. Never invent facts. Infer typos such as donu have = do you have and amount/prise = price. "
-        . "3. SHOW THE PRODUCTS: The customer must read the product name and price in the message. Never send only \"See the details below.\" One product with a JPEG or PNG image_url: send that photo, caption is the name and price, then the Shop now reply button with no URL. One product with no image_url: write the name and price in the text, then Shop now. Two or more products that have image_url: send the product-shop-cards carousel, 2 to 10 cards. Each card text is that product name and price. The button text is the product name, at most 20 characters, and it replies in this chat. A product whose image_url is empty is written as text, not placed on a blank card. Never use the carousel for one product. "
-        . "4. CHOOSE: When they tap Shop now or a product card, they want that product. If they still must pick one option, send the choice list. Do not send the list after they have chosen. "
-        . "5. CONFIRM: Before create_order, send the confirm buttons. Body restates the product, quantity, and total. Create the order only after they choose Confirm order. "
-        . "6. ADDRESS: If the delivery address is missing, ask them to type the full address in this chat. Do not send a location card, a map, or a link. Save it with update_customer. Do not ask again after it is saved. "
-        . "7. PAY: After they confirm, identify_customer or create_customer, update_customer, calculate_order_total, create_order with confirmed=true, then create_payment_link once. Then send the Pay now card and no other message. The visible body is exactly card.body. It lists the order, product, quantity, item total, delivery charge or Free shipping, and the total. Use card.header_image_url as the header only when it starts with https. If it is empty, send the card with no header image. Footer is card.footer. Button label is Pay now. Button URL is the Razorpay payment_link. Do not paste the link as text. Never send only \"See the details below.\" One new link per order. Never reuse or invent a link. "
+        . "3. SHOW THE PRODUCTS: The customer must read the product name and price in the message. Never send only \"See the details below.\" One product with a JPEG or PNG image_url: send that one photo, caption is the name and price, then the Shop now reply button with no URL. Do not send the gallery on this first look. One product with no image_url: write the name and price in the text, then Shop now. Two or more products that have image_url: send the product-shop-cards carousel, 2 to 10 cards, one card per product. Each card text is that product name and price. The button text is the product name, at most 20 characters, and it replies in this chat. A product whose image_url is empty is written as text, not placed on a blank card. Never use the carousel for one product unless they asked for more photos. "
+        . "4. MORE PHOTOS: If they ask for more images, photos, pictures, or the gallery, call search_products again with that product name. Use gallery_cards. Two or more gallery photos: send the product-shop-cards carousel, one card per gallery photo of that same product. Card text is the name and price. Button is Shop now. One photo: send that photo. If gallery_cards is empty, say there are no extra photos and repeat the name and price. Never invent a photo. These cards are extra photos of one product, not different products. "
+        . "5. CART: Shop now adds that product to the cart in this chat. Keep every product they already added. Then send reply buttons Add more and Checkout. Do not create the order yet. If they choose Add more, or name another product, search again and add it the same way. Several products belong in one order. "
+        . "6. DELIVERY DETAILS: When they choose Checkout, do not confirm the order and do not create it. Ask in this chat for each missing item, one at a time, in this order: name, phone number, door number, landmark, street, pincode. A pincode is 6 digits. Do not send a location card, a map, or a link. Do not skip a field. "
+        . "7. CUSTOMER: After the name and phone number are known, call identify_customer or create_customer with that name and phone. Then call update_customer. The address text is Door {door number}, {street}. Landmark: {landmark}. Save the pincode. Create the customer only after the name and phone are collected. "
+        . "8. CONFIRM ONCE: After the customer and the full address are saved, confirm once. Repeat the name, phone number, door number, landmark, street, pincode, every cart product, each quantity, and the combined total. Buttons are Confirm order and Change. This is the only confirmation. Create the order only after Confirm order. create_order items must include every cart product. The order name, phone, address, and pincode are the ones just confirmed. calculate_order_total uses that same product list. Do not ask for the address again. "
+        . "9. PAY: After that one confirmation, create_order with confirmed=true, then create_payment_link once. Then send the Pay now card and no other message. The visible body is exactly card.body. It lists the order, every product, each quantity, item total, delivery charge or Free shipping, and the total. Use card.header_image_url as the header only when it starts with https. If it is empty, send the card with no header image. Footer is card.footer. Button label is Pay now. Button URL is the Razorpay payment_link. Do not paste the link as text. Never send only \"See the details below.\" One new link per order. Never reuse or invent a link. "
         . "Do not send the invoice, a catalog, or an address link. The invoice is sent separately after payment. Never hand off for a simple product or price question. "
         . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
@@ -560,7 +562,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     return [
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'General shop, any product from the database. Show a photo or carousel, confirm in chat, ask for the address in chat, then send the Pay now bill.',
+            'description' => 'General shop. Show one photo first, the gallery when they ask for more images, add several products to one cart, collect name and the delivery address, confirm that once, then send one Pay now bill.',
             'skill'       => $skill,
         ],
     ];
@@ -1103,13 +1105,13 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'title'           => 'product-photo-card',
             'component_type'  => 'interactive_reply_buttons',
             'status'          => 'enabled',
-            'instruction'     => 'When search_products returns exactly one product, send this after the product photo. Body text is the product name and price only. One button only. Button title is exactly "Shop now". This button replies inside this WhatsApp chat and starts the order. Do not add a URL. Do not mention a website or an online store.',
+            'instruction'     => 'When search_products returns exactly one product, send this after the product photo. Body text is the product name and price only. One button only. Button title is exactly "Shop now". This button replies inside this WhatsApp chat and adds the product to the cart. It does not create the order. Do not add a URL. Do not mention a website or an online store.',
         ],
         [
             'title'           => 'product-shop-cards',
             'component_type'  => 'carousel_quick_reply',
             'status'          => 'enabled',
-            'instruction'     => 'Use this only when at least 2 products have an https JPEG or PNG image_url. A carousel must contain 2 to 10 cards. Skip products with an empty image_url and write those names and prices in text instead. Card image URL is image_url. Card text is the product name and price. Button text is the product name, at most 20 characters, and replies in this chat. Never send a card with an empty body, and never send only "See the details below."',
+            'instruction'     => 'Use this when at least 2 products have an https JPEG or PNG image_url, one card per product. Also use it when the customer asked for more photos and gallery_cards has 2 to 10 photos of one product. A carousel must contain 2 to 10 cards. Skip an empty image_url. Card image URL is image_url. Card text is the product name and price. For a product list, button text is the product name, at most 20 characters. For a gallery, button text is Shop now and every card is the same product. The button replies in this chat. Never send a card with an empty body, and never send only "See the details below."',
         ],
         [
             'title'           => 'product-choice-list',
@@ -1121,13 +1123,13 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'title'           => 'order-confirm-buttons',
             'component_type'  => 'interactive_reply_buttons',
             'status'          => 'enabled',
-            'instruction'     => 'Before create_order, send reply buttons. Body restates the product, quantity, and total and asks them to confirm. Two buttons only: id "confirm-order" title "Confirm order", and id "change-order" title "Change". Create the order only after they choose Confirm order.',
+            'instruction'     => 'After Shop now, send reply buttons. Body says that product was added to the cart. Two buttons: id "add-more" title "Add more", and id "checkout" title "Checkout". Do not create the order yet. Checkout does not confirm the order. It starts the delivery questions: name, phone number, door number, landmark, street, and pincode. After those are saved on the customer, send reply buttons once. Body repeats the name, phone, door number, landmark, street, pincode, every product, each quantity, and the total. Two buttons: id "confirm-order" title "Confirm order", and id "change-order" title "Change". Create the order only after Confirm order.',
         ],
         [
             'title'           => 'order-payment-cta',
             'component_type'  => 'cta_url',
             'status'          => 'enabled',
-            'instruction'     => 'When create_payment_link returns a payment_link, send this CTA and no other message. Body text is exactly card.body, which lists the order number, product, quantity, item total, Delivery charge or Free shipping, and the total. The customer must be able to read that body. Header media URL is card.header_image_url only when it starts with https. If it is empty, do not add a header. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link. Never send only "See the details below." Never invent a URL and never paste the link as text.',
+            'instruction'     => 'When create_payment_link returns a payment_link, send this CTA and no other message. Body text is exactly card.body, which lists the order number, every product, each quantity, item total, Delivery charge or Free shipping, and the total. The customer must be able to read that body. Header media URL is card.header_image_url only when it starts with https. If it is empty, do not add a header. Footer text is exactly card.footer. Button label text is exactly "Pay now". Button URL is exactly payment_link. Never send only "See the details below." Never invent a URL and never paste the link as text.',
         ],
     ];
     return $defs;
@@ -1304,7 +1306,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
 
     // Keep this list SMALL — Meta latency grows with tool count (19 tools was ~19s; 9 tools ~14s).
     return [
-        $tool('search_products', 'ONLY tool for product/price/stock. Call once. Never for hi/hello. Returns this shop\'s active products. One product is a photo plus a Shop now reply in this chat. Two or more are a reply carousel. Do not send a website link or a text list.', [
+        $tool('search_products', 'ONLY tool for product/price/stock, and again when they ask for more photos. Never for hi/hello. Returns this shop\'s active products. One product is one photo plus Shop now. gallery_cards are extra photos of that product. Two or more products are a reply carousel. Do not send a website link or a text list.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
             'limit'  => $bodyField('integer', 'Max results (1-3)'),
@@ -1313,12 +1315,12 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
             'email' => $bodyField('string', 'Optional email'),
         ]),
-        $tool('create_customer', 'Create customer if missing when placing an order.', [
+        $tool('create_customer', 'Create the customer only after name and phone number are collected. Save the delivery address next with update_customer.', [
             'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
             'name'  => $bodyField('string', 'Customer name'),
             'email' => $bodyField('string', 'Optional email'),
         ], ['phone']),
-        $tool('update_customer', 'Update delivery address before create_order.', [
+        $tool('update_customer', 'Save the delivery address after the customer exists. address is Door {door number}, {street}. Landmark: {landmark}. pincode is 6 digits.', [
             'customer_id' => $bodyField('integer', 'Customer id'),
             'name'        => $bodyField('string', 'Customer name'),
             'email'       => $bodyField('string', 'Email'),
@@ -1328,10 +1330,10 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'pincode'     => $bodyField('string', 'Pincode'),
             'phone'       => $bodyField('string', 'Phone', $waPhone),
         ], ['customer_id']),
-        $tool('calculate_order_total', 'Compute totals from real product prices before create_order.', [
+        $tool('calculate_order_total', 'Compute the combined total for every product in the cart before create_order.', [
             'items' => $bodyField('string', 'JSON array of {product_id, quantity}'),
         ], ['items']),
-        $tool('create_order', 'Create order only after customer confirmation. confirmed must be true.', [
+        $tool('create_order', 'Create one order only after the address was confirmed once. confirmed must be true. items includes every cart product. name, phone, address, and pincode are the confirmed delivery details.', [
             'confirmed'        => $bodyField('boolean', 'Must be true'),
             'items'            => $bodyField('string', 'JSON array of {product_id, quantity}'),
             'customer_id'      => $bodyField('integer', 'Customer id if known'),
