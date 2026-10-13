@@ -34,7 +34,7 @@ class Marketing_site extends CI_Controller {
                 [
                     'Unified Team Inbox & Human Takeover',
                     'Give your agents complete context across all channels with instant 1-click human intervention.',
-                    ['Unified inbox across WhatsApp, IG, FB & Web', '100% controlled human handoff with thread locking', 'Internal notes, team assignments (@mentions) & tags', 'Multi-vendor isolation for SaaS marketplaces']
+                    ['Unified inbox across WhatsApp, IG, FB & Web', '100% controlled human handoff with thread locking', 'Internal notes, team assignments (@mentions) & tags', 'Multi-branch isolation for enterprise teams']
                 ],
                 [
                     'Omnichannel CRM 360 & Identity Stitching',
@@ -84,7 +84,7 @@ class Marketing_site extends CI_Controller {
                 [
                     'Facebook Messenger & Page Engagement',
                     'Unify Messenger inquiries and post engagement into the same automated sales and support engine.',
-                    ['Automated Messenger sales copilot', 'Page post comment auto-responder', 'Appointment booking & consultation scheduling', 'Unified customer matching with WhatsApp records']
+                    ['Automated Messenger sales copilot', 'Page post comment auto-responder', 'Meeting scheduling & calendar booking', 'Unified customer matching with WhatsApp records']
                 ],
                 [
                     'YouTube Video Comment Lead Capture',
@@ -122,7 +122,7 @@ class Marketing_site extends CI_Controller {
             'active' => 'solutions',
             'eyebrow' => 'Industry Solutions & Blueprints',
             'title' => 'Purpose-Built Automation for High-Growth Business Models',
-            'lead' => 'From retail e-commerce to clinics, real estate, education, and multi-vendor marketplaces — deploy robotic AI tailored to your exact industry workflows.',
+            'lead' => 'From retail e-commerce to consulting, travel, education, and multi-branch retail — deploy robotic AI tailored to your exact industry workflows.',
             'hero_img' => base_url('assets/images/website/solutions_automation.jpg'),
             'hero_img_alt' => 'Talk AI Pilot Multi-Industry Automation & In-Chat Commerce Operations Cockpit',
             'sections' => [
@@ -132,14 +132,14 @@ class Marketing_site extends CI_Controller {
                     ['Interactive catalog browsing inside WhatsApp & IG', 'Razorpay & UPI instant payment links', 'Automated PDF invoice generation and delivery', 'Live order tracking with BlueDart & Delhivery webhooks']
                 ],
                 [
-                    'Healthcare, Clinics & Wellness',
-                    'Enable 24/7 patient inquiries, slot booking, doctor consultation scheduling, and appointment reminders.',
-                    ['Symptom & department qualification', 'Calendar slot booking with calendar sync', 'Automated appointment reminders to reduce no-shows', 'Prescription & report delivery via WhatsApp']
+                    'Professional Consulting & B2B Services',
+                    'Automate client inquiries, discovery call scheduling, consultation reminders, and service proposals.',
+                    ['Client requirements qualification', 'Discovery call scheduling with Google/Outlook calendar sync', 'Automated meeting reminders to reduce no-shows', 'Proposal & quotation delivery via WhatsApp']
                 ],
                 [
-                    'Real Estate & Property Developers',
-                    'Qualify buyers, showcase property brochures, filter by budget & location, and schedule site visits.',
-                    ['Instant property brochure (PDF) downloads', 'Budget & location preference filtering', 'Site visit booking with automated reminders', 'Lead distribution to on-site sales executives']
+                    'Travel, Tourism & Hospitality',
+                    'Engage travelers 24/7, share holiday itineraries, filter packages by budget & dates, and capture bookings.',
+                    ['Instant tour itinerary & brochure downloads', 'Budget & travel dates preference filtering', 'Reservation inquiry booking with automated reminders', 'Lead distribution to dedicated travel planners']
                 ],
                 [
                     'Education, Coaching & EdTech',
@@ -148,18 +148,18 @@ class Marketing_site extends CI_Controller {
                 ],
                 [
                     'Local Services, Salons & Retail',
-                    'Provide instant pricing, service menu lookups, appointment reservations, and customer re-engagement.',
+                    'Provide instant pricing, service menu lookups, reservation scheduling, and customer re-engagement.',
                     ['Service menu and price list sharing in chat', 'Slot booking & technician assignment', 'Post-service review requests with Google Review links', 'Festive offer broadcasts to loyal customers']
                 ],
                 [
-                    'Multi-Vendor SaaS Marketplaces',
-                    'Deploy isolated tenant workspaces for vendors with independent WhatsApp numbers and commission tracking.',
-                    ['Multi-vendor store isolation & independent logins', 'Vendor-specific product catalogs & order routing', 'Automated vendor commission calculations', 'Centralized admin governance & SaaS billing']
+                    'Multi-Branch & Enterprise Retail',
+                    'Deploy dedicated workspaces for multiple store locations with regional numbers and unified inbox management.',
+                    ['Multi-outlet store routing & department logins', 'Branch-specific product catalogs & order routing', 'Centralized business performance analytics', 'Role-based access control & enterprise governance']
                 ],
             ],
             'steps_title' => 'How to Deploy Your Industry Blueprint in 4 Steps',
             'steps' => [
-                ['Select', 'Choose the blueprint matching your business model (Retail, Clinic, Real Estate, SaaS).'],
+                ['Select', 'Choose the blueprint matching your business model (Retail, Consulting, Travel, SaaS).'],
                 ['Sync', 'Connect your catalog, pricing, calendar, or inventory database with one click.'],
                 ['Activate', 'Link your official WhatsApp number and social channels to go live.'],
                 ['Scale', 'Track in-chat orders, qualification rate, and revenue on your live dashboard.'],
@@ -212,7 +212,7 @@ class Marketing_site extends CI_Controller {
                         'Unlimited Agent Seats with Role Permissions',
                         'Unlimited Robotic AI Auto-Replies',
                         'Meta Business Agent Connectors',
-                        'Multi-Vendor Isolation (SaaS Mode)',
+                        'Multi-Branch Isolation (Enterprise Mode)',
                         'Dedicated Account Manager & Training',
                         'Custom ERP / Shopify / Custom Webhook Sync',
                         '99.99% Enterprise SLA'
@@ -270,7 +270,7 @@ class Marketing_site extends CI_Controller {
             'about_story' => [
                 'Customers expect immediate answers whether they message at 2 PM on a weekday or 2 AM on a Sunday. Yet most businesses struggle across disconnected phones, WhatsApp Web, Instagram DM tabs, spreadsheets, and manual payment links.',
                 'We built Talk AI Pilot to connect those broken pieces. Our autonomous robotic AI agent reads customer intent, checks your live catalog, replies in 0.4s, and sends instant payment links. When a high-value or complex query arises, it gracefully hands over to your team with full history.',
-                'Today, Talk AI Pilot powers over 10 million automated conversations for e-commerce brands, healthcare providers, real estate agencies, and retailers across India and globally.'
+                'Today, Talk AI Pilot powers over 10 million automated conversations for e-commerce brands, consulting firms, travel agencies, and retailers across India and globally.'
             ],
             'about_stats' => [
                 ['10M+', 'conversations automated'],
@@ -375,6 +375,16 @@ class Marketing_site extends CI_Controller {
             'title' => 'Terms and Conditions',
             'lead' => 'The terms governing the use of the Talk AI Pilot website, robotic AI agents, channels and omnichannel automation platform.',
             'legal_html' => site_legal_content_html('terms'),
+        ]);
+    }
+
+    public function refund(): void {
+        $this->render([
+            'active' => '',
+            'eyebrow' => 'Legal & Compliance',
+            'title' => 'Cancellation & Refund Policy',
+            'lead' => 'Information on subscription cancellations, billing cycles, and refund eligibility for Talk AI Pilot services.',
+            'legal_html' => site_legal_content_html('refund'),
         ]);
     }
 }

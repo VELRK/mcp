@@ -99,7 +99,7 @@
                   <small>WhatsApp · Instagram · FB · YouTube · Web</small>
                 <?php elseif (($active ?? '') === 'solutions'): ?>
                   <strong>Talk AI Pilot · Industry Automation</strong>
-                  <small>E-Commerce · Healthcare · Real Estate · SaaS</small>
+                  <small>E-Commerce · Consulting · Travel · SaaS</small>
                 <?php elseif (($active ?? '') === 'platform'): ?>
                   <strong>Talk AI Pilot · Cybernetic Core OS</strong>
                   <small>0.4s Sub-Second AI · Catalog &amp; UPI Pay</small>
@@ -320,11 +320,18 @@
             <?php endforeach; ?>
           </div>
 
-          <div style="padding:18px 22px;border-radius:14px;background:#0d1629;color:#fff;display:flex;align-items:center;gap:14px;">
+          <div style="padding:18px 22px;border-radius:14px;background:#0d1629;color:#fff;display:flex;align-items:center;gap:14px;margin-bottom:14px;">
             <div class="pulse-dot"></div>
             <div style="font-size:13px;">
               <strong>SLA Response Guarantee:</strong> Our solution engineers respond within 2 business hours.
             </div>
+          </div>
+
+          <div style="padding:18px 22px;border-radius:14px;background:var(--soft);border:1px solid var(--line);font-size:13px;line-height:1.7;color:var(--muted);">
+            <strong style="color:var(--ink);display:block;margin-bottom:4px;">Merchant &amp; Customer Support:</strong>
+            <div><strong>Email:</strong> support@talkaipilot.com</div>
+            <div><strong>Hours:</strong> Mon – Sat, 9:30 AM – 6:30 PM IST</div>
+            <div><strong>Product:</strong> B2B Conversational AI SaaS &amp; Automation Platform</div>
           </div>
         </div>
 
@@ -464,11 +471,11 @@
           <div class="footer-title">Solutions</div>
           <div class="footer-links">
             <a href="<?= site_url('solutions') ?>">E-Commerce &amp; D2C</a>
-            <a href="<?= site_url('solutions') ?>">Healthcare &amp; Clinics</a>
-            <a href="<?= site_url('solutions') ?>">Real Estate &amp; Housing</a>
+            <a href="<?= site_url('solutions') ?>">Consulting &amp; Services</a>
+            <a href="<?= site_url('solutions') ?>">Travel &amp; Hospitality</a>
             <a href="<?= site_url('solutions') ?>">Coaching &amp; Education</a>
-            <a href="<?= site_url('solutions') ?>">Local Retail &amp; Salons</a>
-            <a href="<?= site_url('solutions') ?>">Multi-Vendor SaaS</a>
+            <a href="<?= site_url('solutions') ?>">Local Retail &amp; Stores</a>
+            <a href="<?= site_url('solutions') ?>">Multi-Branch Enterprise</a>
           </div>
         </div>
 
@@ -482,6 +489,7 @@
             <a href="<?= site_url('admin/vendor/login') ?>">Admin &amp; Vendor Login</a>
             <a href="<?= site_url('privacy') ?>">Privacy Policy</a>
             <a href="<?= site_url('terms') ?>">Terms &amp; Conditions</a>
+            <a href="<?= site_url('refund-policy') ?>">Cancellation &amp; Refund Policy</a>
           </div>
         </div>
       </div>

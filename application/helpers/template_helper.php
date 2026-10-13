@@ -296,14 +296,14 @@ function apply_business_copy($html, $slug = '')
 		'AI understands intent, answers questions, qualifies leads, books appointments, sends products and updates your CRM — then hands off to a human when needed.',
 		'Capture the lead, qualify interest, and route it to sales automatically.',
 		'Capture the lead, qualify interest, and route it to sales automatically.',
-		'Real estate, ecommerce, clinics, education, travel, gyms, restaurants and agencies — one AI layer for every customer conversation.',
+		'Ecommerce, consulting, education, travel, gyms, restaurants and agencies — one AI layer for every customer conversation.',
 		'Starter, Growth and Business plans for every stage',
 		'Connect WhatsApp, social channels, CRM, ecommerce and payments into one automation layer.',
 		'Connect WhatsApp, social, CRM and ecommerce in one workflow.',
 		'We\'re Building the Future of Customer Communication.',
 		'Businesses should not need a separate tool for every customer conversation. We bring AI, WhatsApp, social media, CRM, ecommerce, voice and automation into one communication layer.',
 		'What businesses say',
-		'Saree shops, clinics and stores — WhatsApp, Instagram and Facebook in one inbox, then a paid order.',
+		'Saree shops, consulting firms and stores — WhatsApp, Instagram and Facebook in one inbox, then a paid order.',
 		'We build for real operations — not vanity metrics. Product capability first, honest pricing, and human handoff when a conversation needs your team.',
 		'How It Works',
 		'How It Works',
@@ -340,7 +340,7 @@ function apply_business_copy($html, $slug = '')
 		'Reply, qualify and convert every WhatsApp lead 24/7',
 		'>Social</span>',
 		'Turn Instagram and Facebook comments into sales conversations',
-		'Real Estate',
+		'Consulting Services',
 		'Ecommerce',
 		'Healthcare',
 		'Education',
@@ -420,7 +420,7 @@ function apply_business_copy($html, $slug = '')
 		'WhatsApp AI now replies after hours, qualifies interest, and books follow-ups so the team only speaks to ready buyers.',
 		'WhatsApp automation',
 		'Saree boutique',
-		'Clinic operations',
+		'Consulting operations',
 		'Store operations',
 		'Multi-channel teams',
 		'Getting started',
@@ -464,7 +464,7 @@ function apply_business_copy($html, $slug = '')
 		'<a class="slider-btn capa__more tp-el-btn"  href="'.htmlspecialchars(base_url('service'), ENT_QUOTES, 'UTF-8').'">',
 		'<a class="cmn--btn border__btn" href="'.htmlspecialchars(base_url('contact'), ENT_QUOTES, 'UTF-8').'">',
 		'>See all services</span>',
-		'Saree shops, clinics, stores and social sellers — tap a story to see the matching service.',
+		'Saree shops, consulting firms, stores and social sellers — tap a story to see the matching service.',
 	);
 
 	$html = str_replace($more_search, $more_replace, $html);
@@ -862,7 +862,7 @@ function site_business_story_html()
 		.'</ol>'
 		.'<div class="site-story-who">'
 		.'<article class="is-on"><h4>Saree &amp; boutiques</h4><p>Catalogue, colour, pay link, invoice.</p></article>'
-		.'<article class="is-on"><h4>Clinics &amp; services</h4><p>FAQs, slot booking, reminders.</p></article>'
+		.'<article class="is-on"><h4>Consulting &amp; services</h4><p>FAQs, meeting booking, reminders.</p></article>'
 		.'<article class="is-on"><h4>Stores &amp; D2C</h4><p>Stock, cart, payment, CRM.</p></article>'
 		.'<article class="is-on"><h4>Any WhatsApp shop</h4><p>If they message you, the AI can sell.</p></article>'
 		.'</div>'
@@ -1089,9 +1089,9 @@ function site_use_cases()
 		),
 		array(
 			'img'   => $img.'capabi2.jpg',
-			'tag'   => 'Clinics',
-			'title' => 'Clinics & service bookings',
-			'text'  => 'FAQs, slot booking and reminders so the front desk is not the bottleneck.',
+			'tag'   => 'Consulting',
+			'title' => 'Consulting & service bookings',
+			'text'  => 'FAQs, discovery call booking and reminders so your team focuses on high-value clients.',
 			'slug'  => 'data-stored',
 		),
 		array(
@@ -1228,9 +1228,9 @@ function site_default_testimonials()
 			'rating'       => 5,
 		),
 		array(
-			'author_name'  => 'City Care Clinic',
-			'author_title' => 'Clinic · Chennai',
-			'quote'        => 'Patients book slots on WhatsApp. Reminders go out automatically. The front desk is not the bottleneck anymore.',
+			'author_name'  => 'Apex Advisory',
+			'author_title' => 'Consulting Firm · Chennai',
+			'quote'        => 'Clients book consultation calls on WhatsApp. Reminders go out automatically. Our calendar stays organized seamlessly.',
 			'rating'       => 5,
 		),
 		array(
@@ -1294,7 +1294,7 @@ function site_testimonial_is_platform($row)
 	$quote = strtolower((string) (isset($row['quote']) ? $row['quote'] : ''));
 	$hints = array(
 		'whatsapp', 'instagram', 'facebook', 'inbox', 'crm', 'pay link',
-		'after-hours', 'after hours', 'book slot', 'clinic', 'lead',
+		'after-hours', 'after hours', 'book slot', 'consulting', 'lead',
 		'automation', 'talkaipilot',
 	);
 	foreach ($hints as $hint) {
@@ -1358,7 +1358,7 @@ function site_testimonials_html()
 		.'<div class="site-quotes-inner">'
 		.'<span class="site-quotes-kicker">Testimonials</span>'
 		.'<h2>What businesses say</h2>'
-		.'<p class="site-quotes-lead">Saree shops, clinics and stores using WhatsApp, Instagram and Facebook in one inbox.</p>'
+		.'<p class="site-quotes-lead">Saree shops, consulting firms and stores using WhatsApp, Instagram and Facebook in one inbox.</p>'
 		.'<div class="site-quotes-grid">';
 
 	foreach ($items as $item) {
@@ -1464,7 +1464,7 @@ function site_about_content_html()
 		.'</div></div></div>'
 		.'<div class="site-page-grid">'
 		.'<article class="site-page-card"><h3>Saree &amp; boutiques</h3><p>Catalogue, colour, size, pay link and invoice on WhatsApp.</p></article>'
-		.'<article class="site-page-card"><h3>Clinics &amp; services</h3><p>FAQs, slot booking, reminders and a clean handoff to staff.</p></article>'
+		.'<article class="site-page-card"><h3>Consulting &amp; services</h3><p>FAQs, meeting booking, reminders and a clean handoff to staff.</p></article>'
 		.'<article class="site-page-card"><h3>Stores &amp; D2C</h3><p>Stock, cart, payment and CRM update from one conversation.</p></article>'
 		.'<article class="site-page-card"><h3>Any WhatsApp shop</h3><p>If customers already message you, the AI can sell for you.</p></article>'
 		.'</div>'
@@ -1546,8 +1546,8 @@ function site_contact_form_html($type = 'contact')
 		.'<div class="site-form-full"><label for="site-business">Business name</label><input id="site-business" name="business" type="text" maxlength="150"></div>'
 		.'<div><label for="site-industry">Industry</label><select id="site-industry" name="industry">'
 		.'<option value="">Select</option>'
-		.'<option>Saree / boutique</option><option>Ecommerce / D2C</option><option>Clinic / services</option>'
-		.'<option>Education</option><option>Real estate</option><option>Other</option>'
+		.'<option>Saree / boutique</option><option>Ecommerce / D2C</option><option>Consulting / services</option>'
+		.'<option>Education</option><option>Travel / Hospitality</option><option>Other</option>'
 		.'</select></div>'
 		.'<div><label for="site-subject">Subject</label><input id="site-subject" name="subject" type="text" maxlength="200"></div>'
 		.'<div class="site-form-full"><label for="site-message">Message</label><textarea id="site-message" name="message" rows="6" required></textarea></div>'
@@ -1717,6 +1717,23 @@ function site_legal_content_html($type)
 			.'<p>We may update this policy. The “Last updated” date at the top will change when we do. Continued use of the site or service after an update means you accept the revised policy.</p>'
 			.'<h2>10. Contact</h2>'
 			.'<p>For privacy questions, use the <a href="'.$contact.'">Contact</a> page. Related terms are in our <a href="'.$terms.'">Terms and Conditions</a>.</p>';
+	} elseif ($type === 'refund') {
+		$body = '<p>Last updated: 4 September 2026</p>'
+			.'<p>This Cancellation and Refund Policy outlines the terms regarding subscription cancellations and refund requests for Talk AI Pilot services.</p>'
+			.'<h2>1. Subscription Cancellation</h2>'
+			.'<p>You may cancel your Talk AI Pilot subscription at any time through your account dashboard or by contacting our team via the <a href="'.$contact.'">Contact page</a>. Upon cancellation, your access remains active until the end of your prepaid billing period.</p>'
+			.'<h2>2. Refund Eligibility</h2>'
+			.'<p>We provide a 7-day money-back guarantee for first-time subscribers on our Starter and Growth monthly plans. If you are not satisfied with the service within the first 7 days of initial subscription, contact support to request a full refund of your base subscription fee.</p>'
+			.'<h2>3. Non-Refundable Items</h2>'
+			.'<ul>'
+			.'<li>Usage-based charges consumed via third parties (including official Meta WhatsApp conversation fees and third-party AI compute) are non-refundable.</li>'
+			.'<li>Bespoke implementation or custom flow engineering services once completed or underway are non-refundable.</li>'
+			.'<li>Recurring subscription renewals after the initial 7-day period are non-refundable.</li>'
+			.'</ul>'
+			.'<h2>4. Refund Processing</h2>'
+			.'<p>Approved refunds are credited to the original payment method (via Razorpay / UPI / Net Banking / Card) within 5 to 7 business days from approval.</p>'
+			.'<h2>5. Contact Support</h2>'
+			.'<p>For billing queries, cancellations or refund assistance, please submit an enquiry on our <a href="'.$contact.'">Contact page</a>.</p>';
 	} else {
 		$body = '<p>Last updated: 4 September 2026</p>'
 			.'<p>These Terms and Conditions govern your use of this website and our WhatsApp, social media, AI chatbot, voice and automation platform. By using the site or starting a plan, you agree to these terms.</p>'
@@ -1732,7 +1749,7 @@ function site_legal_content_html($type)
 			.'<li>Do not use the platform for illegal content, fraud, harassment, or unsolicited bulk messaging.</li>'
 			.'</ul>'
 			.'<h2>4. AI and results</h2>'
-			.'<p>AI replies are generated automatically from the knowledge you provide and the conversation context. Outputs can be incomplete or incorrect. You must review high-value, medical, legal or financial conversations. We do not guarantee leads, conversions, uptime of third-party networks, or specific sales results.</p>'
+			.'<p>AI replies are generated automatically from the knowledge you provide and the conversation context. Outputs can be incomplete or incorrect. You must review high-value, legal or business-critical conversations. We do not guarantee leads, conversions, uptime of third-party networks, or specific sales results.</p>'
 			.'<h2>5. Plans, fees and third-party charges</h2>'
 			.'<p>Starter, Growth and Business plan fees are billed as shown at purchase. WhatsApp/Meta conversation fees, AI usage, voice minutes and payment gateway charges may be billed separately by us or by the provider. Taxes may apply. Unpaid amounts may lead to suspension.</p>'
 			.'<h2>6. Human handoff</h2>'
@@ -1756,7 +1773,13 @@ function site_legal_content_html($type)
 
 function apply_legal_copy($html, $type)
 {
-	$title = ($type === 'privacy') ? 'Privacy Policy' : 'Terms and Conditions';
+	if ($type === 'privacy') {
+		$title = 'Privacy Policy';
+	} elseif ($type === 'refund') {
+		$title = 'Cancellation & Refund Policy';
+	} else {
+		$title = 'Terms and Conditions';
+	}
 
 	return apply_page_chrome($html, $title, site_legal_content_html($type));
 }
@@ -1764,7 +1787,7 @@ function apply_legal_copy($html, $type)
 function render_template($file, $current = 'home', $slug = '')
 {
 	$path = APPPATH.'views'.DIRECTORY_SEPARATOR.'website'.DIRECTORY_SEPARATOR.$file;
-	if (!is_file($path) && in_array($current, array('about', 'contact', 'enquiry', 'terms', 'privacy'), true)) {
+	if (!is_file($path) && in_array($current, array('about', 'contact', 'enquiry', 'terms', 'privacy', 'refund'), true)) {
 		$file = 'service.html';
 		$path = APPPATH.'views'.DIRECTORY_SEPARATOR.'website'.DIRECTORY_SEPARATOR.$file;
 	}

@@ -84,6 +84,9 @@ $route['privacy-policy'] = 'Marketing_site/privacy';
 $route['terms'] = 'Marketing_site/terms';
 $route['terms-and-conditions'] = 'Marketing_site/terms';
 $route['terms-conditions'] = 'Marketing_site/terms';
+$route['refund'] = 'Marketing_site/refund';
+$route['refund-policy'] = 'Marketing_site/refund';
+$route['cancellation-refund'] = 'Marketing_site/refund';
 
 // Additional routes
 $route['listing'] = 'Listing/index';
@@ -207,18 +210,19 @@ $route['translate_uri_dashes'] = FALSE;
 
 // Additional routes
 $route['about'] = 'Marketing_site/about';
-$route['properties'] = 'Home/properties';
-$route['listing'] = 'Listing/index';
+$route['properties'] = 'Marketing_site/solutions';
+$route['listing'] = 'Marketing_site/solutions';
 $route['blog'] = 'Blog/index';
 $route['blog/detail/(:num)'] = 'Blog/detail/$1';
 $route['blog/(:num)'] = 'Blog/detail/$1';
 $route['contact'] = 'Marketing_site/contact';
 $route['contact/submit'] = 'Contact/submit';
-// Property routes - support both slug and ID for backward compatibility
-$route['property/(:any)'] = 'Home/property_detail/$1';
-$route['property-detail/(:any)'] = 'Home/property_detail/$1';
+// Legacy property route fallback
+$route['property/(:any)'] = 'Marketing_site/solutions';
+$route['property-detail/(:any)'] = 'Marketing_site/solutions';
 $route['privacy-policy'] = 'Marketing_site/privacy';
 $route['terms-conditions'] = 'Marketing_site/terms';
+$route['refund-policy'] = 'Marketing_site/refund';
 $route['testimonials'] = 'Home/testimonials';
 
 // Legacy property admin routes removed — use /admin/* ShopKart panel routes (mirrored at end of file)

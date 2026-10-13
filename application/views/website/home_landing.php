@@ -1073,11 +1073,11 @@
           <div class="footer-title">Solutions</div>
           <div class="footer-links">
             <a href="<?= site_url('solutions') ?>">E-Commerce &amp; D2C</a>
-            <a href="<?= site_url('solutions') ?>">Healthcare &amp; Clinics</a>
-            <a href="<?= site_url('solutions') ?>">Real Estate &amp; Housing</a>
+            <a href="<?= site_url('solutions') ?>">Consulting &amp; Services</a>
+            <a href="<?= site_url('solutions') ?>">Travel &amp; Hospitality</a>
             <a href="<?= site_url('solutions') ?>">Coaching &amp; Education</a>
-            <a href="<?= site_url('solutions') ?>">Local Retail &amp; Salons</a>
-            <a href="<?= site_url('solutions') ?>">Multi-Vendor SaaS</a>
+            <a href="<?= site_url('solutions') ?>">Local Retail &amp; Stores</a>
+            <a href="<?= site_url('solutions') ?>">Multi-Branch Enterprise</a>
           </div>
         </div>
 
@@ -1092,6 +1092,7 @@
             <a href="<?= site_url('admin/vendor/login') ?>">Admin &amp; Vendor Login</a>
             <a href="<?= site_url('privacy') ?>">Privacy Policy</a>
             <a href="<?= site_url('terms') ?>">Terms &amp; Conditions</a>
+            <a href="<?= site_url('refund-policy') ?>">Cancellation &amp; Refund Policy</a>
           </div>
         </div>
       </div>
@@ -1211,13 +1212,13 @@
       channelTag: "Facebook Messenger · Page Inquiry",
       avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80",
       latency: "Bot Replied in 0.39s",
-      inbound: "Do you provide dental implants? Can I book a consultation for Saturday?",
-      reply: "Hello Vikram! Yes, CareDental offers German Titanium Implants with a lifetime warranty. We have two open slots this Saturday with Dr. Sharma.",
-      cardTitle: "Dental Implant Consultation (3D Scan Included)",
-      cardPrice: "₹499 (Consultation)",
-      cardThumb: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=240&q=80",
-      btnPrimary: "📅 Confirm 11:30 AM Slot",
-      btnSecondary: "Clinic Directions"
+      inbound: "Do you provide corporate tax advisory? Can I book a discovery call for Saturday?",
+      reply: "Hello Vikram! Yes, Apex Advisory provides comprehensive tax and corporate advisory services. We have two discovery call slots available this Saturday.",
+      cardTitle: "30-Min Discovery Strategy Session",
+      cardPrice: "Free Consultation",
+      cardThumb: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=240&q=80",
+      btnPrimary: "📅 Confirm 11:30 AM Call",
+      btnSecondary: "View Services"
     },
     yt: {
       username: "TechReviewsWithKaran",
@@ -1237,9 +1238,9 @@
       channelTag: "Website Live AI Chat Widget · Bangalore",
       avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80",
       latency: "Bot Replied in 0.22s",
-      inbound: "Can you help me choose the right CRM plan for a 10-person real estate agency?",
-      reply: "Welcome! For a 10-person team managing property leads, our <strong>Growth Plan (₹2,999/mo)</strong> includes unlimited WhatsApp lead routing, automated follow-ups, and lead distribution.",
-      cardTitle: "Talk AI Pilot Growth Tier · Real Estate Stack",
+      inbound: "Can you help me choose the right CRM plan for a 10-person marketing agency?",
+      reply: "Welcome! For a 10-person agency managing client campaigns, our <strong>Growth Plan (₹2,999/mo)</strong> includes unlimited WhatsApp lead routing, automated follow-ups, and team inbox collaboration.",
+      cardTitle: "Talk AI Pilot Growth Tier · Agency Stack",
       cardPrice: "₹2,999/mo",
       cardThumb: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=240&q=80",
       btnPrimary: "Start Free 14-Day Trial",
