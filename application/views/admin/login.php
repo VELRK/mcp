@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <title><?= htmlspecialchars($title ?? 'Sign In') ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <link rel="shortcut icon" href="<?= base_url('assets/aquiry/images/logo-sm.png') ?>">
+  <link rel="icon" type="image/svg+xml" href="<?= base_url('assets/images/logo/favicon.svg') ?>">
+  <link rel="shortcut icon" href="<?= base_url('assets/images/logo/favicon.svg') ?>">
   <link href="<?= base_url('assets/aquiry/css/bootstrap.min.css') ?>" id="bootstrap-style" rel="stylesheet" type="text/css">
   <link href="<?= base_url('assets/aquiry/css/icons.min.css') ?>" rel="stylesheet" type="text/css">
   <link href="<?= base_url('assets/aquiry/css/app.min.css') ?>" id="app-style" rel="stylesheet" type="text/css">
@@ -16,8 +17,8 @@
     <div class="col-xl-5">
       <div class="row justify-content-center align-items-center p-10 min-vh-100 bg-body-secondary position-relative">
         <div class="col-md-7 col-lg-6 col-xl-8 col-xxl-7">
-          <a href="<?= site_url('admin/dashboard') ?>" class="text-nowrap d-block w-100 text-decoration-none">
-            <span class="fw-bold fs-4 text-body">Talk <span class="text-primary">AI</span> Pilot</span>
+          <a href="<?= site_url() ?>" class="text-nowrap d-block w-100 text-decoration-none mb-3">
+            <img src="<?= base_url('assets/images/logo/logo.svg') ?>" alt="Talk AI Pilot" style="height: 44px; width: auto; max-width: 100%;">
           </a>
           <h3 class="mb-3 mt-8">Sign In</h3>
           <p class="text-muted mb-8">Access your admin dashboard to manage the store.</p>

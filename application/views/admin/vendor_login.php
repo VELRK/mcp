@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Vendor Login - Talk AI Pilot</title>
+  <link rel="icon" type="image/svg+xml" href="<?= base_url('assets/images/logo/favicon.svg') ?>">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="<?= base_url('assets/admin/css/admin.css') ?>">
@@ -13,11 +14,13 @@
 <div class="sk-login-wrapper">
   <div class="sk-login-card card p-4 p-md-5">
     <div class="text-center mb-4">
-      <div class="mb-2">
-        <i class="bi bi-shop-window text-primary" style="font-size:2.5rem;"></i>
+      <div class="mb-3">
+        <a href="<?= site_url() ?>" title="Back to Talk AI Pilot Home">
+          <img src="<?= base_url('assets/images/logo/logo.svg') ?>" alt="Talk AI Pilot" style="height: 44px; width: auto; max-width: 100%;">
+        </a>
       </div>
-      <h4 class="fw-bold mb-0">Vendor Login</h4>
-      <p class="text-muted small">Sign in to manage your store</p>
+      <h4 class="fw-bold mb-0">Vendor Portal Login</h4>
+      <p class="text-muted small">Sign in to manage your robotic auto-reply channels & store</p>
     </div>
 
     <?php if ($this->session->flashdata('error')): ?>
