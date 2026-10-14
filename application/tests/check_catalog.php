@@ -23,21 +23,14 @@ function meta_get($url, $tok) {
     return ['code' => $code, 'body' => json_decode($res, true) ?: $res];
 }
 
-echo "=== WABA DETAILS ===\n";
-$waba = meta_get("https://graph.facebook.com/v21.0/{$wabaId}?fields=id,name,currency,business,primary_business_location", $token);
-echo json_encode($waba, JSON_PRETTY_PRINT) . "\n\n";
+echo "=== ME ===\n";
+echo json_encode(meta_get("https://graph.facebook.com/v21.0/me?fields=id,name", $token), JSON_PRETTY_PRINT) . "\n\n";
 
-$businessId = $waba['body']['business']['id'] ?? '';
-if ($businessId !== '') {
-    echo "=== BUSINESS OWNED CATALOGS ({$businessId}) ===\n";
-    $catalogs = meta_get("https://graph.facebook.com/v21.0/{$businessId}/owned_product_catalogs?fields=id,name,product_count,feed_count", $token);
-    echo json_encode($catalogs, JSON_PRETTY_PRINT) . "\n\n";
+echo "=== ME BUSINESSES ===\n";
+echo json_encode(meta_get("https://graph.facebook.com/v21.0/me/businesses?fields=id,name", $token), JSON_PRETTY_PRINT) . "\n\n";
 
-    $clientCatalogs = meta_get("https://graph.facebook.com/v21.0/{$businessId}/client_product_catalogs?fields=id,name,product_count", $token);
-    echo "=== CLIENT CATALOGS ===\n";
-    echo json_encode($clientCatalogs, JSON_PRETTY_PRINT) . "\n\n";
-}
+echo "=== ME PRODUCT CATALOGS ===\n";
+echo json_encode(meta_get("https://graph.facebook.com/v21.0/me/product_catalogs?fields=id,name", $token), JSON_PRETTY_PRINT) . "\n\n";
 
-echo "=== LINKED WABA CATALOGS ===\n";
-$linked = meta_get("https://graph.facebook.com/v21.0/{$wabaId}/product_catalogs", $token);
-echo json_encode($linked, JSON_PRETTY_PRINT) . "\n\n";
+echo "=== WABA COMMERCE SETTINGS ===\n";
+echo json_encode(meta_get("https://graph.facebook.com/v21.0/{$wabaId}/whatsapp_commerce_settings", $token), JSON_PRETTY_PRINT) . "\n\n";
