@@ -161,6 +161,11 @@ function sk_mcp_tool_product_image_path(array $product): string {
     return $thumb;
 }
 
+function sk_mcp_tool_resolve_product_image_url(array $product): string {
+    $path = sk_mcp_tool_product_image_path($product);
+    return $path !== '' ? sk_mcp_tool_whatsapp_image_url($path) : '';
+}
+
 /** Main image, gallery rows, and variant photos, in that order, without duplicates. */
 function sk_mcp_tool_product_gallery_paths(array $product): array {
     $paths = [];

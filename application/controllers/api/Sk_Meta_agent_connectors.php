@@ -803,7 +803,9 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
                 'effective_price' => $salePrice,
                 'discount_pct'    => $discountPct,
                 'savings'         => $savings,
-                'image_url'       => sk_mcp_tool_resolve_product_image_url($p),
+                'image_url'       => function_exists('sk_mcp_tool_resolve_product_image_url')
+                    ? sk_mcp_tool_resolve_product_image_url($p)
+                    : (function_exists('sk_mcp_tool_whatsapp_image_url') && !empty($p['thumbnail']) ? sk_mcp_tool_whatsapp_image_url((string)$p['thumbnail']) : (string)($p['thumbnail'] ?? '')),
             ];
             $items[] = $item;
 

@@ -21,6 +21,14 @@ if ($mysqli->connect_error) {
     die("DB connection failed: " . $mysqli->connect_error . "\n");
 }
 
+// Load environment if available
+if (is_file(__DIR__ . '/../helpers/sk_dotenv_helper.php')) {
+    require_once __DIR__ . '/../helpers/sk_dotenv_helper.php';
+    if (function_exists('sk_dotenv_load')) {
+        sk_dotenv_load(dirname(__DIR__, 2) . '/.env');
+    }
+}
+
 // 1. Resolve active WhatsApp account
 $res = $mysqli->query("SELECT phone_number_id, vendor_id, status FROM vendor_whatsapp_accounts WHERE status = 'active' LIMIT 1");
 $account = $res ? $res->fetch_assoc() : null;
@@ -31,10 +39,27 @@ if (!$account) {
 $phoneNumberId = $account['phone_number_id'] ?? '999888777666';
 $vendorId = (int)($account['vendor_id'] ?? 1);
 
-$baseUrl = 'http://127.0.0.1:8088/shopkart-api/meta-agent/connectors/' . $phoneNumberId;
-$apiKey = 'test_meta_connector_key_1234567890';
+$envKey = function_exists('sk_env') ? sk_env('META_BA_CONNECTOR_API_KEY', 'test_meta_connector_key_1234567890') : 'test_meta_connector_key_1234567890';
+$envBase = function_exists('sk_env') ? sk_env('META_BA_CONNECTOR_BASE_URL', '') : '';
 
-function http_req($method, $url, $data = null, $token = 'test_meta_connector_key_1234567890') {
+$cliBase = $argv[1] ?? '';
+$cliKey = $argv[2] ?? '';
+
+if ($cliBase !== '') {
+    $baseUrl = rtrim($cliBase, '/');
+} elseif ($envBase !== '') {
+    $baseUrl = rtrim($envBase, '/') . '/shopkart-api/meta-agent/connectors/' . $phoneNumberId;
+} else {
+    $baseUrl = 'http://127.0.0.1:8088/shopkart-api/meta-agent/connectors/' . $phoneNumberId;
+}
+
+$apiKey = $cliKey !== '' ? $cliKey : $envKey;
+
+function http_req($method, $url, $data = null, $token = null) {
+    global $apiKey;
+    if ($token === null) {
+        $token = $apiKey;
+    }
     $ch = curl_init($url);
     $headers = [
         'Accept: application/json',
@@ -51,6 +76,7 @@ function http_req($method, $url, $data = null, $token = 'test_meta_connector_key
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER     => $headers,
         CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
     ]);
     $res = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -156,7 +182,8 @@ echo "\n--- TEST 7: Security & Tenant Authorization ---\n";
 $res7a = http_req('GET', $baseUrl . '/get_main_menu', null, 'wrong-api-key');
 test_assert($res7a['code'] === 403, "Invalid API key rejected with 403");
 
-$res7b = http_req('GET', 'http://127.0.0.1:8088/shopkart-api/meta-agent/connectors/000000000000/get_main_menu');
+$prefixBase = substr($baseUrl, 0, (int)strrpos($baseUrl, '/'));
+$res7b = http_req('GET', $prefixBase . '/000000000000/get_main_menu');
 test_assert($res7b['code'] === 404, "Unknown phone number rejected with 404");
 
 echo "\n========================================================\n";
