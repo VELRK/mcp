@@ -16,8 +16,14 @@ while ($r = $res->fetch_assoc()) {
     echo sprintf("[%d] %s | #%s | %s | %s | %s | %s\n", $r['id'], $r['created_at'], $r['conversation_id'], $r['direction'], $r['type'], $r['status'], $txt);
 }
 
+echo "\n=== CONVERSATION #4 ===\n";
+$cres = $mysqli->query("SELECT * FROM wa_cloud_conversations WHERE id = 4");
+if ($cres && $row = $cres->fetch_assoc()) {
+    print_r($row);
+}
+
 echo "\n=== RECENT ORDERS ===\n";
-$ores = $mysqli->query("SELECT id, order_number, user_id, total_amount, payment_method, payment_status, status, created_at FROM orders ORDER BY id DESC LIMIT 5");
-while ($o = $ores->fetch_assoc()) {
-    echo sprintf("#%d (%s) - ₹%s - %s - %s - %s | %s\n", $o['id'], $o['order_number'], $o['total_amount'], $o['payment_method'], $o['payment_status'], $o['status'], $o['created_at']);
+$ores = $mysqli->query("SELECT * FROM orders ORDER BY id DESC LIMIT 5");
+while ($ores && $o = $ores->fetch_assoc()) {
+    print_r($o);
 }
