@@ -8,12 +8,12 @@ if ($mysqli->connect_error) {
     die("DB connection failed: " . $mysqli->connect_error . "\n");
 }
 
-$res = $mysqli->query("SELECT id, sender, recipient, message_type, message_text, created_at FROM wa_cloud_messages ORDER BY id DESC LIMIT 20");
+$res = $mysqli->query("SELECT id, conversation_id, direction, type, body, status, created_at FROM wa_cloud_messages ORDER BY id DESC LIMIT 20");
 echo "=== RECENT WA CLOUD MESSAGES ===\n";
 while ($r = $res->fetch_assoc()) {
-    $txt = str_replace(["\r", "\n"], ' ', $r['message_text']);
+    $txt = str_replace(["\r", "\n"], ' ', $r['body'] ?? '');
     if (mb_strlen($txt) > 80) $txt = mb_substr($txt, 0, 77) . '...';
-    echo sprintf("[%d] %s | %s -> %s | %s | %s\n", $r['id'], $r['created_at'], $r['sender'], $r['recipient'], $r['message_type'], $txt);
+    echo sprintf("[%d] %s | #%s | %s | %s | %s | %s\n", $r['id'], $r['created_at'], $r['conversation_id'], $r['direction'], $r['type'], $r['status'], $txt);
 }
 
 echo "\n=== RECENT ORDERS ===\n";
