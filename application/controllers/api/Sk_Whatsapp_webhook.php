@@ -1039,7 +1039,10 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $caption = "🥻 *{$pName}*\n{$priceDisplay}\n{$specStr}📦 Stock: In Stock (Ready to dispatch)\n🚚 Delivery: FREE Delivery across India";
 
         $imgPath = function_exists('sk_mcp_tool_product_image_path') ? sk_mcp_tool_product_image_path($prod) : (string)($prod['thumbnail'] ?? '');
-        $imgUrl = function_exists('sk_mcp_tool_whatsapp_image_url') && $imgPath !== '' ? sk_mcp_tool_whatsapp_image_url($imgPath) : '';
+        $imgUrl = function_exists('sk_mcp_tool_whatsapp_image_url') ? sk_mcp_tool_whatsapp_image_url($imgPath, $prod) : '';
+        if ($imgUrl === '') {
+            $imgUrl = 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=600&q=80';
+        }
 
         // Fetch active variants for this product
         $variants = $this->db->where('product_id', $prodId)
@@ -1068,63 +1071,67 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                   . "👉 *Select quantity below to order:*";
 
         $cardSent = false;
-        if ($imgUrl !== '') {
-            $interactiveCard = [
-                'type'   => 'button',
-                'header' => [
-                    'type'  => 'image',
-                    'image' => ['link' => $imgUrl],
-                ],
-                'body'   => [
-                    'text' => $cardText,
-                ],
-                'footer' => [
-                    'text' => '100% Authentic Handloom Quality',
-                ],
-                'action' => [
-                    'buttons' => [
-                        [
-                            'type'  => 'reply',
-                            'reply' => [
-                                'id'    => "qty_1_{$prodId}_{$defaultVarId}",
-                                'title' => '🛒 Buy 1 Pc',
-                            ],
+        $interactiveCard = [
+            'type'   => 'button',
+            'header' => [
+                'type'  => 'image',
+                'image' => ['link' => $imgUrl],
+            ],
+            'body'   => [
+                'text' => $cardText,
+            ],
+            'footer' => [
+                'text' => '100% Authentic Handloom Quality',
+            ],
+            'action' => [
+                'buttons' => [
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => "qty_1_{$prodId}_{$defaultVarId}",
+                            'title' => '🛒 Buy 1 Pc',
                         ],
-                        [
-                            'type'  => 'reply',
-                            'reply' => [
-                                'id'    => "qty_2_{$prodId}_{$defaultVarId}",
-                                'title' => '🛍️ Buy 2 Pcs',
-                            ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => "qty_2_{$prodId}_{$defaultVarId}",
+                            'title' => '🛍️ Buy 2 Pcs',
                         ],
-                        [
-                            'type'  => 'reply',
-                            'reply' => [
-                                'id'    => "more_qty_{$prodId}_{$defaultVarId}",
-                                'title' => count($variants) > 1 ? '✨ Styles / Qty' : '🔢 More Qty',
-                            ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => "more_qty_{$prodId}_{$defaultVarId}",
+                            'title' => count($variants) > 1 ? '✨ Styles / Qty' : '🔢 More Qty',
                         ],
                     ],
                 ],
-            ];
-            $res = $waCloud->send_interactive($peer, $interactiveCard);
-            if (!empty($res['success'])) {
-                $cardSent = true;
-            }
+            ],
+        ];
+        $res = $waCloud->send_interactive($peer, $interactiveCard);
+        if (!empty($res['success'])) {
+            $cardSent = true;
         }
 
         if (!$cardSent) {
-            if ($imgUrl !== '') {
-                $waCloud->send_media($peer, 'image', $imgUrl, $caption);
+            // Fallback: send interactive button card with text header so buttons are never lost!
+            $textButtonCard = $interactiveCard;
+            $textButtonCard['header'] = [
+                'type' => 'text',
+                'text' => function_exists('mb_substr') ? mb_substr("🥻 {$pName}", 0, 60) : "🥻 {$pName}",
+            ];
+            $tRes = $waCloud->send_interactive($peer, $textButtonCard);
+            if (!empty($tRes['success'])) {
+                $cardSent = true;
             } else {
                 $waCloud->send_text($peer, $caption);
-            }
-
-            if (count($variants) > 1) {
-                $this->_send_variant_selector($prod, $variants, $peer, $waCloud, $shopName);
-            } else {
-                $defaultVar = !empty($variants) ? $variants[0] : null;
-                $this->_send_quantity_selector($prod, $defaultVar, $peer, $vendorId, $waCloud, $shopName, $conv);
+                if (count($variants) > 1) {
+                    $this->_send_variant_selector($prod, $variants, $peer, $waCloud, $shopName);
+                } else {
+                    $defaultVar = !empty($variants) ? $variants[0] : null;
+                    $this->_send_quantity_selector($prod, $defaultVar, $peer, $vendorId, $waCloud, $shopName, $conv);
+                }
             }
         }
     }
@@ -1508,7 +1515,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'text' => 'Free delivery across India 🚚',
             ],
             'action' => [
-                'button'   => '🛍️ Open Saree Catalog',
+                'button'   => '🛍️ Saree Catalog',
                 'sections' => $sections,
             ],
         ];
