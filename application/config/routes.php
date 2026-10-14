@@ -704,6 +704,8 @@ $route['shopkart-api/meta-agent/connectors/(:any)/remove_cart_item/(:any)']['DEL
 $route['shopkart-api/meta-agent/connectors/(:any)/remove_cart_item/(:any)']['POST']   = 'api/Sk_Meta_agent_connectors/remove_cart_item/$1/$2';
 $route['shopkart-api/meta-agent/connectors/(:any)/apply_discount_code']['POST']  = 'api/Sk_Meta_agent_connectors/apply_discount_code/$1';
 
+$route['shopkart-api/meta-agent/connectors/(:any)/get_categories']['GET']          = 'api/Sk_Meta_agent_connectors/get_categories/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_categories']['POST']         = 'api/Sk_Meta_agent_connectors/get_categories/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/search_products']['POST']       = 'api/Sk_Meta_agent_connectors/search_products/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/identify_customer']['POST']     = 'api/Sk_Meta_agent_connectors/identify_customer/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/create_customer']['POST']       = 'api/Sk_Meta_agent_connectors/create_customer/$1';

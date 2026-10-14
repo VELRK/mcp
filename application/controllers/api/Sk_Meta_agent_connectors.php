@@ -529,6 +529,74 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
     public function get_order_status($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_order_status'); }
     public function get_delivery_status($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_delivery_status'); }
 
+    public function get_categories($phoneNumberId = '') {
+        $this->_require_connector_auth();
+        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
+        $vendorId = (int)$tenant['vendor_id'];
+
+        $sql = "SELECT c.id, c.name, COUNT(p.id) as product_count 
+                FROM categories c 
+                INNER JOIN products p ON p.category_id = c.id 
+                WHERE p.vendor_id = ? AND p.status = 'active' 
+                GROUP BY c.id HAVING product_count > 0 
+                ORDER BY c.name ASC";
+        $rows = $this->db->query($sql, [$vendorId])->result_array();
+
+        if (empty($rows)) {
+            $sqlAll = "SELECT id, name FROM categories ORDER BY name ASC LIMIT 10";
+            $rows = $this->db->query($sqlAll)->result_array();
+        }
+
+        $icons = [
+            'silk'     => '🥻',
+            'cotton'   => '🧵',
+            'designer' => '✨',
+            'wedding'  => '👰',
+            'bridal'   => '👰',
+            'casual'   => '🌸',
+            'party'    => '🎉',
+            'men'      => '👕',
+            'women'    => '👗',
+            'footwear' => '👟',
+            'bag'      => '👜',
+        ];
+
+        $categories = [];
+        $lines = [];
+        foreach ($rows as $r) {
+            $name = trim((string)$r['name']);
+            if ($name === '') continue;
+            $lower = strtolower($name);
+            $icon = '🛍️';
+            foreach ($icons as $key => $ic) {
+                if (strpos($lower, $key) !== false) {
+                    $icon = $ic;
+                    break;
+                }
+            }
+            $catItem = [
+                'id'            => (int)($r['id'] ?? 0),
+                'name'          => $name,
+                'icon'          => $icon,
+                'display'       => "{$icon} {$name}",
+                'product_count' => (int)($r['product_count'] ?? 0),
+            ];
+            $categories[] = $catItem;
+            $lines[] = "{$icon} {$name}";
+        }
+
+        $listFormatted = implode("\n", $lines);
+        $message = "What are you looking for? 😊\n" . $listFormatted;
+        $summary = "Available categories for this seller:\n{$listFormatted}\nIn your WhatsApp message, ask: 'What are you looking for? 😊' and list these exact categories. Do not invent categories that are not on this list.";
+
+        $this->success([
+            'categories' => $categories,
+            'count'      => count($categories),
+            'message'    => $message,
+            'summary'    => $summary,
+        ], 'Categories retrieved.');
+    }
+
     public function search_products($phoneNumberId = '') {
         $this->_require_connector_auth();
         $tenant = $this->_resolve_tenant((string)$phoneNumberId);

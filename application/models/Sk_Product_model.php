@@ -78,6 +78,7 @@ class Sk_Product_model extends CI_Model {
             $this->db->group_start()
                      ->like('p.name', $rawSearch)
                      ->or_like('p.sku', $rawSearch)
+                     ->or_like('c.name', $rawSearch)
                      ->or_like('p.tags', $rawSearch)
                      ->or_like('p.saree_type', $rawSearch)
                      ->or_like('p.fabric', $rawSearch)
@@ -87,6 +88,7 @@ class Sk_Product_model extends CI_Model {
                 foreach ($words as $w) {
                     if (strlen($w) < 3) continue;
                     $this->db->or_like('p.name', $w)
+                             ->or_like('c.name', $w)
                              ->or_like('p.tags', $w)
                              ->or_like('p.saree_type', $w)
                              ->or_like('p.fabric', $w)

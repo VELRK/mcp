@@ -89,9 +89,9 @@ assert_true(isset($cfg['api_version']) && $cfg['api_version'] === '2.0.0', 'API 
 assert_true(sk_meta_ba_connector_auth_ok($cfg['connector_api_key']) === true, 'connector auth accepts configured key');
 assert_true(sk_meta_ba_connector_auth_ok('wrong-key') === false, 'connector auth rejects wrong key');
 assert_true(sk_meta_ba_connector_auth_ok('') === false, 'connector auth rejects empty key');
-
 $tools = sk_meta_ba_connector_tool_defs('PHONE123');
 $names = array_map(static function ($t) { return $t['name']; }, $tools);
+assert_true(in_array('get_categories', $names, true), 'tool get_categories defined');
 assert_true(in_array('search_products', $names, true), 'tool search_products defined');
 assert_true(in_array('create_order', $names, true), 'tool create_order defined');
 assert_true(in_array('handover_to_human', $names, true), 'tool handover_to_human defined');
