@@ -6,15 +6,20 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  */
 class Shopfront extends CI_Controller {
 
+    public function __construct() {
+        parent::__construct();
+        $this->load->database();
+        $this->load->helper(['url', 'sk_mcp_tool']);
+        $this->load->model('Sk_Product_model');
+    }
+
     public function product($id = 0) {
         $id = (int)$id;
-        $this->load->model('Sk_Product_model');
         $product = $id > 0 ? $this->Sk_Product_model->get_by_id($id) : null;
         if (!$product || strtolower(trim((string)($product['status'] ?? ''))) !== 'active') {
             show_404();
             return;
         }
-        $this->load->helper('sk_mcp_tool');
 
         // Main image
         $image = '';
@@ -94,14 +99,24 @@ class Shopfront extends CI_Controller {
 
         // Vendor & WhatsApp click-to-chat
         $vendorId = (int)($product['vendor_id'] ?? 0);
-        $vendorRow = $vendorId > 0 ? $this->db->where('id', $vendorId)->get('vendors')->row_array() : null;
-        $storeRow = $vendorId > 0 ? $this->db->where('vendor_id', $vendorId)->get('vendor_stores')->row_array() : null;
-        $shopName = trim((string)($storeRow['store_name'] ?? $vendorRow['business_name'] ?? $vendorRow['name'] ?? 'Talk AI Pilot Shop'));
+        $shopName = 'Talk AI Pilot Shop';
+        if ($vendorId > 0 && $this->db->table_exists('vendors')) {
+            $vendorRow = $this->db->where('id', $vendorId)->get('vendors')->row_array();
+            if ($vendorRow) {
+                $shopName = trim((string)($vendorRow['business_name'] ?? $vendorRow['name'] ?? $shopName));
+            }
+        }
 
-        $waRow = $vendorId > 0
-            ? $this->db->where('vendor_id', $vendorId)->where('status', 'active')->order_by('is_default', 'DESC')->get('vendor_whatsapp_accounts')->row_array()
-            : null;
-        $waPhone = preg_replace('/\D+/', '', (string)($waRow['display_phone'] ?? $waRow['phone_number_id'] ?? ''));
+        $waPhone = '';
+        if ($this->db->table_exists('vendor_whatsapp_accounts')) {
+            if ($vendorId > 0) {
+                $this->db->where('vendor_id', $vendorId);
+            }
+            $waRow = $this->db->where('status', 'active')->order_by('is_default', 'DESC')->get('vendor_whatsapp_accounts')->row_array();
+            if ($waRow) {
+                $waPhone = preg_replace('/\D+/', '', (string)($waRow['display_phone'] ?? $waRow['phone_number_id'] ?? ''));
+            }
+        }
 
         $this->load->view('shop/product_card', [
             'id'          => $id,
