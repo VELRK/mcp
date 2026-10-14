@@ -15,8 +15,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
     public function __construct() {
         parent::__construct();
-        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp', 'sk_whatsapp_mcp', 'sk_meta_business_agent']);
+        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp', 'sk_whatsapp_mcp', 'sk_meta_business_agent', 'sk_mcp_tool']);
         $this->load->model(['Sk_Whatsapp_cloud_model', 'Sk_Admin_model', 'Sk_Vendor_meta_agent_model']);
+        $this->load->library('Whatsapp_cloud');
         sk_wa_cloud_ensure_schema();
         $this->Sk_Vendor_meta_agent_model->ensure_schema();
     }
@@ -334,8 +335,12 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             } elseif ($direction === 'out' && $this->_is_bizai_echo($raw, $m)) {
                 $this->Sk_Vendor_meta_agent_model->set_conversation_owner((int)$conv['id'], 'meta_agent', 'message_echo');
             }
-            if ($direction === 'in' && $vendorId > 0 && !empty($conv['handoff_at'])) {
-                sk_whatsapp_notify_handoff($vendorId, $peer, $body, $names[$peer] ?? '', true);
+            if ($direction === 'in' && $vendorId > 0) {
+                if (!empty($conv['handoff_at'])) {
+                    sk_whatsapp_notify_handoff($vendorId, $peer, $body, $names[$peer] ?? '', true);
+                } else {
+                    $this->_handle_inbound_customer_message($raw, $m, $conv, $peer, $body, $vendorId, $phoneNumberId, $settings);
+                }
             }
         }
     }
@@ -387,5 +392,372 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Handle incoming customer messages when the App is the active thread handler on WhatsApp.
+     * Implements the 5-option interactive menu, button actions, and auto-releases thread to agent.
+     */
+    private function _handle_inbound_customer_message(
+        array $raw,
+        array $m,
+        array $conv,
+        string $peer,
+        string $body,
+        int $vendorId,
+        string $phoneNumberId,
+        array $settings
+    ): void {
+        if ($peer === '' || $vendorId <= 0) {
+            return;
+        }
+
+        // Initialize Cloud API client
+        $resolved = $settings;
+        $resolved['vendor_id'] = $vendorId;
+        if ($phoneNumberId !== '') {
+            $resolved['_wa_phone_number_id'] = $phoneNumberId;
+        }
+        $waCloud = new Whatsapp_cloud($resolved);
+
+        $shopName = 'Vel Saree';
+        if (function_exists('sk_whatsapp_shop_name')) {
+            $biz = sk_whatsapp_shop_name($vendorId);
+            if ($biz !== '' && strcasecmp($biz, 'Shop') !== 0) {
+                $shopName = $biz;
+            }
+        }
+
+        // Extract interactive list/button selection ID if present
+        $interactiveId = '';
+        if (!empty($raw['interactive']['list_reply']['id'])) {
+            $interactiveId = trim((string)$raw['interactive']['list_reply']['id']);
+        } elseif (!empty($raw['interactive']['button_reply']['id'])) {
+            $interactiveId = trim((string)$raw['interactive']['button_reply']['id']);
+        }
+
+        $trimBody = trim(mb_strtolower($body));
+
+        // 1. GREETING / MAIN MENU:
+        $isGreeting = preg_match('/^(hi|hai|hello|hey|vanakkam|menu|main menu|start|help|வணக்கம்)(\s+(there|team|vel|bro|sir|mam|madam|all))?[\s!.,?]*$/iu', $trimBody)
+            || in_array($interactiveId, ['main_menu', 'menu'], true);
+
+        if ($isGreeting) {
+            $headerText = function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : substr($shopName, 0, 60);
+            $interactive = [
+                'type'   => 'list',
+                'header' => [
+                    'type' => 'text',
+                    'text' => $headerText,
+                ],
+                'body'   => [
+                    'text' => "Welcome to {$shopName}! 👋\nHow can I help you today? Please choose an option below:",
+                ],
+                'footer' => [
+                    'text' => 'Select an option to proceed',
+                ],
+                'action' => [
+                    'button'   => 'View Menu',
+                    'sections' => [
+                        [
+                            'title' => 'Main Menu',
+                            'rows'  => [
+                                [
+                                    'id'          => 'browse_products',
+                                    'title'       => '🛍️ Browse products',
+                                    'description' => 'Explore collections & categories',
+                                ],
+                                [
+                                    'id'          => 'offers_deals',
+                                    'title'       => '🏷️ Offers & Deals',
+                                    'description' => "Today's discounts & promo codes",
+                                ],
+                                [
+                                    'id'          => 'search_product',
+                                    'title'       => '🔎 Search a product',
+                                    'description' => 'Find by name, style, or color',
+                                ],
+                                [
+                                    'id'          => 'track_order',
+                                    'title'       => '📦 Track my order',
+                                    'description' => 'Check order & shipment status',
+                                ],
+                                [
+                                    'id'          => 'talk_to_team',
+                                    'title'       => '🙋 Talk to our team',
+                                    'description' => 'Chat with our support team',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ];
+            $waCloud->send_interactive($peer, $interactive);
+            return;
+        }
+
+        // 2. BUTTON 1 — 🛍️ BROWSE PRODUCTS / CATEGORIES:
+        if ($interactiveId === 'browse_products' || $trimBody === '1' || preg_match('/^(browse|categories|category|collections)$/iu', $trimBody)) {
+            $sql = "SELECT c.id, c.name, COUNT(p.id) as product_count 
+                    FROM categories c 
+                    INNER JOIN products p ON p.category_id = c.id 
+                    WHERE p.vendor_id = ? AND p.status = 'active' 
+                    GROUP BY c.id HAVING product_count > 0 
+                    ORDER BY c.name ASC";
+            $rows = $this->db->query($sql, [$vendorId])->result_array();
+            if (empty($rows)) {
+                $rows = $this->db->query("SELECT id, name FROM categories ORDER BY name ASC LIMIT 10")->result_array();
+            }
+
+            $icons = ['🌸', '🧵', '✨', '🥻', '👰', '🪡', '💎', '🎨', '🌟', '👗'];
+            $secRows = [];
+            foreach (array_slice($rows, 0, 10) as $i => $cat) {
+                $icon = $icons[$i % count($icons)];
+                $name = trim((string)($cat['name'] ?? 'Collection'));
+                $cnt = (int)($cat['product_count'] ?? 0);
+                $secRows[] = [
+                    'id'          => 'cat_' . $cat['id'],
+                    'title'       => function_exists('mb_substr') ? mb_substr("{$icon} {$name}", 0, 24) : substr("{$icon} {$name}", 0, 24),
+                    'description' => $cnt > 0 ? "{$cnt} items available" : "View collection",
+                ];
+            }
+
+            $interactive = [
+                'type'   => 'list',
+                'header' => [
+                    'type' => 'text',
+                    'text' => function_exists('mb_substr') ? mb_substr("{$shopName} Categories", 0, 60) : substr("{$shopName} Categories", 0, 60),
+                ],
+                'body'   => [
+                    'text' => "What would you like to shop for? 😊\nTap below to explore our categories:",
+                ],
+                'footer' => [
+                    'text' => 'Select a category to view items',
+                ],
+                'action' => [
+                    'button'   => 'View Categories',
+                    'sections' => [
+                        [
+                            'title' => 'Product Categories',
+                            'rows'  => $secRows,
+                        ],
+                    ],
+                ],
+            ];
+            $waCloud->send_interactive($peer, $interactive);
+            return;
+        }
+
+        // 3. BUTTON 2 — 🏷️ OFFERS & DEALS:
+        if ($interactiveId === 'offers_deals' || $trimBody === '2' || preg_match('/^(offers|deals|discounts|coupons)$/iu', $trimBody)) {
+            $now = date('Y-m-d H:i:s');
+            $sql = "SELECT p.*, c.name as category_name 
+                    FROM products p 
+                    LEFT JOIN categories c ON c.id = p.category_id 
+                    WHERE p.vendor_id = ? AND p.status = 'active' 
+                      AND p.sale_price IS NOT NULL AND p.sale_price > 0 AND p.sale_price < p.price
+                      AND (p.sale_start_at IS NULL OR p.sale_start_at <= ?)
+                      AND (p.sale_end_at IS NULL OR p.sale_end_at >= ?)
+                    ORDER BY (p.price - p.sale_price) DESC 
+                    LIMIT 8";
+            $discounted = $this->db->query($sql, [$vendorId, $now, $now])->result_array();
+            if (empty($discounted)) {
+                $sqlHot = "SELECT p.*, c.name as category_name 
+                           FROM products p 
+                           LEFT JOIN categories c ON c.id = p.category_id 
+                           WHERE p.vendor_id = ? AND p.status = 'active' 
+                             AND (p.hot_sale = 1 OR p.special_product = 1 OR p.featured = 1)
+                           ORDER BY p.id DESC LIMIT 5";
+                $discounted = $this->db->query($sqlHot, [$vendorId])->result_array();
+            }
+
+            if (!empty($discounted)) {
+                $rows = [];
+                foreach ($discounted as $idx => $p) {
+                    $origPrice = (float)($p['price'] ?? 0);
+                    $salePrice = isset($p['sale_price']) && (float)$p['sale_price'] > 0 ? (float)$p['sale_price'] : $origPrice;
+                    $savings = max(0, $origPrice - $salePrice);
+                    $pct = $origPrice > 0 && $savings > 0 ? round(($savings / $origPrice) * 100) : 0;
+                    $pName = trim((string)($p['name'] ?? 'Product'));
+                    $priceStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($salePrice) : "₹{$salePrice}";
+                    $origStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($origPrice) : "₹{$origPrice}";
+
+                    $desc = $pct > 0 ? "{$priceStr} (Was {$origStr}, {$pct}% OFF)" : $priceStr;
+                    $rows[] = [
+                        'id'          => (string)($p['sku'] ?? ('prod_' . $p['id'])),
+                        'title'       => function_exists('mb_substr') ? mb_substr($pName, 0, 24) : substr($pName, 0, 24),
+                        'description' => function_exists('mb_substr') ? mb_substr($desc, 0, 72) : substr($desc, 0, 72),
+                    ];
+                }
+
+                $interactive = [
+                    'type'   => 'list',
+                    'header' => [
+                        'type' => 'text',
+                        'text' => function_exists('mb_substr') ? mb_substr("{$shopName} Offers", 0, 60) : substr("{$shopName} Offers", 0, 60),
+                    ],
+                    'body'   => [
+                        'text' => "🎉 Here are today's special discounts and offers at {$shopName}!\nTap below to explore deals:",
+                    ],
+                    'footer' => [
+                        'text' => 'Limited time offers',
+                    ],
+                    'action' => [
+                        'button'   => 'View Offers',
+                        'sections' => [
+                            [
+                                'title' => "Today's Deals",
+                                'rows'  => array_slice($rows, 0, 10),
+                            ],
+                        ],
+                    ],
+                ];
+                $waCloud->send_interactive($peer, $interactive);
+            } else {
+                $waCloud->send_text($peer, "No active offers right now 😊 Would you like to browse our products?\nReply with *1* to browse or send a saree name to search!");
+            }
+            return;
+        }
+
+        // 4. BUTTON 3 — 🔎 SEARCH A PRODUCT:
+        if ($interactiveId === 'search_product' || $trimBody === '3') {
+            $waCloud->send_text($peer, "What product or saree are you looking for? 🔎\n(You can share name, color, style, or fabric like *Kanjivaram*, *Cotton*, *Crepe*, or *Red*)");
+            return;
+        }
+
+        // 5. BUTTON 4 — 📦 TRACK MY ORDER:
+        if ($interactiveId === 'track_order' || $trimBody === '4' || preg_match('/^(track|track order|where is my order)$/iu', $trimBody)) {
+            $digits = preg_replace('/\D+/', '', $peer);
+            $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+            $this->db->select('o.*')
+                     ->from('orders o')
+                     ->group_start()
+                       ->like('o.shipping_phone', $last10)
+                       ->or_like('o.billing_phone', $last10)
+                     ->group_end()
+                     ->order_by('o.id', 'DESC')
+                     ->limit(3);
+            $orders = $this->db->get()->result_array();
+
+            $matched = [];
+            foreach ($orders as $o) {
+                if (function_exists('sk_ai_order_in_shop') && sk_ai_order_in_shop($o, $vendorId)) {
+                    $matched[] = $o;
+                }
+            }
+
+            if (!empty($matched)) {
+                $latest = $matched[0];
+                $oNum = (string)($latest['order_number'] ?? $latest['id']);
+                $oStatus = ucfirst((string)($latest['status'] ?? 'pending'));
+                $pStatus = ucfirst((string)($latest['payment_status'] ?? 'pending'));
+                $oTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr((float)($latest['total'] ?? 0)) : "₹" . ($latest['total'] ?? 0);
+                $trackNo = (string)($latest['tracking_number'] ?? $latest['awb_number'] ?? '');
+                $courier = (string)($latest['courier_name'] ?? $latest['shipping_provider'] ?? '');
+
+                $msg = "📦 *Order Status for #{$oNum}*\n\n"
+                    . "• *Status:* {$oStatus}\n"
+                    . "• *Payment:* {$pStatus}\n"
+                    . "• *Total:* {$oTot}\n";
+                if ($trackNo !== '') {
+                    $msg .= "• *Tracking:* {$trackNo} ({$courier})\n";
+                }
+                $msg .= "\nHow else can we help you today?";
+                $waCloud->send_text($peer, $msg);
+            } else {
+                $waCloud->send_text($peer, "We couldn't find any recent orders linked to +{$digits} at {$shopName} 😊\nIf you have an order number, please reply with it (e.g. *#G2D1001*), or reply *1* to browse our products!");
+            }
+            return;
+        }
+
+        // 6. BUTTON 5 — 🙋 TALK TO OUR TEAM:
+        if ($interactiveId === 'talk_to_team' || $trimBody === '5' || preg_match('/^(talk to team|human|support|agent)$/iu', $trimBody)) {
+            if (function_exists('sk_ai_human_handoff')) {
+                sk_ai_human_handoff(['phone' => $peer, 'reason' => 'Customer clicked Talk to our team'], $vendorId);
+            }
+            $waCloud->send_text($peer, "Of course 😊 I am connecting you with our team.\nPlease wait while our team reviews your message. A teammate will join this chat shortly!");
+            return;
+        }
+
+        // 7. CATEGORY SELECTED (e.g. cat_1, cat_2)
+        if (strpos($interactiveId, 'cat_') === 0) {
+            $catId = (int)substr($interactiveId, 4);
+            $cat = $this->db->where('id', $catId)->get('categories')->row_array();
+            $catName = (string)($cat['name'] ?? 'Category');
+
+            $prods = $this->db->where('vendor_id', $vendorId)
+                              ->where('category_id', $catId)
+                              ->where('status', 'active')
+                              ->limit(10)
+                              ->get('products')
+                              ->result_array();
+
+            if (!empty($prods)) {
+                $footer = function_exists('sk_mcp_tool_delivery_footer') ? sk_mcp_tool_delivery_footer($vendorId) : 'Free delivery over ₹999';
+                $interactive = function_exists('sk_mcp_tool_build_product_interactive_list')
+                    ? sk_mcp_tool_build_product_interactive_list($prods, $catName, $footer)
+                    : null;
+                if ($interactive) {
+                    $waCloud->send_interactive($peer, $interactive);
+                    return;
+                }
+            }
+        }
+
+        // 8. PRODUCT SKU SELECTED (e.g. 2D-001-PC)
+        if (strpos($interactiveId, '2D-') === 0 || strpos($interactiveId, 'prod_') === 0) {
+            $sku = $interactiveId;
+            $prod = $this->db->where('vendor_id', $vendorId)
+                             ->where('sku', $sku)
+                             ->get('products')
+                             ->row_array();
+            if (!$prod && is_numeric(str_replace('prod_', '', $sku))) {
+                $prod = $this->db->where('vendor_id', $vendorId)
+                                 ->where('id', (int)str_replace('prod_', '', $sku))
+                                 ->get('products')
+                                 ->row_array();
+            }
+            if ($prod) {
+                $pName = (string)$prod['name'];
+                $pPrice = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr((float)$prod['price']) : "₹" . $prod['price'];
+                $fabric = !empty($prod['fabric']) ? "Fabric: " . $prod['fabric'] : '';
+                $color = !empty($prod['color']) ? "Color: " . $prod['color'] : '';
+                $details = array_filter([$fabric, $color]);
+                $detailStr = !empty($details) ? implode(" · ", $details) . "\n" : '';
+                $caption = "🥻 *{$pName}*\n💰 Price: {$pPrice}\n{$detailStr}\nWhich saree and quantity would you like to order?";
+
+                $imgPath = function_exists('sk_mcp_tool_product_image_path') ? sk_mcp_tool_product_image_path($prod) : (string)($prod['thumbnail'] ?? '');
+                $imgUrl = function_exists('sk_mcp_tool_whatsapp_image_url') && $imgPath !== '' ? sk_mcp_tool_whatsapp_image_url($imgPath) : '';
+
+                if ($imgUrl !== '') {
+                    $waCloud->send_media($peer, 'image', $imgUrl, $caption);
+                } else {
+                    $waCloud->send_text($peer, $caption);
+                }
+                return;
+            }
+        }
+
+        // 9. KEYWORD SEARCH (e.g. user typed "kanjivaram", "silk saree", etc.)
+        if (function_exists('sk_mcp_tool_find_products') && strlen($trimBody) >= 2) {
+            $found = sk_mcp_tool_find_products($body, ['tenant' => $vendorId], 10);
+            if (!empty($found['products'])) {
+                $prods = $found['products'];
+                $footer = function_exists('sk_mcp_tool_delivery_footer') ? sk_mcp_tool_delivery_footer($vendorId) : 'Free delivery over ₹999';
+                $interactive = function_exists('sk_mcp_tool_build_product_interactive_list')
+                    ? sk_mcp_tool_build_product_interactive_list($prods, $shopName, $footer)
+                    : null;
+                if ($interactive) {
+                    $waCloud->send_interactive($peer, $interactive);
+                    return;
+                }
+            }
+        }
+
+        // 10. Fallback: release thread control to Meta Business Agent
+        if (function_exists('sk_meta_ba_thread_control')) {
+            sk_meta_ba_thread_control($phoneNumberId, $peer, 'release');
+        }
     }
 }
