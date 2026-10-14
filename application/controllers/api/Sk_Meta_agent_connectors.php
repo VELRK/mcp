@@ -570,10 +570,10 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         if ($count === 1) {
             $galleryCards = $this->_gallery_cards($products[0], $footer);
             $ui = $photoCount === 1 ? 'product-photo' : 'none';
-            $summary = 'Send the clean product photo from image_url with Shop now button. In text, confirm product and price. If options exist, ask which size/variant they want, or they can tap Shop now to customize and add to cart online. When adding via chat, confirm quantity and call get_cart then add_cart_item.';
+            $summary = 'Send the product photo from image_url with product name and price. In text, tell the shopper the available sizes/variants from the database and ask which size and quantity they want to add to their cart right here in WhatsApp. When they reply, confirm quantity and call get_cart then add_cart_item. All shopping happens in WhatsApp.';
         } elseif ($count > 1) {
             $ui = 'product-photo';
-            $summary = 'Product list. Send the product photo for each product with Shop now. In text, ask which item, size, and quantity they would like to add to their basket.';
+            $summary = 'Product list. Send the product photo for each product. In text, ask which item, size, and quantity they would like to add to their basket in this chat.';
         } else {
             $summary = 'No matching products in this shop.';
         }
