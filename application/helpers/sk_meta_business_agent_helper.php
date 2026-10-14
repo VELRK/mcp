@@ -98,23 +98,29 @@ function sk_meta_ba_access_token(string $phoneNumberId = '', ?array $settings = 
     if ($cfg['system_user_token'] !== '') {
         return $cfg['system_user_token'];
     }
-    $CI =& get_instance();
-    if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
-        $CI->load->model('Sk_Vendor_whatsapp_account_model');
-    }
-    $phoneNumberId = trim($phoneNumberId);
-    if ($phoneNumberId !== '') {
-        $acct = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId);
-        $tok = trim((string)($acct['access_token'] ?? ''));
-        if ($tok !== '') {
-            return $tok;
+    if (function_exists('get_instance') && get_instance() !== null) {
+        $CI =& get_instance();
+        if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
+            $CI->load->model('Sk_Vendor_whatsapp_account_model');
+        }
+        $phoneNumberId = trim($phoneNumberId);
+        if ($phoneNumberId !== '') {
+            $acct = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId);
+            $tok = trim((string)($acct['access_token'] ?? ''));
+            if ($tok !== '') {
+                return $tok;
+            }
+        }
+        if (!function_exists('sk_wa_cloud_config')) {
+            $CI->load->helper('sk_whatsapp_cloud');
+        }
+        $cloud = sk_wa_cloud_config($settings);
+        if (!empty($cloud['access_token'])) {
+            return trim((string)$cloud['access_token']);
         }
     }
-    if (!function_exists('sk_wa_cloud_config')) {
-        $CI->load->helper('sk_whatsapp_cloud');
-    }
-    $cloud = sk_wa_cloud_config($settings);
-    return trim((string)($cloud['access_token'] ?? ''));
+    $envTok = trim((string)(getenv('META_BA_ACCESS_TOKEN') ?: getenv('WHATSAPP_CLOUD_ACCESS_TOKEN') ?: ''));
+    return $envTok;
 }
 
 function sk_meta_ba_http(string $method, string $url, $body = null, string $token = '', int $timeout = 30, string $apiVersion = ''): array {

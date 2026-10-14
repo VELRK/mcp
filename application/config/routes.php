@@ -706,26 +706,37 @@ $route['shopkart-api/meta-agent/connectors/(:any)/apply_discount_code']['POST'] 
 
 $route['shopkart-api/meta-agent/connectors/(:any)/get_categories']['GET']          = 'api/Sk_Meta_agent_connectors/get_categories/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_categories']['POST']         = 'api/Sk_Meta_agent_connectors/get_categories/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/search_products']['GET']        = 'api/Sk_Meta_agent_connectors/search_products/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/search_products']['POST']       = 'api/Sk_Meta_agent_connectors/search_products/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/identify_customer']['POST']     = 'api/Sk_Meta_agent_connectors/identify_customer/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/create_customer']['POST']       = 'api/Sk_Meta_agent_connectors/create_customer/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/update_customer']['POST']       = 'api/Sk_Meta_agent_connectors/update_customer/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_customer']['GET']           = 'api/Sk_Meta_agent_connectors/get_customer/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_customer']['POST']          = 'api/Sk_Meta_agent_connectors/get_customer/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_product']['GET']            = 'api/Sk_Meta_agent_connectors/get_product/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_product']['POST']           = 'api/Sk_Meta_agent_connectors/get_product/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_product_details']['GET']    = 'api/Sk_Meta_agent_connectors/get_product_details/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_product_details']['POST']   = 'api/Sk_Meta_agent_connectors/get_product_details/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_product_price']['GET']      = 'api/Sk_Meta_agent_connectors/get_product_price/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_product_price']['POST']     = 'api/Sk_Meta_agent_connectors/get_product_price/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/check_stock']['GET']            = 'api/Sk_Meta_agent_connectors/check_stock/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/check_stock']['POST']           = 'api/Sk_Meta_agent_connectors/check_stock/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/calculate_order_total']['POST'] = 'api/Sk_Meta_agent_connectors/calculate_order_total/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/create_order']['POST']          = 'api/Sk_Meta_agent_connectors/create_order/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_order']['GET']              = 'api/Sk_Meta_agent_connectors/get_order/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_order']['POST']             = 'api/Sk_Meta_agent_connectors/get_order/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/create_payment_link']['POST']   = 'api/Sk_Meta_agent_connectors/create_payment_link/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_payment_status']['GET']     = 'api/Sk_Meta_agent_connectors/get_payment_status/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_payment_status']['POST']    = 'api/Sk_Meta_agent_connectors/get_payment_status/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/generate_invoice']['POST']      = 'api/Sk_Meta_agent_connectors/generate_invoice/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/handover_to_human']['POST']     = 'api/Sk_Meta_agent_connectors/handover_to_human/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/human_handoff']['POST']         = 'api/Sk_Meta_agent_connectors/human_handoff/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_tenant_config']['GET']      = 'api/Sk_Meta_agent_connectors/get_tenant_config/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_tenant_config']['POST']     = 'api/Sk_Meta_agent_connectors/get_tenant_config/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/save_conversation_state']['POST'] = 'api/Sk_Meta_agent_connectors/save_conversation_state/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_order_status']['GET']       = 'api/Sk_Meta_agent_connectors/get_order_status/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_order_status']['POST']      = 'api/Sk_Meta_agent_connectors/get_order_status/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_delivery_status']['GET']    = 'api/Sk_Meta_agent_connectors/get_delivery_status/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/get_delivery_status']['POST']   = 'api/Sk_Meta_agent_connectors/get_delivery_status/$1';
 // Promo
 $route['shopkart-api/apply-coupon']['POST'] = 'api/Sk_Promo/apply';

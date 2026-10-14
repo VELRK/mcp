@@ -11,7 +11,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
 
     public function __construct() {
         parent::__construct();
-        $this->load->helper(['sk_meta_business_agent', 'sk_mcp_tool', 'sk_whatsapp_cloud']);
+        $this->load->helper(['sk_meta_business_agent', 'sk_mcp_tool', 'sk_whatsapp_cloud', 'sk_whatsapp']);
         $this->load->model(['Sk_Vendor_whatsapp_account_model', 'Sk_Vendor_meta_agent_model', 'Sk_Whatsapp_cloud_model', 'Sk_Product_model']);
         $this->Sk_Vendor_meta_agent_model->ensure_schema();
     }
@@ -659,10 +659,15 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         } elseif ($count > 1) {
             $ui = 'interactive_list';
             $shopName = 'Vel Saree';
-            if (!empty($tenant['vendor_id'])) {
-                $vendor = $this->db->get_where('tbl_vendors', ['id' => (int)$tenant['vendor_id']])->row_array();
-                if (!empty($vendor['shop_name'])) {
-                    $shopName = $vendor['shop_name'];
+            if (function_exists('sk_whatsapp_shop_name')) {
+                $biz = sk_whatsapp_shop_name($vendorId);
+                if ($biz !== '' && strcasecmp($biz, 'Shop') !== 0) {
+                    $shopName = $biz;
+                }
+            } elseif (!empty($tenant['vendor_id']) && $this->db->table_exists('vendors')) {
+                $vendor = $this->db->select('business_name')->where('id', (int)$tenant['vendor_id'])->get('vendors')->row_array();
+                if (!empty($vendor['business_name'])) {
+                    $shopName = $vendor['business_name'];
                 }
             }
             $interactive = sk_mcp_tool_build_product_interactive_list($products, $shopName, $footer);
