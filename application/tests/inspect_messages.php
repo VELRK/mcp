@@ -16,11 +16,16 @@ while ($r = $res->fetch_assoc()) {
     echo sprintf("[%d] %s | #%s | %s | %s | %s | %s\n", $r['id'], $r['created_at'], $r['conversation_id'], $r['direction'], $r['type'], $r['status'], $txt);
 }
 
-echo "\n=== CONVERSATION #4 ===\n";
-$cres = $mysqli->query("SELECT * FROM wa_cloud_conversations WHERE id = 4");
-if ($cres && $row = $cres->fetch_assoc()) {
-    foreach ($row as $k => $v) {
-        echo "$k => $v\n";
-    }
+echo "\n=== ADDRESSES COLUMNS ===\n";
+$ares = $mysqli->query("SHOW COLUMNS FROM addresses");
+while ($ares && $row = $ares->fetch_assoc()) {
+    echo $row['Field'] . ' (' . $row['Type'] . ")\n";
 }
+
+echo "\n=== SAMPLE ADDRESSES ===\n";
+$sres = $mysqli->query("SELECT * FROM addresses LIMIT 5");
+while ($sres && $row = $sres->fetch_assoc()) {
+    print_r($row);
+}
+exit(0);
 exit(0);
