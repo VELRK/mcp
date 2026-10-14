@@ -12,18 +12,16 @@ $token = sk_meta_ba_access_token($phoneId);
 
 echo "Token prefix: " . substr($token, 0, 15) . "...\n";
 
-// 1. Get phone number & WABA details
-$ch = curl_init("https://graph.facebook.com/v21.0/{$phoneId}?fields=id,display_phone_number,whatsapp_business_account");
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token],
-]);
-$res1 = curl_exec($ch);
-curl_close($ch);
-echo "Phone info: " . $res1 . "\n\n";
+// Read from database
+require FCPATH . 'application/config/database.php';
+$dbCfg = $db['default'];
+$conn = mysqli_connect($dbCfg['hostname'], $dbCfg['username'], $dbCfg['password'], $dbCfg['database']);
+$res = mysqli_query($conn, "SELECT * FROM vendor_whatsapp_accounts WHERE phone_number_id = '{$phoneId}'");
+$acct = mysqli_fetch_assoc($res);
+echo "DB Account: " . json_encode($acct, JSON_PRETTY_PRINT) . "\n\n";
 
-$data1 = json_decode($res1, true);
-$wabaId = $data1['whatsapp_business_account']['id'] ?? '';
+$wabaId = $acct['waba_id'] ?? '';
+$businessId = $acct['business_id'] ?? '';
 
 if ($wabaId !== '') {
     echo "Found WABA ID: {$wabaId}\n";
