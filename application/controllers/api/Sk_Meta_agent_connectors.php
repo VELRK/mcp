@@ -589,7 +589,15 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             $detailText = "*{$pName}*\nPrice: {$pPrice}" . ($pSpecs !== '' ? "\nSpecifications: {$pSpecs}" : '') . ($pDesc !== '' ? "\n{$pDesc}" : '') . "\n\nHow many would you like to order?";
             $summary = "Product found: {$pName} ({$pPrice}). Send the product photo with caption \"{$pName} - {$pPrice}\". IN YOUR WHATSAPP TEXT MESSAGE, write:\n\n'Here are the details for *{$pName}*:\nPrice: {$pPrice}\n" . ($pSpecs !== '' ? "Details: {$pSpecs}\n" : '') . "How many would you like to order?'";
         } elseif ($count > 1) {
-            $ui = $photoCount >= 1 ? 'product-photo' : 'none';
+            $ui = 'interactive_list';
+            $shopName = 'Vel Saree';
+            if (!empty($tenant['vendor_id'])) {
+                $vendor = $this->db->get_where('tbl_vendors', ['id' => (int)$tenant['vendor_id']])->row_array();
+                if (!empty($vendor['shop_name'])) {
+                    $shopName = $vendor['shop_name'];
+                }
+            }
+            $interactive = sk_mcp_tool_build_product_interactive_list($products, $shopName, $footer);
             // Only send 1 featured card so WhatsApp never drops multiple media messages
             $cards = array_slice($cards, 0, 1);
             $lines = [];
@@ -601,10 +609,10 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
                 $lines[] = ($i + 1) . ". *{$pName}* - {$pPrice}{$extra}";
             }
             $catalogList = implode("\n", $lines);
-            $detailText = "Here are our available sarees:\n" . $catalogList . "\n\nWhich saree and quantity would you like to order?";
+            $detailText = "Explore our saree collection below! Tap \"🛍️ Browse Sarees\" to browse prices, fabrics, and colors:\n" . $catalogList . "\n\nWhich saree and quantity would you like to order?";
             $featuredName = (string)($cards[0]['name'] ?? $products[0]['name'] ?? 'Saree');
             $featuredPrice = sk_mcp_tool_inr((float)($products[0]['price'] ?? 0));
-            $summary = "Found {$count} sarees in catalog. Send the featured saree photo with caption \"{$featuredName} - {$featuredPrice}\". IN YOUR WHATSAPP TEXT MESSAGE, write out this exact saree list:\n\n'Here are our available sarees:\n{$catalogList}\n\nWhich saree and quantity would you like to order?'";
+            $summary = "Found {$count} sarees. Send the WhatsApp interactive list drawer (button '🛍️ Browse Sarees') so the customer can tap and view all sarees. In text, tell the customer:\n\n'Explore our saree collection below! Tap \"🛍️ Browse Sarees\" to browse prices, fabrics, and colors:\n{$catalogList}\n\nWhich saree and quantity would you like to order?'";
         } else {
             $detailText = "We couldn't find any matching sarees right now. We have beautiful silk, cotton, and designer sarees available. Would you like to see our latest collection?";
             $summary = "No matching products found. In your text message, tell the customer: 'We couldn't find any matching sarees right now. Would you like to see our latest collection?'";
@@ -617,20 +625,22 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         $featuredCaption = $featuredName !== '' ? "{$featuredName} - {$featuredPrice}" : '';
 
         $this->success([
-            'query'         => $query,
-            'count'         => $count,
-            'ui'            => $ui,
-            'image_url'     => $featuredImg,
-            'product_name'  => $featuredName,
-            'price'         => $featuredPrice,
-            'caption'       => $featuredCaption,
-            'summary'       => $summary,
-            'message'       => $detailText,
-            'detail'        => $detailText,
-            'footer'        => (string)($sheet['footer'] ?? $footer),
-            'cards'         => $cards,
-            'gallery_cards' => $galleryCards,
-            'products'      => $products,
+            'query'            => $query,
+            'count'            => $count,
+            'ui'               => $ui,
+            'interactive'      => $count > 1 ? ($interactive ?? null) : null,
+            'interactive_list' => $count > 1 ? ($interactive ?? null) : null,
+            'image_url'        => $featuredImg,
+            'product_name'     => $featuredName,
+            'price'            => $featuredPrice,
+            'caption'          => $featuredCaption,
+            'summary'          => $summary,
+            'message'          => $detailText,
+            'detail'           => $detailText,
+            'footer'           => (string)($sheet['footer'] ?? $footer),
+            'cards'            => $cards,
+            'gallery_cards'    => $galleryCards,
+            'products'         => $products,
         ], 'Product search completed.');
     }
 

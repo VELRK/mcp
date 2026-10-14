@@ -577,7 +577,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "Follow this order. "
         . "1. GREETING: If they only say hi/hello/hey/vanakkam, reply in ONE short sentence. Call NO tools. "
         . "2. PRODUCTS: On any product, price, or stock question, call search_products exactly once. The tool result is the whole catalog. Offer only those products. If it is empty, say so in one sentence. Never add a product from memory or another shop. Never invent facts. Infer typos such as donu have = do you have and amount/prise = price. "
-        . "3. SHOW THE PRODUCTS: Send the clean product image. Caption is the name and the price. In text, always write out the full product name, fabric, color, specifications, and price directly in your message, and ask which size and quantity they want to add to their cart in this chat. Do not send a website link or external URL. Everything happens inside this WhatsApp chat. "
+        . "3. SHOW THE PRODUCTS: When multiple products are returned, present the interactive list drawer so the customer can tap and browse sarees directly in WhatsApp. When exactly one product is chosen, send the clean product image with caption '[Product Name] - [Price]', full specifications, and ask which quantity they want. Do not send a website link or external URL. Everything happens inside this WhatsApp chat. "
         . "4. MORE PHOTOS: If they ask for more images, call search_products again with that product name. Send each extra JPEG or PNG as its own image. No carousel and no buttons. No photos: say there are no extra photos. Never invent a photo. "
         . "5. BASKET & CART: Always call get_cart before any change and again after it. Never assume quantity 1. When adding an item, ask how many and which variant first, then call add_cart_item with sku and quantity. When setting a total, call update_cart_item with the line_id from get_cart. To remove an item, call remove_cart_item with line_id. If a discount code is given, call apply_discount_code with the code verbatim. If a change is rejected for limit or stock, report the exact limit and headroom without guessing. "
         . "6. DELIVERY DETAILS: When they say buy or checkout, confirm the basket once in plain text. Ask in this chat for each missing item, one at a time, in this order: name, phone number, door number, landmark, street, pincode. A pincode is 6 digits. Do not send a location card, a map, or a link. Do not skip a field. "
@@ -1132,6 +1132,12 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'status'          => 'enabled',
             'instruction'     => 'Send the single product photo from image_url with caption format "[Product Name] - [Price]". In text, always write out the full product names and prices from the catalog response.',
         ],
+        [
+            'title'           => 'product-choice-list',
+            'component_type'  => 'interactive_list',
+            'status'          => 'enabled',
+            'instruction'     => 'When search_products returns multiple products or ui is interactive_list, send an interactive list drawer. Button text "🛍️ Browse Sarees". Sections contain the saree rows with title as product name (up to 24 chars) and description with price and color.',
+        ],
     ];
     return $defs;
 }
@@ -1160,7 +1166,7 @@ function sk_meta_ba_sync_shop_ui_skills(string $phoneNumberId, string $shopName,
     }
     foreach ([
         'product-cards', 'shop-catalog-cta', 'delivery-location',
-        'product-photo-card', 'product-shop-cards', 'product-choice-list',
+        'product-photo-card', 'product-shop-cards',
         'cart-qty-buttons', 'cart-lines', 'order-confirm-buttons',
         'checkout-lines', 'order-payment-cta',
     ] as $retired) {

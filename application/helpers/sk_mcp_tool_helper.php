@@ -341,6 +341,97 @@ function sk_mcp_tool_variant_choices(array $variants): array {
     return $out;
 }
 
+/**
+ * Build a WhatsApp native interactive list message payload (Option B).
+ * Enforces WhatsApp Cloud API strict limits:
+ * - header.text: max 60 chars
+ * - body.text: max 1024 chars
+ * - footer.text: max 60 chars
+ * - action.button: max 20 chars
+ * - section.title: max 24 chars
+ * - row.title: max 24 chars
+ * - row.description: max 72 chars
+ * - total rows: max 10 across all sections
+ *
+ * @param array $products
+ * @param string $shopName
+ * @param string $footer
+ * @return array
+ */
+function sk_mcp_tool_build_product_interactive_list(array $products, string $shopName = '', string $footer = ''): array {
+    $shopName = trim($shopName) !== '' ? trim($shopName) : 'Our Shop';
+    $headerText = function_exists('mb_substr') ? mb_substr($shopName . ' Sarees', 0, 60) : substr($shopName . ' Sarees', 0, 60);
+    $bodyText = "Explore our handpicked collection of sarees.\nTap below to browse styles, colors, and prices:";
+    $footerText = trim($footer) !== '' ? $footer : 'Free delivery over ₹999';
+    $footerText = function_exists('mb_substr') ? mb_substr($footerText, 0, 60) : substr($footerText, 0, 60);
+    $buttonText = '🛍️ Browse Sarees'; // 16 chars <= 20
+
+    $silkRows = [];
+    $dailyRows = [];
+    $allRows = [];
+
+    foreach (array_slice($products, 0, 10) as $idx => $p) {
+        $pName = trim((string)($p['name'] ?? 'Product'));
+        $price = (float)($p['price'] ?? 0);
+        $priceStr = sk_mcp_tool_inr($price);
+        $color = trim((string)($p['color'] ?? ''));
+        
+        $rowTitle = function_exists('mb_substr') ? mb_substr($pName, 0, 24) : substr($pName, 0, 24);
+        $desc = $priceStr . ($color !== '' ? " · {$color}" : '');
+        $rowDesc = function_exists('mb_substr') ? mb_substr($desc, 0, 72) : substr($desc, 0, 72);
+        
+        $row = [
+            'id'          => (string)($p['sku'] ?? ('prod_' . ($p['id'] ?? ($idx + 1)))),
+            'title'       => $rowTitle,
+            'description' => $rowDesc,
+        ];
+
+        // Classify silk vs daily/cotton or all in one
+        $lower = strtolower($pName);
+        if (strpos($lower, 'silk') !== false || strpos($lower, 'zari') !== false || strpos($lower, 'crepe') !== false || strpos($lower, 'bridal') !== false || strpos($lower, 'tissue') !== false) {
+            $silkRows[] = $row;
+        } else {
+            $dailyRows[] = $row;
+        }
+        $allRows[] = $row;
+    }
+
+    $sections = [];
+    if (!empty($silkRows) && !empty($dailyRows) && (count($silkRows) + count($dailyRows) <= 10)) {
+        $sections[] = [
+            'title' => 'Silk & Festive Sarees', // 21 chars <= 24
+            'rows'  => $silkRows,
+        ];
+        $sections[] = [
+            'title' => 'Cotton & Daily Sarees', // 21 chars <= 24
+            'rows'  => $dailyRows,
+        ];
+    } else {
+        $sections[] = [
+            'title' => 'Available Sarees', // 16 chars <= 24
+            'rows'  => $allRows,
+        ];
+    }
+
+    return [
+        'type'   => 'list',
+        'header' => [
+            'type' => 'text',
+            'text' => $headerText,
+        ],
+        'body'   => [
+            'text' => $bodyText,
+        ],
+        'footer' => [
+            'text' => $footerText,
+        ],
+        'action' => [
+            'button'   => $buttonText,
+            'sections' => $sections,
+        ],
+    ];
+}
+
 function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $limit = 5): array {
     $CI =& get_instance();
     if (!isset($CI->Sk_Product_model)) {
