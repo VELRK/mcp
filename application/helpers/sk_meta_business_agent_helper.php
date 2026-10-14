@@ -87,6 +87,10 @@ function sk_meta_ba_request_token_from_headers(): string {
     if (stripos($auth, 'Bearer ') === 0) {
         return trim(substr($auth, 7));
     }
+    $queryKey = (string)($CI->input->get('api_key', true) ?: $CI->input->get('token', true) ?: '');
+    if ($queryKey !== '') {
+        return trim($queryKey);
+    }
     return '';
 }
 

@@ -545,6 +545,48 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
     }
 
     /**
+     * Base connector endpoint: /shopkart-api/meta-agent/connectors/{phoneNumberId}
+     * Returns connector status, shop info, and list of available tools.
+     */
+    public function index($phoneNumberId = '') {
+        $phoneNumberId = trim((string)$phoneNumberId);
+        if ($phoneNumberId === '') {
+            $this->error('phone_number_id is required in the URL.', 400);
+            return;
+        }
+
+        $tenant = $this->_resolve_tenant($phoneNumberId);
+        $vendorId = (int)$tenant['vendor_id'];
+        $shopName = $this->_get_shop_name($vendorId, $tenant);
+
+        $this->success([
+            'service'         => 'TalkAI Pilot Meta Business Agent Commerce Connector',
+            'status'          => 'active',
+            'shop_name'       => $shopName,
+            'vendor_id'       => $vendorId,
+            'phone_number_id' => $phoneNumberId,
+            'version'         => '2.0.0',
+            'tools_count'     => 16,
+            'endpoints'       => [
+                'get_main_menu'        => 'GET/POST /get_main_menu — 5-option interactive menu & greeting',
+                'get_categories'       => 'GET/POST /get_categories — Category drawer & browse products',
+                'get_offers'           => 'GET/POST /get_offers — Active discounts, sale items & promo codes',
+                'search_products'      => 'POST /search_products — Search catalog by keyword',
+                'get_order_status'     => 'POST /get_order_status — Live order status by order # or phone',
+                'handover_to_human'    => 'POST /handover_to_human — Human support handoff',
+                'get_cart'             => 'GET/POST /cart — Read active cart summary',
+                'add_cart_item'        => 'POST /cart/items — Add product to basket',
+                'update_cart_item'     => 'POST/PUT /cart/items/{line_id} — Update quantity',
+                'remove_cart_item'     => 'DELETE/POST /cart/items/{line_id} — Remove item',
+                'apply_discount_code'  => 'POST /cart/discount — Apply coupon code',
+                'create_order'         => 'POST /create_order — Create confirmed order',
+                'create_payment_link'  => 'POST /create_payment_link — Generate payment link',
+            ],
+            'note'            => 'Connector base URL is active and ready. Append tool name (e.g. /get_main_menu) with X-Api-Key header or ?api_key= to invoke.',
+        ], "TalkAI Pilot commerce connector is active for {$shopName}.");
+    }
+
+    /**
      * Menu Option: 5 Options Interactive Main Menu & Sales Flow Trigger.
      */
     public function get_main_menu($phoneNumberId = '') {
