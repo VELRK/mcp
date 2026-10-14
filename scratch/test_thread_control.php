@@ -10,9 +10,9 @@ require_once APPPATH . 'helpers/sk_meta_business_agent_helper.php';
 $phoneId = '1389144424278347';
 $userPhone = '917598933686';
 
-echo "=== CHECKING THREAD CONTROL FOR {$userPhone} ===\n";
-$res = sk_meta_ba_thread_control($phoneId, $userPhone, 'release');
-echo "Release result:\n";
+echo "=== CHECKING THREAD CONTROL TAKE FOR {$userPhone} ===\n";
+$res = sk_meta_ba_thread_control($phoneId, $userPhone, 'take');
+echo "Take result:\n";
 print_r($res);
 
 // Also test sending message directly to verify Cloud API token and session
