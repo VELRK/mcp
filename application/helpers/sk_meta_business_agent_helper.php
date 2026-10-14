@@ -10,19 +10,37 @@ function sk_meta_ba_config_array(): array {
     if (is_array($cfg)) {
         return $cfg;
     }
-    $CI =& get_instance();
-    $CI->config->load('meta_business_agent', true);
-    $cfg = [
-        'enabled'             => (bool)$CI->config->item('meta_ba_enabled', 'meta_business_agent'),
-        'api_base'            => (string)$CI->config->item('meta_ba_api_base', 'meta_business_agent'),
-        'api_version'         => (string)$CI->config->item('meta_ba_api_version', 'meta_business_agent'),
-        'system_user_token'   => (string)$CI->config->item('meta_ba_system_user_token', 'meta_business_agent'),
-        'connector_api_key'   => (string)$CI->config->item('meta_ba_connector_api_key', 'meta_business_agent'),
-        'connector_base_url'  => (string)$CI->config->item('meta_ba_connector_base_url', 'meta_business_agent'),
-        'default_audience'    => (string)$CI->config->item('meta_ba_default_audience', 'meta_business_agent'),
-        'handoff_message'     => (string)$CI->config->item('meta_ba_handoff_message', 'meta_business_agent'),
-        'handoff_release_control' => (bool)$CI->config->item('meta_ba_handoff_release_control', 'meta_business_agent'),
-    ];
+    if (function_exists('get_instance') && get_instance() !== null) {
+        $CI =& get_instance();
+        $CI->config->load('meta_business_agent', true);
+        $cfg = [
+            'enabled'             => (bool)$CI->config->item('meta_ba_enabled', 'meta_business_agent'),
+            'api_base'            => (string)$CI->config->item('meta_ba_api_base', 'meta_business_agent'),
+            'api_version'         => (string)$CI->config->item('meta_ba_api_version', 'meta_business_agent'),
+            'system_user_token'   => (string)$CI->config->item('meta_ba_system_user_token', 'meta_business_agent'),
+            'connector_api_key'   => (string)$CI->config->item('meta_ba_connector_api_key', 'meta_business_agent'),
+            'connector_base_url'  => (string)$CI->config->item('meta_ba_connector_base_url', 'meta_business_agent'),
+            'default_audience'    => (string)$CI->config->item('meta_ba_default_audience', 'meta_business_agent'),
+            'handoff_message'     => (string)$CI->config->item('meta_ba_handoff_message', 'meta_business_agent'),
+            'handoff_release_control' => (bool)$CI->config->item('meta_ba_handoff_release_control', 'meta_business_agent'),
+        ];
+    } else {
+        if (!function_exists('sk_env')) {
+            require_once APPPATH . 'helpers/sk_dotenv_helper.php';
+            sk_dotenv_load();
+        }
+        $cfg = [
+            'enabled'             => sk_env_bool('META_BA_ENABLED', false),
+            'api_base'            => rtrim(sk_env('META_BA_API_BASE', 'https://api.facebook.com'), '/'),
+            'api_version'         => (string)(sk_env('META_BA_API_VERSION', '2.0.0') ?: '2.0.0'),
+            'system_user_token'   => sk_env('META_BA_SYSTEM_USER_TOKEN', ''),
+            'connector_api_key'   => sk_env('META_BA_CONNECTOR_API_KEY', ''),
+            'connector_base_url'  => rtrim(sk_env('META_BA_CONNECTOR_BASE_URL', ''), '/'),
+            'default_audience'    => strtoupper(sk_env('META_BA_DEFAULT_AUDIENCE', 'ALLOWLISTED_ONLY')) ?: 'ALLOWLISTED_ONLY',
+            'handoff_message'     => sk_env('META_BA_HANDOFF_MESSAGE', 'A teammate has been notified.'),
+            'handoff_release_control' => sk_env_bool('META_BA_HANDOFF_RELEASE_CONTROL', false),
+        ];
+    }
     if ($cfg['api_base'] === '') {
         $cfg['api_base'] = 'https://api.facebook.com';
     }
@@ -33,7 +51,7 @@ function sk_meta_ba_config_array(): array {
         $cfg['default_audience'] = 'ALLOWLISTED_ONLY';
     }
     if ($cfg['connector_base_url'] === '') {
-        $cfg['connector_base_url'] = rtrim(site_url(), '/');
+        $cfg['connector_base_url'] = function_exists('site_url') ? rtrim(site_url(), '/') : 'https://talkaipilot.com';
     }
     return $cfg;
 }
