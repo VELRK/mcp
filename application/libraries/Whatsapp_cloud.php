@@ -209,17 +209,13 @@ class Whatsapp_cloud {
         if ($phoneId === '') {
             return ['success' => false, 'message' => 'Phone Number ID is missing.'];
         }
-        $result = $this->request('POST', $phoneId . '/messages', $payload);
-        if (!empty($result['success'])) {
-            $this->release_agent_thread((string)($payload['to'] ?? ''));
-        }
-        return $result;
+        return $this->request('POST', $phoneId . '/messages', $payload);
     }
 
     /**
-     * A Cloud API send moves the chat to this app. Hand it straight back so the agent is not frozen.
+     * Explicitly hand thread control back to Meta Business Agent when desired (e.g. human/agent handoff).
      */
-    private function release_agent_thread(string $to): void {
+    public function release_thread(string $to): void {
         $phoneId = trim((string)($this->cfg['phone_number_id'] ?? ''));
         $to = preg_replace('/\D+/', '', $to) ?? '';
         if ($phoneId === '' || $to === '') {

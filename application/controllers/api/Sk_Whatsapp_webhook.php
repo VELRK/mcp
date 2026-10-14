@@ -15,8 +15,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
     public function __construct() {
         parent::__construct();
-        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp', 'sk_whatsapp_mcp', 'sk_meta_business_agent', 'sk_mcp_tool']);
-        $this->load->model(['Sk_Whatsapp_cloud_model', 'Sk_Admin_model', 'Sk_Vendor_meta_agent_model']);
+        $this->load->helper(['sk_whatsapp_cloud', 'sk_whatsapp', 'sk_whatsapp_mcp', 'sk_meta_business_agent', 'sk_mcp_tool', 'sk_razorpay', 'sk_invoice', 'sk_currency']);
+        $this->load->model(['Sk_Whatsapp_cloud_model', 'Sk_Admin_model', 'Sk_Vendor_meta_agent_model', 'Sk_Order_model', 'Sk_Product_model', 'Sk_User_model']);
         $this->load->library('Whatsapp_cloud');
         sk_wa_cloud_ensure_schema();
         $this->Sk_Vendor_meta_agent_model->ensure_schema();
@@ -412,6 +412,11 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
 
+        // Keep thread control with this App so Meta Cloud AI does NOT send Hindi messages
+        if (function_exists('sk_meta_ba_thread_control') && $phoneNumberId !== '') {
+            sk_meta_ba_thread_control($phoneNumberId, $peer, 'take');
+        }
+
         // Initialize Cloud API client
         $resolved = $settings;
         $resolved['vendor_id'] = $vendorId;
@@ -464,8 +469,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                             'rows'  => [
                                 [
                                     'id'          => 'browse_products',
-                                    'title'       => '🛍️ Browse products',
-                                    'description' => 'Explore collections & categories',
+                                    'title'       => '🛍️ Browse sarees',
+                                    'description' => 'Explore collections & saree catalog',
                                 ],
                                 [
                                     'id'          => 'offers_deals',
@@ -496,55 +501,14 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
 
-        // 2. BUTTON 1 — 🛍️ BROWSE PRODUCTS / CATEGORIES:
-        if ($interactiveId === 'browse_products' || $trimBody === '1' || preg_match('/^(browse|categories|category|collections)$/iu', $trimBody)) {
-            $sql = "SELECT c.id, c.name, COUNT(p.id) as product_count 
-                    FROM categories c 
-                    INNER JOIN products p ON p.category_id = c.id 
-                    WHERE p.vendor_id = ? AND p.status = 'active' 
-                    GROUP BY c.id HAVING product_count > 0 
-                    ORDER BY c.name ASC";
-            $rows = $this->db->query($sql, [$vendorId])->result_array();
-            if (empty($rows)) {
-                $rows = $this->db->query("SELECT id, name FROM categories ORDER BY name ASC LIMIT 10")->result_array();
-            }
+        // 2. BUTTON 1 — 🛍️ BROWSE PRODUCTS / SAREES / CATALOG:
+        $isBrowse = $interactiveId === 'browse_products'
+            || $interactiveId === 'browse_sarees'
+            || $trimBody === '1'
+            || preg_match('/^(browse|browse sarees?|sarees?|sari|saris|catalog|view catalog|show sarees?|collections?|categories|category)$/iu', $trimBody);
 
-            $icons = ['🌸', '🧵', '✨', '🥻', '👰', '🪡', '💎', '🎨', '🌟', '👗'];
-            $secRows = [];
-            foreach (array_slice($rows, 0, 10) as $i => $cat) {
-                $icon = $icons[$i % count($icons)];
-                $name = trim((string)($cat['name'] ?? 'Collection'));
-                $cnt = (int)($cat['product_count'] ?? 0);
-                $secRows[] = [
-                    'id'          => 'cat_' . $cat['id'],
-                    'title'       => function_exists('mb_substr') ? mb_substr("{$icon} {$name}", 0, 24) : substr("{$icon} {$name}", 0, 24),
-                    'description' => $cnt > 0 ? "{$cnt} items available" : "View collection",
-                ];
-            }
-
-            $interactive = [
-                'type'   => 'list',
-                'header' => [
-                    'type' => 'text',
-                    'text' => function_exists('mb_substr') ? mb_substr("{$shopName} Categories", 0, 60) : substr("{$shopName} Categories", 0, 60),
-                ],
-                'body'   => [
-                    'text' => "What would you like to shop for? 😊\nTap below to explore our categories:",
-                ],
-                'footer' => [
-                    'text' => 'Select a category to view items',
-                ],
-                'action' => [
-                    'button'   => 'View Categories',
-                    'sections' => [
-                        [
-                            'title' => 'Product Categories',
-                            'rows'  => $secRows,
-                        ],
-                    ],
-                ],
-            ];
-            $waCloud->send_interactive($peer, $interactive);
+        if ($isBrowse) {
+            $this->_send_saree_catalog($peer, $vendorId, $waCloud, $shopName);
             return;
         }
 
@@ -800,6 +764,26 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
 
+        // 11b. MORE QUANTITY / VARIANT SELECTOR CLICKED (from product card buttons)
+        if (strpos($interactiveId, 'more_qty_') === 0) {
+            $parts = explode('_', substr($interactiveId, 9));
+            $productId = (int)($parts[0] ?? 0);
+            $variantId = (int)($parts[1] ?? 0);
+
+            $prod = $this->db->where('id', $productId)->get('products')->row_array();
+            $var = $variantId > 0 ? $this->db->where('id', $variantId)->get('product_variants')->row_array() : null;
+
+            if ($prod) {
+                $variants = $this->db->where('product_id', $productId)->where('status', 1)->get('product_variants')->result_array();
+                if (count($variants) > 1 && $variantId === 0) {
+                    $this->_send_variant_selector($prod, $variants, $peer, $waCloud, $shopName);
+                } else {
+                    $this->_send_quantity_selector($prod, $var, $peer, $vendorId, $waCloud, $shopName, $conv);
+                }
+                return;
+            }
+        }
+
         // 12. TEXT-BASED QUANTITY INPUT (e.g. user typed "2", "qty 2", "3 pcs")
         if (preg_match('/^(?:qty\s*)?([1-9]|10)(?:\s*(?:pcs?|pieces?))?$/iu', $trimBody, $mQty)) {
             $qty = (int)$mQty[1];
@@ -826,8 +810,34 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
 
         // 15. CHECKOUT / PLACE ORDER:
-        if (in_array($interactiveId, ['cart_checkout', 'checkout', 'buy_now'], true) || preg_match('/^(checkout|buy now|place order|order now|pay)$/iu', $trimBody)) {
-            $this->_send_checkout_card($peer, $vendorId, $waCloud, $shopName);
+        if (in_array($interactiveId, ['cart_checkout', 'checkout', 'buy_now'], true) || preg_match('/^(checkout|buy now|place order|order now|order)$/iu', $trimBody)) {
+            $this->_send_checkout_payment_mode_options($peer, $vendorId, $waCloud, $shopName);
+            return;
+        }
+
+        // 15a. PAYMENT MODE: CASH ON DELIVERY (COD)
+        if ($interactiveId === 'pay_cod' || preg_match('/^(cod|cash on delivery)$/iu', $trimBody)) {
+            $this->_place_order_cod($peer, $vendorId, $waCloud, $shopName, $conv, $settings);
+            return;
+        }
+
+        // 15b. PAYMENT MODE: PAY ONLINE (RAZORPAY)
+        if ($interactiveId === 'pay_online' || preg_match('/^(pay online|online|razorpay|upi|pay)$/iu', $trimBody)) {
+            $this->_place_order_online($peer, $vendorId, $waCloud, $shopName, $conv, $settings);
+            return;
+        }
+
+        // 15c. CONFIRM ONLINE PAYMENT COMPLETED ("I Have Paid")
+        if (strpos($interactiveId, 'paid_') === 0 || preg_match('/^(i have paid|paid|payment done|paid online)$/iu', $trimBody)) {
+            $orderId = (int)str_replace('paid_', '', $interactiveId);
+            $this->_confirm_online_payment($orderId, $peer, $vendorId, $waCloud, $shopName, $conv, $settings);
+            return;
+        }
+
+        // 15d. SWITCH EXISTING ORDER TO COD
+        if (strpos($interactiveId, 'switch_cod_') === 0) {
+            $orderId = (int)str_replace('switch_cod_', '', $interactiveId);
+            $this->_switch_order_to_cod($orderId, $peer, $vendorId, $waCloud, $shopName, $conv);
             return;
         }
 
@@ -860,10 +870,48 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             }
         }
 
-        // 17. Fallback: release thread control to Meta Business Agent
-        if (function_exists('sk_meta_ba_thread_control')) {
-            sk_meta_ba_thread_control($phoneNumberId, $peer, 'release');
-        }
+        // 17. Helpful Conversational Fallback (Never release to Meta AI to prevent Hindi handoff)
+        $interactive = [
+            'type'   => 'button',
+            'header' => [
+                'type' => 'text',
+                'text' => function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : $shopName,
+            ],
+            'body'   => [
+                'text' => "How can we help you today? 😊\n\n"
+                        . "You can browse our saree collections, search for a style (e.g. *Silk*, *Cotton*, *Red*), or chat with our team:",
+            ],
+            'footer' => [
+                'text' => 'Select an option below',
+            ],
+            'action' => [
+                'buttons' => [
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'browse_products',
+                            'title' => '🛍️ Browse Sarees',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'cart_view',
+                            'title' => '🛒 View Bag',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'talk_to_team',
+                            'title' => '🙋 Talk to Team',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $waCloud->send_interactive($peer, $interactive);
+        return;
     }
 
     /**
@@ -969,7 +1017,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     }
 
     /**
-     * Send rich product detail card with image, price, specs, and variant/quantity selector.
+     * Send rich product detail card with image, price, specs, and direct quantity buttons.
      */
     private function _send_product_details(array $prod, string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
         $prodId = (int)$prod['id'];
@@ -987,17 +1035,11 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $specs = array_filter([$fabric, $color, $length, $blouse]);
         $specStr = !empty($specs) ? implode("\n", $specs) . "\n" : '';
 
-        $priceDisplay = $discountPct > 0 ? "💰 Price: {$priceStr} ~{$origStr}~ ({$discountPct}% OFF)" : "💰 Price: {$priceStr}";
-        $caption = "🥻 *{$pName}*\n{$priceDisplay}\n{$specStr}📦 Stock: In Stock (Ready to dispatch)";
+        $priceDisplay = $discountPct > 0 ? "💰 Rate: {$priceStr} ~{$origStr}~ ({$discountPct}% OFF)" : "💰 Rate: {$priceStr}";
+        $caption = "🥻 *{$pName}*\n{$priceDisplay}\n{$specStr}📦 Stock: In Stock (Ready to dispatch)\n🚚 Delivery: FREE Delivery across India";
 
         $imgPath = function_exists('sk_mcp_tool_product_image_path') ? sk_mcp_tool_product_image_path($prod) : (string)($prod['thumbnail'] ?? '');
         $imgUrl = function_exists('sk_mcp_tool_whatsapp_image_url') && $imgPath !== '' ? sk_mcp_tool_whatsapp_image_url($imgPath) : '';
-
-        if ($imgUrl !== '') {
-            $waCloud->send_media($peer, 'image', $imgUrl, $caption);
-        } else {
-            $waCloud->send_text($peer, $caption);
-        }
 
         // Fetch active variants for this product
         $variants = $this->db->where('product_id', $prodId)
@@ -1007,7 +1049,6 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                              ->get('product_variants')
                              ->result_array();
 
-        // Save active product in conversation agent_state
         $defaultVarId = !empty($variants) ? (int)$variants[0]['id'] : 0;
         $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
             'agent_state' => json_encode([
@@ -1019,52 +1060,72 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             'updated_at'  => date('Y-m-d H:i:s'),
         ]);
 
-        if (count($variants) > 1) {
-            // Send Variant Selector List
-            $secRows = [];
-            foreach (array_slice($variants, 0, 9) as $var) {
-                $vPrice = (float)($var['sale_price'] && (float)$var['sale_price'] > 0 ? $var['sale_price'] : $var['price']);
-                $vPriceStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($vPrice) : "₹{$vPrice}";
-                $label = trim((string)($var['label'] ?? 'Standard'));
-                $secRows[] = [
-                    'id'          => 'var_' . $var['id'] . '_' . $prodId,
-                    'title'       => function_exists('mb_substr') ? mb_substr($label, 0, 24) : substr($label, 0, 24),
-                    'description' => "{$vPriceStr} · In Stock",
-                ];
-            }
-            $secRows[] = [
-                'id'          => 'qty_1_' . $prodId . '_' . $defaultVarId,
-                'title'       => '🛒 Buy Default (Qty: 1)',
-                'description' => "{$priceStr} · Quick Order",
-            ];
+        $cardText = "🥻 *{$pName}*\n"
+                  . "{$priceDisplay}\n\n"
+                  . ($specStr !== '' ? "{$specStr}\n" : '')
+                  . "📦 *Stock:* In Stock (Ready to dispatch)\n"
+                  . "🚚 *Delivery:* FREE Delivery across India\n\n"
+                  . "👉 *Select quantity below to order:*";
 
-            $interactive = [
-                'type'   => 'list',
+        $cardSent = false;
+        if ($imgUrl !== '') {
+            $interactiveCard = [
+                'type'   => 'button',
                 'header' => [
-                    'type' => 'text',
-                    'text' => function_exists('mb_substr') ? mb_substr("{$pName} Variants", 0, 60) : substr("{$pName} Variants", 0, 60),
+                    'type'  => 'image',
+                    'image' => ['link' => $imgUrl],
                 ],
                 'body'   => [
-                    'text' => "This saree is available in multiple variants ✨\nPlease choose your preferred style or variant below:",
+                    'text' => $cardText,
                 ],
                 'footer' => [
-                    'text' => 'Tap Choose Variant to proceed',
+                    'text' => '100% Authentic Handloom Quality',
                 ],
                 'action' => [
-                    'button'   => 'Choose Variant',
-                    'sections' => [
+                    'buttons' => [
                         [
-                            'title' => 'Available Variants',
-                            'rows'  => $secRows,
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => "qty_1_{$prodId}_{$defaultVarId}",
+                                'title' => '🛒 Buy 1 Pc',
+                            ],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => "qty_2_{$prodId}_{$defaultVarId}",
+                                'title' => '🛍️ Buy 2 Pcs',
+                            ],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => "more_qty_{$prodId}_{$defaultVarId}",
+                                'title' => count($variants) > 1 ? '✨ Styles / Qty' : '🔢 More Qty',
+                            ],
                         ],
                     ],
                 ],
             ];
-            $waCloud->send_interactive($peer, $interactive);
-        } else {
-            // Single variant or default — prompt for Quantity immediately!
-            $defaultVar = !empty($variants) ? $variants[0] : null;
-            $this->_send_quantity_selector($prod, $defaultVar, $peer, $vendorId, $waCloud, $shopName, $conv);
+            $res = $waCloud->send_interactive($peer, $interactiveCard);
+            if (!empty($res['success'])) {
+                $cardSent = true;
+            }
+        }
+
+        if (!$cardSent) {
+            if ($imgUrl !== '') {
+                $waCloud->send_media($peer, 'image', $imgUrl, $caption);
+            } else {
+                $waCloud->send_text($peer, $caption);
+            }
+
+            if (count($variants) > 1) {
+                $this->_send_variant_selector($prod, $variants, $peer, $waCloud, $shopName);
+            } else {
+                $defaultVar = !empty($variants) ? $variants[0] : null;
+                $this->_send_quantity_selector($prod, $defaultVar, $peer, $vendorId, $waCloud, $shopName, $conv);
+            }
         }
     }
 
@@ -1375,9 +1436,143 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     }
 
     /**
-     * Send checkout payment card with link and delivery guidance.
+     * Send rich Saree Catalog list with direct product selection and category browsing.
      */
-    private function _send_checkout_card(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName): void {
+    private function _send_saree_catalog(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName): void {
+        $prods = $this->db->where('vendor_id', $vendorId)
+                          ->where('status', 'active')
+                          ->order_by('id', 'ASC')
+                          ->limit(7)
+                          ->get('products')
+                          ->result_array();
+
+        $cats = $this->db->query("SELECT c.id, c.name, COUNT(p.id) as product_count 
+                                 FROM categories c 
+                                 INNER JOIN products p ON p.category_id = c.id 
+                                 WHERE p.vendor_id = ? AND p.status = 'active' 
+                                 GROUP BY c.id HAVING product_count > 0 
+                                 ORDER BY c.name ASC LIMIT 3", [$vendorId])->result_array();
+
+        $prodRows = [];
+        foreach ($prods as $p) {
+            $pName = trim((string)$p['name']);
+            $salePrice = isset($p['sale_price']) && (float)$p['sale_price'] > 0 ? (float)$p['sale_price'] : (float)$p['price'];
+            $priceStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($salePrice) : "₹{$salePrice}";
+            $fabric = !empty($p['fabric']) ? " · " . $p['fabric'] : '';
+            $desc = "{$priceStr}{$fabric} · In Stock";
+
+            $prodRows[] = [
+                'id'          => 'prod_' . $p['id'],
+                'title'       => function_exists('mb_substr') ? mb_substr("🥻 {$pName}", 0, 24) : substr("🥻 {$pName}", 0, 24),
+                'description' => function_exists('mb_substr') ? mb_substr($desc, 0, 72) : substr($desc, 0, 72),
+            ];
+        }
+
+        $catRows = [];
+        $catIcons = ['🧵', '✨', '🌸'];
+        foreach ($cats as $i => $cat) {
+            $cName = trim((string)$cat['name']);
+            $cnt = (int)($cat['product_count'] ?? 0);
+            $icon = $catIcons[$i % count($catIcons)];
+            $catRows[] = [
+                'id'          => 'cat_' . $cat['id'],
+                'title'       => function_exists('mb_substr') ? mb_substr("{$icon} {$cName}", 0, 24) : substr("{$icon} {$cName}", 0, 24),
+                'description' => "{$cnt} saree designs available",
+            ];
+        }
+
+        $sections = [];
+        if (!empty($prodRows)) {
+            $sections[] = [
+                'title' => '🌟 Saree Catalog (Select to View)',
+                'rows'  => $prodRows,
+            ];
+        }
+        if (!empty($catRows)) {
+            $sections[] = [
+                'title' => '📂 Browse by Category',
+                'rows'  => $catRows,
+            ];
+        }
+
+        $interactive = [
+            'type'   => 'list',
+            'header' => [
+                'type' => 'text',
+                'text' => function_exists('mb_substr') ? mb_substr("{$shopName} Saree Catalog", 0, 60) : "Saree Catalog",
+            ],
+            'body'   => [
+                'text' => "Welcome to our handcrafted saree collection! ✨\nTap below to open the catalog, view rates, specifications, and place your order:",
+            ],
+            'footer' => [
+                'text' => 'Free delivery across India 🚚',
+            ],
+            'action' => [
+                'button'   => '🛍️ Open Saree Catalog',
+                'sections' => $sections,
+            ],
+        ];
+
+        $waCloud->send_interactive($peer, $interactive);
+    }
+
+    /**
+     * Send variant selection drawer for products with multiple color/size variants.
+     */
+    private function _send_variant_selector(array $prod, array $variants, string $peer, Whatsapp_cloud $waCloud, string $shopName): void {
+        $prodId = (int)$prod['id'];
+        $pName = (string)$prod['name'];
+        $origPrice = (float)($prod['price'] ?? 0);
+        $salePrice = isset($prod['sale_price']) && (float)$prod['sale_price'] > 0 ? (float)$prod['sale_price'] : $origPrice;
+        $priceStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($salePrice) : "₹{$salePrice}";
+        $defaultVarId = !empty($variants) ? (int)$variants[0]['id'] : 0;
+
+        $secRows = [];
+        foreach (array_slice($variants, 0, 8) as $var) {
+            $vPrice = (float)($var['sale_price'] && (float)$var['sale_price'] > 0 ? $var['sale_price'] : $var['price']);
+            $vPriceStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($vPrice) : "₹{$vPrice}";
+            $label = trim((string)($var['label'] ?? 'Standard'));
+            $secRows[] = [
+                'id'          => 'var_' . $var['id'] . '_' . $prodId,
+                'title'       => function_exists('mb_substr') ? mb_substr($label, 0, 24) : substr($label, 0, 24),
+                'description' => "{$vPriceStr} · In Stock",
+            ];
+        }
+        $secRows[] = [
+            'id'          => 'qty_1_' . $prodId . '_' . $defaultVarId,
+            'title'       => '🛒 Buy Default (Qty: 1)',
+            'description' => "{$priceStr} · Quick Order",
+        ];
+
+        $interactive = [
+            'type'   => 'list',
+            'header' => [
+                'type' => 'text',
+                'text' => function_exists('mb_substr') ? mb_substr("{$pName} Variants", 0, 60) : "Choose Variant",
+            ],
+            'body'   => [
+                'text' => "This saree is available in multiple styles & variants ✨\nPlease choose your preferred option below:",
+            ],
+            'footer' => [
+                'text' => 'Tap Choose Variant to proceed',
+            ],
+            'action' => [
+                'button'   => 'Choose Variant',
+                'sections' => [
+                    [
+                        'title' => 'Available Variants',
+                        'rows'  => $secRows,
+                    ],
+                ],
+            ],
+        ];
+        $waCloud->send_interactive($peer, $interactive);
+    }
+
+    /**
+     * Send Checkout payment mode selection (Pay Online vs Cash on Delivery).
+     */
+    private function _send_checkout_payment_mode_options(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName): void {
         $sessionId = 'wa_' . $peer;
         $cartItems = $this->db->select('c.*, p.name as product_name, p.price as prod_price, p.sale_price as prod_sale, pv.label as variant_label, pv.price as var_price, pv.sale_price as var_sale')
                               ->from('cart c')
@@ -1388,7 +1583,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                               ->get()->result_array();
 
         if (empty($cartItems)) {
-            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* to browse sarees before checking out!");
+            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* or send *saree* to browse our collections before placing an order!");
             return;
         }
 
@@ -1404,21 +1599,478 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
 
         $cartTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($totalVal) : "₹{$totalVal}";
-        $checkoutUrl = "https://talkaipilot.com/checkout?session=" . urlencode($sessionId);
 
-        $msg = "🛍️ *Ready to Place Your Order!*\n\n"
-             . "• *Items in Bag:* {$totalItems}\n"
-             . "• *Total Payable:* {$cartTot}\n"
-             . "• *Shipping:* FREE Delivery\n\n"
-             . "💳 *Complete Your Purchase:*\n"
-             . "Tap the secure checkout link below to enter your delivery address & pay:\n"
-             . "👉 {$checkoutUrl}\n\n"
-             . "✨ *Payment Methods Accepted:*\n"
-             . "• Google Pay / PhonePe / Paytm / UPI\n"
-             . "• Credit / Debit Cards & Net Banking\n"
-             . "• Cash on Delivery (COD) available\n\n"
-             . "Once confirmed, your saree will be dispatched with live tracking!";
+        $interactive = [
+            'type'   => 'button',
+            'header' => [
+                'type' => 'text',
+                'text' => function_exists('mb_substr') ? mb_substr("Checkout ({$cartTot})", 0, 60) : "Checkout",
+            ],
+            'body'   => [
+                'text' => "🛍️ *Ready to Place Your Order!*\n\n"
+                        . "• *Items in Bag:* {$totalItems} piece(s)\n"
+                        . "• *Subtotal:* {$cartTot}\n"
+                        . "• *Shipping:* FREE Delivery across India 🚚\n"
+                        . "• *Total Payable:* *{$cartTot}*\n\n"
+                        . "📦 *Cash on Delivery (COD) is AVAILABLE!*\n\n"
+                        . "Please choose how you would like to pay:",
+            ],
+            'footer' => [
+                'text' => '100% Secure Checkout',
+            ],
+            'action' => [
+                'buttons' => [
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'pay_online',
+                            'title' => '💳 Pay Online (UPI)',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'pay_cod',
+                            'title' => '💵 Cash on Delivery',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'cart_view',
+                            'title' => '🛒 View Bag',
+                        ],
+                    ],
+                ],
+            ],
+        ];
 
-        $waCloud->send_text($peer, $msg);
+        $waCloud->send_interactive($peer, $interactive);
+    }
+
+    /**
+     * Create database order in orders and order_items tables.
+     */
+    private function _create_whatsapp_order(string $peer, int $vendorId, string $method, array $cartItems, float $totalVal, array $conv): ?array {
+        $user = $this->db->where('phone', $peer)->or_like('phone', substr($peer, -10))->get('users')->row_array();
+        $now = date('Y-m-d H:i:s');
+        if (!$user) {
+            $this->db->insert('users', [
+                'name'       => !empty($conv['customer_name']) ? $conv['customer_name'] : 'WhatsApp Customer',
+                'phone'      => $peer,
+                'role'       => 'customer',
+                'status'     => 'active',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+            $userId = (int)$this->db->insert_id();
+        } else {
+            $userId = (int)$user['id'];
+        }
+
+        $isCod = ($method === 'cod');
+        $orderData = [
+            'user_id'          => $userId,
+            'vendor_id'        => $vendorId,
+            'subtotal'         => $totalVal,
+            'shipping'         => 0.00,
+            'shipping_detail'  => 'Free Delivery across India',
+            'tax'              => 0.00,
+            'discount'         => 0.00,
+            'wallet_discount'  => 0.00,
+            'promo_code'       => null,
+            'total'            => $totalVal,
+            'wallet_amount'    => 0.00,
+            'order_source'     => 'whatsapp',
+            'payment_method'   => $method,
+            'payment_status'   => 'pending',
+            'status'           => $isCod ? 'confirmed' : 'payment_attempt',
+            'status_updated_at'=> $now,
+            'confirmed_at'     => $isCod ? $now : null,
+            'notes'            => 'Order placed via WhatsApp chat (' . ($isCod ? 'Cash on Delivery' : 'Razorpay Online') . ')',
+            'shipping_name'    => !empty($conv['customer_name']) ? $conv['customer_name'] : 'WhatsApp Customer',
+            'shipping_phone'   => $peer,
+            'shipping_line1'   => 'Customer Address via WhatsApp',
+            'shipping_country' => 'India',
+        ];
+
+        $orderItems = [];
+        foreach ($cartItems as $ci) {
+            $q = (int)$ci['quantity'];
+            $price = $ci['var_price'] !== null && (float)$ci['var_price'] > 0
+                ? (float)($ci['var_sale'] && (float)$ci['var_sale'] > 0 ? $ci['var_sale'] : $ci['var_price'])
+                : (float)($ci['prod_sale'] && (float)$ci['prod_sale'] > 0 ? $ci['prod_sale'] : $ci['prod_price']);
+            $orderItems[] = [
+                'vendor_id'     => $vendorId,
+                'product_id'    => (int)$ci['product_id'],
+                'variant_id'    => !empty($ci['variant_id']) ? (int)$ci['variant_id'] : null,
+                'product_name'  => (string)$ci['product_name'],
+                'product_sku'   => (string)($ci['sku'] ?? ('SKU-' . $ci['product_id'])),
+                'variant_label' => (string)($ci['variant_label'] ?? ''),
+                'thumbnail'     => (string)($ci['thumbnail'] ?? ''),
+                'price'         => $price,
+                'quantity'      => $q,
+                'subtotal'      => round($price * $q, 2),
+            ];
+        }
+
+        $orderId = $this->Sk_Order_model->create($orderData, $orderItems, true);
+        if ($orderId > 0) {
+            return $this->Sk_Order_model->get_by_id($orderId);
+        }
+        return null;
+    }
+
+    /**
+     * Handle Cash on Delivery (COD) order placement.
+     */
+    private function _place_order_cod(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, array $settings): void {
+        $sessionId = 'wa_' . $peer;
+        $cartItems = $this->db->select('c.*, p.name as product_name, p.price as prod_price, p.sale_price as prod_sale, pv.label as variant_label, pv.price as var_price, pv.sale_price as var_sale')
+                              ->from('cart c')
+                              ->join('products p', 'p.id = c.product_id')
+                              ->join('product_variants pv', 'pv.id = c.variant_id', 'left')
+                              ->where('c.session_id', $sessionId)
+                              ->where('c.vendor_id', $vendorId)
+                              ->get()->result_array();
+
+        if (empty($cartItems)) {
+            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* to browse our sarees!");
+            return;
+        }
+
+        $totalVal = 0.0;
+        foreach ($cartItems as $ci) {
+            $q = (int)$ci['quantity'];
+            $price = $ci['var_price'] !== null && (float)$ci['var_price'] > 0
+                ? (float)($ci['var_sale'] && (float)$ci['var_sale'] > 0 ? $ci['var_sale'] : $ci['var_price'])
+                : (float)($ci['prod_sale'] && (float)$ci['prod_sale'] > 0 ? $ci['prod_sale'] : $ci['prod_price']);
+            $totalVal += ($price * $q);
+        }
+
+        $order = $this->_create_whatsapp_order($peer, $vendorId, 'cod', $cartItems, $totalVal, $conv);
+        if (!$order) {
+            $waCloud->send_text($peer, "We couldn't process your order right now. Please try again or tap *Talk to our team* for assistance.");
+            return;
+        }
+
+        // Empty cart
+        $this->db->where('session_id', $sessionId)->delete('cart');
+
+        // Send Invoice & Confirmation
+        $this->_send_invoice_message($order, $cartItems, 'cod', $peer, $waCloud, $shopName, false);
+    }
+
+    /**
+     * Handle Pay Online order placement (generate Razorpay payment link).
+     */
+    private function _place_order_online(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, array $settings): void {
+        $sessionId = 'wa_' . $peer;
+        $cartItems = $this->db->select('c.*, p.name as product_name, p.price as prod_price, p.sale_price as prod_sale, pv.label as variant_label, pv.price as var_price, pv.sale_price as var_sale')
+                              ->from('cart c')
+                              ->join('products p', 'p.id = c.product_id')
+                              ->join('product_variants pv', 'pv.id = c.variant_id', 'left')
+                              ->where('c.session_id', $sessionId)
+                              ->where('c.vendor_id', $vendorId)
+                              ->get()->result_array();
+
+        if (empty($cartItems)) {
+            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* to browse our sarees!");
+            return;
+        }
+
+        $totalItems = 0;
+        $totalVal = 0.0;
+        foreach ($cartItems as $ci) {
+            $q = (int)$ci['quantity'];
+            $price = $ci['var_price'] !== null && (float)$ci['var_price'] > 0
+                ? (float)($ci['var_sale'] && (float)$ci['var_sale'] > 0 ? $ci['var_sale'] : $ci['var_price'])
+                : (float)($ci['prod_sale'] && (float)$ci['prod_sale'] > 0 ? $ci['prod_sale'] : $ci['prod_price']);
+            $totalItems += $q;
+            $totalVal += ($price * $q);
+        }
+
+        $cartTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($totalVal) : "₹{$totalVal}";
+
+        $order = $this->_create_whatsapp_order($peer, $vendorId, 'razorpay', $cartItems, $totalVal, $conv);
+        if (!$order) {
+            $waCloud->send_text($peer, "We couldn't initiate your online order. Please try again or select Cash on Delivery.");
+            return;
+        }
+
+        $orderId = (int)$order['id'];
+        $orderNumber = (string)($order['order_number'] ?? $orderId);
+
+        // Generate Razorpay Payment Link
+        $rzpRes = sk_razorpay_create_payment_link(
+            $totalVal,
+            "{$shopName} Saree Order #{$orderNumber}",
+            "ORD_{$orderId}_" . time(),
+            [
+                'order_id'  => (string)$orderId,
+                'peer'      => $peer,
+                'vendor_id' => (string)$vendorId,
+            ],
+            $settings
+        );
+
+        if (!empty($rzpRes['success']) && !empty($rzpRes['payment_link'])) {
+            $paymentLink = $rzpRes['payment_link'];
+            $this->db->where('id', $orderId)->update('orders', [
+                'notes' => 'Razorpay Link: ' . $paymentLink . ' (ID: ' . ($rzpRes['id'] ?? '') . ')',
+            ]);
+
+            // Empty cart
+            $this->db->where('session_id', $sessionId)->delete('cart');
+
+            $interactive = [
+                'type'   => 'button',
+                'header' => [
+                    'type' => 'text',
+                    'text' => function_exists('mb_substr') ? mb_substr("Payment Link #{$orderNumber}", 0, 60) : "Payment Link",
+                ],
+                'body'   => [
+                    'text' => "🛍️ *Order Reserved: #{$orderNumber}*\n\n"
+                            . "Please tap the secure link below to pay with UPI, GPay, PhonePe, Paytm, or Card:\n\n"
+                            . "👉 *{$paymentLink}*\n\n"
+                            . "• *Amount Payable:* *{$cartTot}*\n"
+                            . "• *Items in Order:* {$totalItems} piece(s)\n"
+                            . "• *Link Valid For:* 30 minutes ⏳\n\n"
+                            . "💡 *After completing your payment, tap '✅ I Have Paid' below to receive your Tax Invoice and receipt immediately!*",
+                ],
+                'footer' => [
+                    'text' => '100% Secure Razorpay Payment',
+                ],
+                'action' => [
+                    'buttons' => [
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => "paid_{$orderId}",
+                                'title' => '✅ I Have Paid',
+                            ],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => "switch_cod_{$orderId}",
+                                'title' => '💵 Switch to COD',
+                            ],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => 'main_menu',
+                                'title' => '🏠 Main Menu',
+                            ],
+                        ],
+                    ],
+                ],
+            ];
+
+            $waCloud->send_interactive($peer, $interactive);
+        } else {
+            // Fallback to web checkout or COD
+            $checkoutUrl = "https://talkaipilot.com/checkout?session=" . urlencode($sessionId);
+            $interactive = [
+                'type'   => 'button',
+                'header' => [
+                    'type' => 'text',
+                    'text' => 'Complete Your Order',
+                ],
+                'body'   => [
+                    'text' => "🛍️ *Order #{orderNumber}*\n\n"
+                            . "Pay online via web checkout below, or switch to Cash on Delivery:\n\n"
+                            . "👉 {$checkoutUrl}\n\n"
+                            . "• *Total Amount:* *{$cartTot}*",
+                ],
+                'footer' => [
+                    'text' => 'Free delivery included',
+                ],
+                'action' => [
+                    'buttons' => [
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => "switch_cod_{$orderId}",
+                                'title' => '💵 Switch to COD',
+                            ],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => 'main_menu',
+                                'title' => '🏠 Main Menu',
+                            ],
+                        ],
+                    ],
+                ],
+            ];
+            $waCloud->send_interactive($peer, $interactive);
+        }
+    }
+
+    /**
+     * Confirm online payment received and send detailed Tax Invoice & Receipt.
+     */
+    private function _confirm_online_payment(int $orderId, string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, array $settings): void {
+        $order = $this->Sk_Order_model->get_by_id($orderId);
+        if (!$order) {
+            // Find latest order for this phone
+            $order = $this->db->where('shipping_phone', $peer)
+                              ->order_by('id', 'DESC')
+                              ->limit(1)
+                              ->get('orders')
+                              ->row_array();
+            if ($order) {
+                $orderId = (int)$order['id'];
+                $order = $this->Sk_Order_model->get_by_id($orderId);
+            }
+        }
+
+        if (!$order) {
+            $waCloud->send_text($peer, "We couldn't locate your recent order record. Please reply with your Order ID or contact support.");
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $this->Sk_Order_model->update_status($orderId, 'confirmed');
+        $this->Sk_Order_model->update_payment_status($orderId, 'paid');
+        $this->db->where('id', $orderId)->update('orders', [
+            'confirmed_at' => $now,
+            'updated_at'   => $now,
+        ]);
+
+        // Insert into payments table
+        $totalVal = (float)$order['total'];
+        $currency = function_exists('sk_currency_code') ? sk_currency_code($settings) : 'INR';
+        $this->Sk_Order_model->save_payment([
+            'order_id'          => $orderId,
+            'razorpay_order_id' => 'plink_wa_' . $orderId,
+            'amount'            => $totalVal,
+            'currency'          => $currency,
+            'status'            => 'captured',
+        ]);
+
+        $items = $this->Sk_Order_model->get_items($orderId);
+        $this->_send_invoice_message($order, $items, 'razorpay', $peer, $waCloud, $shopName, true);
+    }
+
+    /**
+     * Switch an existing online pending order to Cash on Delivery.
+     */
+    private function _switch_order_to_cod(int $orderId, string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
+        $order = $this->Sk_Order_model->get_by_id($orderId);
+        if (!$order) {
+            $waCloud->send_text($peer, "Order record not found. Reply with *1* to browse sarees!");
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $this->db->where('id', $orderId)->update('orders', [
+            'payment_method'    => 'cod',
+            'status'            => 'confirmed',
+            'payment_status'    => 'pending',
+            'status_updated_at' => $now,
+            'confirmed_at'      => $now,
+            'updated_at'        => $now,
+            'notes'             => 'Customer switched payment to Cash on Delivery (COD)',
+        ]);
+
+        $order = $this->Sk_Order_model->get_by_id($orderId);
+        $items = $this->Sk_Order_model->get_items($orderId);
+        $this->_send_invoice_message($order, $items, 'cod', $peer, $waCloud, $shopName, false);
+    }
+
+    /**
+     * Send formatted Tax Invoice & Order Confirmation message on WhatsApp with action buttons.
+     */
+    private function _send_invoice_message(array $order, array $items, string $paymentMode, string $peer, Whatsapp_cloud $waCloud, string $shopName, bool $isPaid): void {
+        $orderNo = (string)($order['order_number'] ?? $order['id']);
+        $totalVal = (float)($order['total'] ?? 0);
+        $cartTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($totalVal) : "₹{$totalVal}";
+        $custName = !empty($order['shipping_name']) ? $order['shipping_name'] : 'Valued Customer';
+        $orderDate = date('d M Y, h:i A');
+
+        $lines = [];
+        foreach ($items as $idx => $it) {
+            $pName = (string)($it['product_name'] ?? $it['name'] ?? 'Saree');
+            $vLabel = !empty($it['variant_label']) ? " ({$it['variant_label']})" : '';
+            $q = (int)($it['quantity'] ?? 1);
+            $price = (float)($it['price'] ?? 0);
+            $sub = $price * $q;
+            $subStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($sub) : "₹{$sub}";
+            $lines[] = ($idx + 1) . ". *{$pName}*{$vLabel}\n   Qty: {$q} · Amount: *{$subStr}*";
+        }
+        $itemsBlock = implode("\n", $lines);
+
+        $isCod = ($paymentMode === 'cod');
+        $payTitle = $isCod ? "Cash on Delivery (COD)" : "Razorpay Online (UPI/Card)";
+        $payStatusText = $isPaid ? "PAID & VERIFIED ✅" : ($isCod ? "Pay {$cartTot} on Delivery 📦" : "Payment Pending ⏳");
+
+        $invoiceMsg = ($isPaid ? "🎉 *PAYMENT RECEIVED & ORDER CONFIRMED!*" : "🎉 *ORDER CONFIRMED!*") . "\n"
+                    . "Thank you for shopping with *{$shopName}*!\n\n"
+                    . "🧾 *TAX INVOICE / ORDER SUMMARY*\n"
+                    . "━━━━━━━━━━━━━━━━━━━━\n"
+                    . "🆔 *Order #:* {$orderNo}\n"
+                    . "📅 *Date:* {$orderDate}\n"
+                    . "👤 *Customer:* {$custName} (+{$peer})\n"
+                    . "💳 *Payment Mode:* {$payTitle}\n"
+                    . "💵 *Payment Status:* {$payStatusText}\n"
+                    . "📦 *Order Status:* Confirmed (Preparing for dispatch)\n\n"
+                    . "🛍️ *ITEMIZED DETAILS:*\n"
+                    . "{$itemsBlock}\n"
+                    . "━━━━━━━━━━━━━━━━━━━━\n"
+                    . "• *Subtotal:* {$cartTot}\n"
+                    . "• *Delivery:* FREE Delivery (₹0.00) 🚚\n"
+                    . "• *Taxes (GST 5%):* Included in price\n"
+                    . "💰 *" . ($isPaid ? "NET AMOUNT PAID" : "TOTAL AMOUNT DUE") . ":* *{$cartTot}*\n"
+                    . "━━━━━━━━━━━━━━━━━━━━\n"
+                    . "🚚 *Estimated Delivery:* 3 - 5 business days\n"
+                    . "📦 A live courier tracking link will be sent to your WhatsApp as soon as your package is dispatched!\n\n"
+                    . "Need any assistance? Reply *5* to chat with our team!";
+
+        $waCloud->send_text($peer, $invoiceMsg);
+
+        $interactive = [
+            'type'   => 'button',
+            'header' => [
+                'type' => 'text',
+                'text' => function_exists('mb_substr') ? mb_substr("Order #{$orderNo}", 0, 60) : "Order Confirmed",
+            ],
+            'body'   => [
+                'text' => "Your order #{$orderNo} has been placed successfully! What would you like to do next?",
+            ],
+            'footer' => [
+                'text' => 'Free delivery on all orders',
+            ],
+            'action' => [
+                'buttons' => [
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'track_order',
+                            'title' => '📦 Track Order',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'browse_products',
+                            'title' => '🛍️ Browse More',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'main_menu',
+                            'title' => '🏠 Main Menu',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $waCloud->send_interactive($peer, $interactive);
     }
 }

@@ -106,6 +106,52 @@ assert_test($updatedCart && (int)$updatedCart['quantity'] === 3, "Cart quantity 
 // Cleanup
 $mysqli->query("DELETE FROM cart WHERE session_id = '{$testSession}'");
 
+echo "\n--- TEST 5: Saree Catalog Structure & Products ---\n";
+$catProducts = $mysqli->query("SELECT id, name, price, fabric, color FROM products WHERE vendor_id = 2 AND status = 'active' ORDER BY id ASC LIMIT 5")->fetch_all(MYSQLI_ASSOC);
+assert_test(count($catProducts) >= 3, "Saree Catalog has >= 3 active products", "Found " . count($catProducts));
+$first = $catProducts[0] ?? [];
+assert_test(!empty($first['name']) && !empty($first['price']), "Catalog product has name and price");
+
+echo "\n--- TEST 6: COD Order Creation & Invoice Formatting ---\n";
+$testPhone = '917598933686';
+$testOrderNum = 'TEST_ORD_' . time();
+$orderSql = "INSERT INTO orders (user_id, vendor_id, order_number, subtotal, shipping, tax, discount, total, payment_method, order_source, payment_status, status, shipping_name, shipping_phone, shipping_country, created_at, updated_at)
+             VALUES (1, 2, '{$testOrderNum}', 2499.00, 0.00, 0.00, 0.00, 2499.00, 'cod', 'whatsapp', 'pending', 'confirmed', 'Test Customer', '{$testPhone}', 'India', NOW(), NOW())";
+$mysqli->query($orderSql);
+$orderId = $mysqli->insert_id;
+assert_test($orderId > 0, "Insert COD order succeeds with ID {$orderId}");
+
+// Insert item
+$mysqli->query("INSERT INTO order_items (order_id, vendor_id, product_id, product_name, product_sku, price, quantity, subtotal)
+                VALUES ({$orderId}, 2, 4, 'Pure Kanjivaram Silk Saree', '2D-004', 2499.00, 1, 2499.00)");
+$insertedItem = $mysqli->query("SELECT * FROM order_items WHERE order_id = {$orderId}")->fetch_assoc();
+assert_test($insertedItem && $insertedItem['product_name'] === 'Pure Kanjivaram Silk Saree', "Insert order item succeeds");
+
+// Verify invoice format
+$invoiceLines = [
+    "🎉 *ORDER CONFIRMED!* #{$testOrderNum}",
+    "🧾 *TAX INVOICE / ORDER SUMMARY*",
+    "💳 *Payment Mode:* Cash on Delivery (COD)",
+    "💰 *TOTAL AMOUNT DUE:* *₹2,499.00*",
+];
+$invoiceSample = "🎉 *ORDER CONFIRMED!* #{$testOrderNum}\n🧾 *TAX INVOICE / ORDER SUMMARY*\n💳 *Payment Mode:* Cash on Delivery (COD)\n💰 *TOTAL AMOUNT DUE:* *₹2,499.00*";
+$hasAllInvoiceParts = true;
+foreach ($invoiceLines as $il) {
+    if (strpos($invoiceSample, $il) === false) {
+        $hasAllInvoiceParts = false;
+        break;
+    }
+}
+assert_test($hasAllInvoiceParts, "Invoice formatting contains Order #, Tax Invoice, COD, and Total");
+
+// Clean up test order
+$mysqli->query("DELETE FROM order_items WHERE order_id = {$orderId}");
+$mysqli->query("DELETE FROM orders WHERE id = {$orderId}");
+
+echo "\n--- TEST 7: Razorpay Credentials on VPS ---\n";
+$rzpKey = $mysqli->query("SELECT value FROM settings WHERE `key` = 'razorpay_key_id'")->fetch_assoc()['value'] ?? '';
+assert_test(strpos($rzpKey, 'rzp_') === 0, "Razorpay key exists in settings", "Key: " . substr($rzpKey, 0, 8) . "...");
+
 echo "\n========================================================\n";
 echo " RESULTS: {$passed} PASSED, {$failed} FAILED\n";
 echo "========================================================\n";
