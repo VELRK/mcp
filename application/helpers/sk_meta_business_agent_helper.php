@@ -1130,7 +1130,7 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
             'title'           => 'product-photo',
             'component_type'  => 'image',
             'status'          => 'enabled',
-            'instruction'     => 'For each product from search_products at ' . $shopName . ', send the product photo. Caption MUST be the product name and price (e.g. "Kanjivaram Silk Saree - Gold Border - ₹3"). In text, describe the product details, available sizes, and ask for quantity. If image_url is empty, do not send an image.',
+            'instruction'     => 'Send the single product photo from image_url with caption format "[Product Name] - [Price]". In text, always write out the full product names and prices from the catalog response.',
         ],
     ];
     return $defs;

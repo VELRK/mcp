@@ -444,6 +444,28 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             $score += 25;
         }
 
+        if (!$catalog) {
+            $distinctiveTerms = [];
+            foreach ($parsed['terms'] as $term) {
+                $term = trim((string)$term);
+                if (strlen($term) < 3 || in_array($term, $conversationalFillers, true)) continue;
+                if (in_array($term, ['saree', 'sarees', 'cloth', 'clothes', 'dress', 'item', 'product'], true)) continue;
+                $distinctiveTerms[] = $term;
+            }
+            if (!empty($distinctiveTerms)) {
+                $hasDistinctiveMatch = false;
+                foreach ($distinctiveTerms as $dt) {
+                    if (stripos($haystack, $dt) !== false) {
+                        $hasDistinctiveMatch = true;
+                        break;
+                    }
+                }
+                if (!$hasDistinctiveMatch) {
+                    continue;
+                }
+            }
+        }
+
         if ($catalog) {
             $score = max($score, 1);
         }

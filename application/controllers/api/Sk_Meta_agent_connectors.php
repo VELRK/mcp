@@ -583,16 +583,26 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             $ui = $photoCount >= 1 ? 'product-photo' : 'none';
             $pName = (string)($products[0]['name'] ?? 'product');
             $pPrice = sk_mcp_tool_inr((float)($products[0]['price'] ?? 0));
-            $summary = "Product found: {$pName} ({$pPrice}). Send the product photo with caption \"{$pName} - {$pPrice}\". In text, describe the fabric, color, design, and price from the database, and ask which size and quantity to add to cart in this WhatsApp chat.";
-            $detailText = (string)($cards[0]['detail'] ?? '');
+            $pSpecs = (string)($products[0]['specs'] ?? '');
+            $pDesc = (string)($products[0]['description'] ?? '');
+            $cards = array_slice($cards, 0, 1);
+            $detailText = "*{$pName}*\nPrice: {$pPrice}" . ($pSpecs !== '' ? "\nSpecifications: {$pSpecs}" : '') . ($pDesc !== '' ? "\n{$pDesc}" : '');
+            $summary = "Product found: {$pName} ({$pPrice}). Send the product photo with caption \"{$pName} - {$pPrice}\". In your text message, tell the customer: 'Here are the details for *{$pName}*:\nPrice: {$pPrice}\n" . ($pSpecs !== '' ? "Details: {$pSpecs}\n" : '') . "How many would you like to order?'";
         } elseif ($count > 1) {
-            $ui = 'product-photo';
-            $summary = "Found {$count} products in catalog. Send the product photo for each product with its name and price. In text, describe the products and ask which item, size, and quantity they would like to order in this WhatsApp chat.";
+            $ui = $photoCount >= 1 ? 'product-photo' : 'none';
+            // Only send 1 featured card so WhatsApp never drops multiple media messages
+            $cards = array_slice($cards, 0, 1);
             $lines = [];
-            foreach ($cards as $c) {
-                $lines[] = (string)($c['name'] ?? '') . ' - ' . (string)($c['body'] ?? '');
+            foreach (array_slice($products, 0, 5) as $i => $p) {
+                $pName = (string)($p['name'] ?? 'Product');
+                $pPrice = sk_mcp_tool_inr((float)($p['price'] ?? 0));
+                $pColor = trim((string)($p['color'] ?? ''));
+                $extra = $pColor !== '' ? " · {$pColor}" : '';
+                $lines[] = ($i + 1) . ". *{$pName}* - {$pPrice}{$extra}";
             }
-            $detailText = implode("\n", $lines);
+            $catalogList = implode("\n", $lines);
+            $detailText = "Available products:\n" . $catalogList;
+            $summary = "Found {$count} products in catalog. Send the featured product photo with caption \"{$cards[0]['name']} - " . sk_mcp_tool_inr((float)($products[0]['price'] ?? 0)) . "\". In your text message, write:\n\n'Here are our available sarees:\n{$catalogList}\n\nWhich saree and quantity would you like to order?'";
         } else {
             $summary = 'No matching products found in the catalog.';
         }
