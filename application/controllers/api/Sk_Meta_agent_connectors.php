@@ -570,10 +570,10 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         if ($count === 1) {
             $galleryCards = $this->_gallery_cards($products[0], $footer);
             $ui = $photoCount === 1 ? 'product-photo' : 'none';
-            $summary = 'Send the branded product card image from image_url. The card visually displays the photo, title, price, available sizes, stepper, and Add to Cart. In text, reply in a friendly tone (e.g. "Iruku bro 😊 Here are some options for you:") and ask how many units or which size they want. When they confirm adding it, call get_cart then add_cart_item.';
+            $summary = 'Send the clean product photo from image_url with Shop now button. In text, confirm product and price. If options exist, ask which size/variant they want, or they can tap Shop now to customize and add to cart online. When adding via chat, confirm quantity and call get_cart then add_cart_item.';
         } elseif ($count > 1) {
             $ui = 'product-photo';
-            $summary = 'Product list. Send the branded product card image from image_url for each product (up to 5). Each card visually displays the photo, title, price, and sizes. In text, reply friendly and ask which item and how many they want to add to their basket.';
+            $summary = 'Product list. Send the product photo for each product with Shop now. In text, ask which item, size, and quantity they would like to add to their basket.';
         } else {
             $summary = 'No matching products in this shop.';
         }
@@ -629,6 +629,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         if ($name === '') {
             $name = 'Product';
         }
+        $rawImage = (string)($product['image_url'] ?? '');
         $cardImage = function_exists('sk_meta_generate_product_card_image')
             ? sk_meta_generate_product_card_image($product)
             : '';
@@ -637,10 +638,11 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             'body'          => $this->_shop_card_body($product),
             'detail'        => $this->_shop_detail_body($product),
             'footer'        => $footer,
-            'image_url'     => $cardImage ?: (string)($product['image_url'] ?? ''),
-            'raw_image_url' => (string)($product['image_url'] ?? ''),
+            'image_url'     => $rawImage !== '' ? $rawImage : $cardImage,
+            'raw_image_url' => $rawImage,
             'card_image_url'=> $cardImage,
-            'button_label'  => $button ?: 'Add to Cart',
+            'button_label'  => $button ?: 'Shop now',
+            'product_url'   => $product['product_url'] ?? site_url('shop/product/' . ($product['id'] ?? '')),
             'needs_variant' => count($product['variants'] ?? []) > 0,
         ];
     }
