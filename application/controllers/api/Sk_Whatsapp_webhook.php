@@ -443,9 +443,18 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
         $trimBody = trim(mb_strtolower($body));
 
+        $agentState = !empty($conv['agent_state']) ? json_decode((string)$conv['agent_state'], true) : [];
+        $isWaitingAddress = is_array($agentState) && (($agentState['step'] ?? '') === 'waiting_for_address');
+
         // 1. GREETING / MAIN MENU:
         $isGreeting = preg_match('/^(hi|hai|hello|hey|vanakkam|menu|main menu|start|help|வணக்கம்)(\s+(there|team|vel|bro|sir|mam|madam|all))?[\s!.,?]*$/iu', $trimBody)
             || in_array($interactiveId, ['main_menu', 'menu'], true);
+
+        // If customer is currently entering delivery address, process the address text or location pin
+        if ($isWaitingAddress && !$isGreeting && $interactiveId === '') {
+            $this->_handle_inbound_address_entry($peer, $vendorId, $body, $raw, $waCloud, $shopName, $conv);
+            return;
+        }
 
         if ($isGreeting) {
             $headerText = function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : substr($shopName, 0, 60);
@@ -809,32 +818,53 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
 
-        // 15. CHECKOUT / PLACE ORDER:
+        // 15. CHECKOUT / PLACE ORDER: ASK DELIVERY ADDRESS FIRST!
         if (in_array($interactiveId, ['cart_checkout', 'checkout', 'buy_now'], true) || preg_match('/^(checkout|buy now|place order|order now|order)$/iu', $trimBody)) {
-            $this->_send_checkout_payment_mode_options($peer, $vendorId, $waCloud, $shopName);
+            $this->_initiate_checkout_address_flow($peer, $vendorId, $waCloud, $shopName, $conv);
             return;
         }
 
-        // 15a. PAYMENT MODE: CASH ON DELIVERY (COD)
-        if ($interactiveId === 'pay_cod' || preg_match('/^(cod|cash on delivery)$/iu', $trimBody)) {
-            $this->_place_order_cod($peer, $vendorId, $waCloud, $shopName, $conv, $settings);
+        // 15a. CONFIRM SAVED DELIVERY ADDRESS (e.g. addr_confirm_2, addr_proceed_2)
+        if (strpos($interactiveId, 'addr_confirm_') === 0 || strpos($interactiveId, 'addr_proceed_') === 0) {
+            $addrId = (int)str_replace(['addr_confirm_', 'addr_proceed_'], '', $interactiveId);
+            $this->_send_checkout_payment_mode_options($peer, $vendorId, $waCloud, $shopName, $addrId);
             return;
         }
 
-        // 15b. PAYMENT MODE: PAY ONLINE (RAZORPAY)
-        if ($interactiveId === 'pay_online' || preg_match('/^(pay online|online|razorpay|upi|pay)$/iu', $trimBody)) {
-            $this->_place_order_online($peer, $vendorId, $waCloud, $shopName, $conv, $settings);
+        // 15b. CHANGE / ENTER DELIVERY ADDRESS (addr_change)
+        if ($interactiveId === 'addr_change') {
+            $this->_prompt_for_delivery_address($peer, $vendorId, $waCloud, $shopName, $conv);
             return;
         }
 
-        // 15c. CONFIRM ONLINE PAYMENT COMPLETED ("I Have Paid")
+        // 15c. PAYMENT MODE: CASH ON DELIVERY (COD)
+        if (strpos($interactiveId, 'pay_cod') === 0 || preg_match('/^(cod|cash on delivery)$/iu', $trimBody)) {
+            $addrId = 0;
+            if (strpos($interactiveId, 'pay_cod_') === 0) {
+                $addrId = (int)str_replace('pay_cod_', '', $interactiveId);
+            }
+            $this->_place_order_cod($peer, $vendorId, $waCloud, $shopName, $conv, $settings, $addrId);
+            return;
+        }
+
+        // 15d. PAYMENT MODE: PAY ONLINE (RAZORPAY)
+        if (strpos($interactiveId, 'pay_online') === 0 || preg_match('/^(pay online|online|razorpay|upi|pay)$/iu', $trimBody)) {
+            $addrId = 0;
+            if (strpos($interactiveId, 'pay_online_') === 0) {
+                $addrId = (int)str_replace('pay_online_', '', $interactiveId);
+            }
+            $this->_place_order_online($peer, $vendorId, $waCloud, $shopName, $conv, $settings, $addrId);
+            return;
+        }
+
+        // 15e. CONFIRM ONLINE PAYMENT COMPLETED ("I Have Paid")
         if (strpos($interactiveId, 'paid_') === 0 || preg_match('/^(i have paid|paid|payment done|paid online)$/iu', $trimBody)) {
             $orderId = (int)str_replace('paid_', '', $interactiveId);
             $this->_confirm_online_payment($orderId, $peer, $vendorId, $waCloud, $shopName, $conv, $settings);
             return;
         }
 
-        // 15d. SWITCH EXISTING ORDER TO COD
+        // 15f. SWITCH EXISTING ORDER TO COD
         if (strpos($interactiveId, 'switch_cod_') === 0) {
             $orderId = (int)str_replace('switch_cod_', '', $interactiveId);
             $this->_switch_order_to_cod($orderId, $peer, $vendorId, $waCloud, $shopName, $conv);
@@ -1567,19 +1597,448 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'button'   => 'Choose Variant',
                 'sections' => [
                     [
-                        'title' => 'Available Variants',
+                        'title' => 'Available Options',
                         'rows'  => $secRows,
                     ],
                 ],
             ],
         ];
+
         $waCloud->send_interactive($peer, $interactive);
     }
 
     /**
-     * Send Checkout payment mode selection (Pay Online vs Cash on Delivery).
+     * Step 1 of Checkout: Verify or ask for delivery address before sale.
      */
-    private function _send_checkout_payment_mode_options(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName): void {
+    private function _initiate_checkout_address_flow(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
+        $sessionId = 'wa_' . $peer;
+        $cartCount = $this->db->where('session_id', $sessionId)->where('vendor_id', $vendorId)->count_all_results('cart');
+        if ($cartCount === 0) {
+            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* or send *saree* to browse our collections before placing an order!");
+            return;
+        }
+
+        $addr = $this->_get_latest_customer_address($peer);
+        if ($addr && !empty($addr['line1'])) {
+            $addrId = (int)($addr['id'] ?? 0);
+            $name = !empty($addr['full_name']) ? $addr['full_name'] : (!empty($conv['name']) ? $conv['name'] : 'Customer');
+            $phone = !empty($addr['phone']) ? $addr['phone'] : $peer;
+            $line1 = (string)$addr['line1'];
+            $line2 = !empty($addr['line2']) ? ", " . $addr['line2'] : '';
+            $city = (string)($addr['city'] ?? '');
+            $state = (string)($addr['state'] ?? '');
+            $pin = (string)($addr['pincode'] ?? '');
+
+            $body = "📦 *Confirm Delivery Address*\n\n"
+                  . "Please confirm where your saree order should be delivered:\n\n"
+                  . "👤 *Recipient:* {$name}\n"
+                  . "📞 *Contact:* +{$phone}\n"
+                  . "🏠 *Address:* {$line1}{$line2}\n"
+                  . ($city !== '' ? "🏙️ *City / State:* {$city}, {$state}\n" : '')
+                  . ($pin !== '' ? "📮 *Pincode:* {$pin}\n" : '')
+                  . "🚚 *Delivery:* FREE Express Delivery across India (₹0.00)\n\n"
+                  . "Is this address correct for dispatch?";
+
+            $interactive = [
+                'type'   => 'button',
+                'header' => [
+                    'type' => 'text',
+                    'text' => '📍 Confirm Delivery Address',
+                ],
+                'body'   => [
+                    'text' => $body,
+                ],
+                'footer' => [
+                    'text' => '100% Free Express Delivery',
+                ],
+                'action' => [
+                    'buttons' => [
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => "addr_confirm_{$addrId}",
+                                'title' => '✅ Deliver Here',
+                            ],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => 'addr_change',
+                                'title' => '✏️ Edit Address',
+                            ],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => [
+                                'id'    => 'cart_view',
+                                'title' => '🛒 View Bag',
+                            ],
+                        ],
+                    ],
+                ],
+            ];
+            $waCloud->send_interactive($peer, $interactive);
+            return;
+        }
+
+        // If no saved address found, prompt customer to enter address
+        $this->_prompt_for_delivery_address($peer, $vendorId, $waCloud, $shopName, $conv);
+    }
+
+    /**
+     * Prompt customer to type or share their delivery address.
+     */
+    private function _prompt_for_delivery_address(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
+        // Set conversation state to waiting_for_address
+        $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
+            'agent_state' => json_encode([
+                'step'      => 'waiting_for_address',
+                'vendor_id' => $vendorId,
+            ], JSON_UNESCAPED_UNICODE),
+            'updated_at'  => date('Y-m-d H:i:s'),
+        ]);
+
+        $promptText = "📍 *Enter Delivery Address*\n\n"
+                    . "Please reply with your shipping address in this easy format:\n\n"
+                    . "*Name, House/Flat No, Street/Road, City, State, Pincode*\n\n"
+                    . "_Example:_\n"
+                    . "*Priya Sharma, 14/2 Anna Salai, Opposite Temple, Madurai, Tamil Nadu, 625001*\n\n"
+                    . "💡 *Tip:* You can also tap the 📎 Attachment icon and share your *Location Pin* 📍\n"
+                    . "🚚 _Free Delivery across all locations in India._";
+
+        $interactive = [
+            'type'   => 'button',
+            'header' => [
+                'type' => 'text',
+                'text' => 'Delivery Address Required',
+            ],
+            'body'   => [
+                'text' => $promptText,
+            ],
+            'footer' => [
+                'text' => 'Reply below with your address',
+            ],
+            'action' => [
+                'buttons' => [
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'cart_view',
+                            'title' => '🛒 Return to Bag',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'talk_to_team',
+                            'title' => '🙋 Help / Support',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $res = $waCloud->send_interactive($peer, $interactive);
+        if (empty($res['success'])) {
+            $waCloud->send_text($peer, $promptText);
+        }
+    }
+
+    /**
+     * Handle incoming address text or location pin from customer.
+     */
+    private function _handle_inbound_address_entry(string $peer, int $vendorId, string $body, array $raw, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
+        // Handle WhatsApp Location Pin if provided
+        $isLocation = (!empty($raw['type']) && $raw['type'] === 'location') || !empty($raw['location']);
+        $locationData = $raw['location'] ?? null;
+
+        $parsed = null;
+        if ($isLocation && is_array($locationData)) {
+            $lat = (string)($locationData['latitude'] ?? '');
+            $lng = (string)($locationData['longitude'] ?? '');
+            $locName = trim((string)($locationData['name'] ?? ''));
+            $locAddr = trim((string)($locationData['address'] ?? ''));
+            $fullLine = $locName !== '' ? "{$locName}, {$locAddr}" : ($locAddr !== '' ? $locAddr : "Location Pin: {$lat}, {$lng}");
+
+            $parsed = $this->_parse_address_text($fullLine, $peer, $conv['name'] ?? null);
+        } else {
+            // Validate minimum length
+            if (mb_strlen(trim($body)) < 5) {
+                $waCloud->send_text($peer, "📍 *Please provide a complete delivery address*\n\nInclude your Street / Area, City, and 6-digit Pincode so our courier can deliver smoothly! 📦\n\n_Example:_\n*Priya Sharma, 12 Lake View, Anna Salai, Madurai, Tamil Nadu, 625001*");
+                return;
+            }
+
+            $parsed = $this->_parse_address_text($body, $peer, $conv['name'] ?? null);
+        }
+
+        // Insert or update in addresses table
+        $user = $this->db->where('phone', $peer)->or_like('phone', substr($peer, -10))->get('users')->row_array();
+        $now = date('Y-m-d H:i:s');
+        if (!$user) {
+            $this->db->insert('users', [
+                'name'       => $parsed['full_name'],
+                'phone'      => $peer,
+                'status'     => 'active',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+            $userId = (int)$this->db->insert_id();
+        } else {
+            $userId = (int)$user['id'];
+        }
+
+        $this->db->insert('addresses', [
+            'vendor_id'    => $vendorId,
+            'user_id'      => $userId,
+            'label'        => 'Home',
+            'full_name'    => $parsed['full_name'],
+            'phone'        => $parsed['phone'],
+            'line1'        => $parsed['line1'],
+            'line2'        => $parsed['line2'] ?? '',
+            'city'         => $parsed['city'],
+            'state'        => $parsed['state'],
+            'pincode'      => $parsed['pincode'],
+            'country'      => 'India',
+            'is_default'   => 1,
+            'address_type' => 'shipping',
+            'created_at'   => $now,
+        ]);
+        $addrId = (int)$this->db->insert_id();
+
+        // Clear waiting_for_address state
+        $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
+            'agent_state' => json_encode([
+                'address_id' => $addrId,
+            ], JSON_UNESCAPED_UNICODE),
+            'updated_at'  => $now,
+        ]);
+
+        $addrText = "✅ *Delivery Address Saved Successfully!*\n\n"
+                  . "📦 *Shipping To:*\n"
+                  . "👤 *Name:* {$parsed['full_name']}\n"
+                  . "📞 *Phone:* +{$parsed['phone']}\n"
+                  . "🏠 *Address:* {$parsed['line1']}\n"
+                  . "🏙️ *City / State:* {$parsed['city']}, {$parsed['state']}\n"
+                  . "📮 *Pincode:* {$parsed['pincode']}\n"
+                  . "🚚 *Delivery:* FREE Express Delivery (₹0.00)\n\n"
+                  . "👉 Tap *Proceed to Pay* below to choose payment mode:";
+
+        $interactive = [
+            'type'   => 'button',
+            'header' => [
+                'type' => 'text',
+                'text' => 'Address Saved ✅',
+            ],
+            'body'   => [
+                'text' => $addrText,
+            ],
+            'footer' => [
+                'text' => '100% Free Express Delivery',
+            ],
+            'action' => [
+                'buttons' => [
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => "addr_proceed_{$addrId}",
+                            'title' => '💳 Proceed to Pay',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'addr_change',
+                            'title' => '✏️ Edit Address',
+                        ],
+                    ],
+                    [
+                        'type'  => 'reply',
+                        'reply' => [
+                            'id'    => 'cart_view',
+                            'title' => '🛒 View Bag',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $res = $waCloud->send_interactive($peer, $interactive);
+        if (empty($res['success'])) {
+            $waCloud->send_text($peer, $addrText);
+        }
+    }
+
+    /**
+     * Parse structured Indian address fields from casual customer text.
+     */
+    private function _parse_address_text(string $text, string $peer, ?string $customerName = null): array {
+        $raw = trim($text);
+
+        $name = !empty($customerName) && strcasecmp($customerName, 'WhatsApp Customer') !== 0 ? $customerName : '';
+        $phone = $peer;
+        $pincode = '';
+        $city = '';
+        $state = '';
+        $line1 = '';
+
+        // 1. Extract 6-digit Indian pincode
+        if (preg_match('/\b([1-9][0-9]{5})\b/', $raw, $pm)) {
+            $pincode = $pm[1];
+        }
+
+        // 2. Extract phone if alternate phone provided, else use $peer
+        if (preg_match('/(?:phone|mobile|mob|contact|ph|tel)?\s*[:=-]?\s*(?:\+?91[\s-]*)?([6-9]\d{9})\b/iu', $raw, $phm)) {
+            $phone = $phm[1];
+        }
+
+        // 3. Extract explicit labeled fields if customer used key-value style
+        if (preg_match('/(?:name|recipient)\s*[:=-]\s*([^\r\n,]+)/iu', $raw, $nm)) {
+            $name = trim($nm[1]);
+        }
+        if (preg_match('/(?:city|town)\s*[:=-]\s*([^\r\n,]+)/iu', $raw, $cm)) {
+            $city = trim($cm[1]);
+        }
+        if (preg_match('/(?:state)\s*[:=-]\s*([^\r\n,]+)/iu', $raw, $sm)) {
+            $state = trim($sm[1]);
+        }
+        if (preg_match('/(?:address|addr|street|house|flat|road)\s*[:=-]\s*([^\r\n]+)/iu', $raw, $am)) {
+            $line1 = trim($am[1]);
+        }
+
+        // 4. Clean tokens for positional extraction if fields remain missing
+        $clean = preg_replace('/(?:phone|mobile|mob|contact|ph|tel)\s*[:=-]?\s*(?:\+?91[\s-]*)?[6-9]\d{9}\b/iu', '', $raw);
+        if ($pincode !== '') {
+            $clean = str_replace($pincode, '', $clean);
+        }
+        // Remove label prefixes
+        $clean = preg_replace('/\b(?:name|recipient|address|addr|street|city|state|pin|pincode)\s*[:=-]/iu', '', $clean);
+        $clean = trim(preg_replace('/[,;\-–—\s]+$/u', '', $clean));
+
+        // Split by newlines or commas
+        $lines = preg_split('/[\r\n,]+/', $clean);
+        $cleanLines = [];
+        foreach ($lines as $l) {
+            $trimmed = trim(preg_replace('/^(?:name|address|addr|street|city|state|pin|pincode|phone|mobile|contact)\s*[:=-]\s*/iu', '', trim($l)));
+            if ($trimmed !== '' && !preg_match('/^(?:phone|ph|mob|mobile|contact|tel|pin|pincode|name|address)\s*[:=-]?$/iu', $trimmed)) {
+                $cleanLines[] = $trimmed;
+            }
+        }
+
+        $knownStates = [
+            'tamil nadu', 'tamilnadu', 'kerala', 'karnataka', 'andhra pradesh', 'telangana',
+            'maharashtra', 'delhi', 'gujarat', 'rajasthan', 'uttar pradesh', 'west bengal',
+            'madhya pradesh', 'bihar', 'punjab', 'haryana', 'odisha', 'assam'
+        ];
+
+        $addressParts = [];
+        foreach ($cleanLines as $line) {
+            $lower = strtolower($line);
+            $matchedState = false;
+            foreach ($knownStates as $ks) {
+                if ($lower === $ks || strpos($lower, $ks) !== false) {
+                    if ($state === '') {
+                        $state = ucwords($ks);
+                    }
+                    $matchedState = true;
+                    break;
+                }
+            }
+            if (!$matchedState) {
+                $addressParts[] = $line;
+            }
+        }
+
+        // Positional name extraction if not already set
+        if ($name === '' && !empty($addressParts) && !preg_match('/\d/', $addressParts[0]) && count(explode(' ', $addressParts[0])) <= 4) {
+            $name = array_shift($addressParts);
+        }
+        if ($name === '') {
+            $name = !empty($customerName) ? $customerName : 'Valued Customer';
+        }
+
+        // Positional city extraction if not already set
+        if ($city === '' && count($addressParts) > 1) {
+            $lastPart = end($addressParts);
+            if (!preg_match('/\d/', $lastPart) && strlen($lastPart) < 30) {
+                $city = array_pop($addressParts);
+            }
+        }
+
+        if ($line1 === '') {
+            $line1 = implode(', ', $addressParts);
+        }
+        if ($line1 === '') {
+            $line1 = $clean !== '' ? $clean : 'Customer Address';
+        }
+
+        if ($city === '') {
+            $city = 'Nagercoil';
+        }
+        if ($state === '') {
+            $state = 'Tamil Nadu';
+        }
+        if ($pincode === '') {
+            $pincode = '629501';
+        }
+
+        return [
+            'full_name' => $name,
+            'phone'     => $phone,
+            'line1'     => $line1,
+            'line2'     => '',
+            'city'      => $city,
+            'state'     => $state,
+            'pincode'   => $pincode,
+            'country'   => 'India',
+        ];
+    }
+
+    /**
+     * Find latest shipping address for this customer from addresses or orders table.
+     */
+    private function _get_latest_customer_address(string $peer): ?array {
+        $digits = preg_replace('/\D+/', '', $peer);
+        $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+        // 1. Check addresses table
+        $this->db->select('*')
+                 ->from('addresses')
+                 ->group_start()
+                     ->where('phone', $peer)
+                     ->or_like('phone', $last10)
+                 ->group_end()
+                 ->order_by('is_default', 'DESC')
+                 ->order_by('id', 'DESC')
+                 ->limit(1);
+        $addr = $this->db->get()->row_array();
+        if ($addr && !empty($addr['line1'])) {
+            return $addr;
+        }
+
+        // 2. Check recent orders
+        $this->db->select('shipping_name as full_name, shipping_phone as phone, shipping_line1 as line1, shipping_line2 as line2, shipping_city as city, shipping_state as state, shipping_pincode as pincode, shipping_country as country')
+                 ->from('orders')
+                 ->group_start()
+                     ->where('shipping_phone', $peer)
+                     ->or_like('shipping_phone', $last10)
+                 ->group_end()
+                 ->where('shipping_line1 IS NOT NULL', null, false)
+                 ->where("shipping_line1 != ''", null, false)
+                 ->where("shipping_line1 NOT LIKE '%via WhatsApp%'", null, false)
+                 ->order_by('id', 'DESC')
+                 ->limit(1);
+        $orderAddr = $this->db->get()->row_array();
+        if ($orderAddr && !empty($orderAddr['line1'])) {
+            return $orderAddr;
+        }
+
+        return null;
+    }
+
+    /**
+     * Send Checkout payment mode selection (Pay Online vs Cash on Delivery) with confirmed delivery address context.
+     */
+    private function _send_checkout_payment_mode_options(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, int $addrId = 0): void {
         $sessionId = 'wa_' . $peer;
         $cartItems = $this->db->select('c.*, p.name as product_name, p.price as prod_price, p.sale_price as prod_sale, pv.label as variant_label, pv.price as var_price, pv.sale_price as var_sale')
                               ->from('cart c')
@@ -1607,6 +2066,23 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
         $cartTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($totalVal) : "₹{$totalVal}";
 
+        $addr = null;
+        if ($addrId > 0) {
+            $addr = $this->db->where('id', $addrId)->get('addresses')->row_array();
+        }
+        if (!$addr) {
+            $addr = $this->_get_latest_customer_address($peer);
+        }
+
+        $addrIdParam = $addr ? (int)$addr['id'] : 0;
+        $addrSummary = '';
+        if ($addr) {
+            $name = !empty($addr['full_name']) ? $addr['full_name'] : 'Customer';
+            $city = !empty($addr['city']) ? $addr['city'] : '';
+            $pin = !empty($addr['pincode']) ? " - " . $addr['pincode'] : '';
+            $addrSummary = "📍 *Delivering To:* {$name}, {$city}{$pin}\n";
+        }
+
         $interactive = [
             'type'   => 'button',
             'header' => [
@@ -1618,7 +2094,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                         . "• *Items in Bag:* {$totalItems} piece(s)\n"
                         . "• *Subtotal:* {$cartTot}\n"
                         . "• *Shipping:* FREE Delivery across India 🚚\n"
-                        . "• *Total Payable:* *{$cartTot}*\n\n"
+                        . "• *Total Payable:* *{$cartTot}*\n"
+                        . ($addrSummary !== '' ? "• {$addrSummary}" : '') . "\n"
                         . "📦 *Cash on Delivery (COD) is AVAILABLE!*\n\n"
                         . "Please choose how you would like to pay:",
             ],
@@ -1630,22 +2107,22 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                     [
                         'type'  => 'reply',
                         'reply' => [
-                            'id'    => 'pay_online',
-                            'title' => '💳 Pay Online (UPI)',
+                            'id'    => "pay_online_{$addrIdParam}",
+                            'title' => '💳 Pay Online',
                         ],
                     ],
                     [
                         'type'  => 'reply',
                         'reply' => [
-                            'id'    => 'pay_cod',
-                            'title' => '💵 Cash on Delivery',
+                            'id'    => "pay_cod_{$addrIdParam}",
+                            'title' => '💵 Pay COD',
                         ],
                     ],
                     [
                         'type'  => 'reply',
                         'reply' => [
-                            'id'    => 'cart_view',
-                            'title' => '🛒 View Bag',
+                            'id'    => 'addr_change',
+                            'title' => '📍 Change Address',
                         ],
                     ],
                 ],
@@ -1656,16 +2133,15 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     }
 
     /**
-     * Create database order in orders and order_items tables.
+     * Create database order in orders and order_items tables with confirmed shipping address.
      */
-    private function _create_whatsapp_order(string $peer, int $vendorId, string $method, array $cartItems, float $totalVal, array $conv): ?array {
+    private function _create_whatsapp_order(string $peer, int $vendorId, string $method, array $cartItems, float $totalVal, array $conv, int $addrId = 0): ?array {
         $user = $this->db->where('phone', $peer)->or_like('phone', substr($peer, -10))->get('users')->row_array();
         $now = date('Y-m-d H:i:s');
         if (!$user) {
             $this->db->insert('users', [
                 'name'       => !empty($conv['customer_name']) ? $conv['customer_name'] : 'WhatsApp Customer',
                 'phone'      => $peer,
-                'role'       => 'customer',
                 'status'     => 'active',
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -1674,6 +2150,24 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         } else {
             $userId = (int)$user['id'];
         }
+
+        // Fetch shipping address
+        $addr = null;
+        if ($addrId > 0) {
+            $addr = $this->db->where('id', $addrId)->get('addresses')->row_array();
+        }
+        if (!$addr) {
+            $addr = $this->_get_latest_customer_address($peer);
+        }
+
+        $shipName = !empty($addr['full_name']) ? $addr['full_name'] : (!empty($conv['customer_name']) ? $conv['customer_name'] : 'WhatsApp Customer');
+        $shipPhone = !empty($addr['phone']) ? $addr['phone'] : $peer;
+        $shipLine1 = !empty($addr['line1']) ? $addr['line1'] : 'Address provided on WhatsApp';
+        $shipLine2 = !empty($addr['line2']) ? $addr['line2'] : '';
+        $shipCity = !empty($addr['city']) ? $addr['city'] : 'Nagercoil';
+        $shipState = !empty($addr['state']) ? $addr['state'] : 'Tamil Nadu';
+        $shipPin = !empty($addr['pincode']) ? $addr['pincode'] : '629501';
+        $shipCountry = !empty($addr['country']) ? $addr['country'] : 'India';
 
         $isCod = ($method === 'cod');
         $orderData = [
@@ -1695,10 +2189,14 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             'status_updated_at'=> $now,
             'confirmed_at'     => $isCod ? $now : null,
             'notes'            => 'Order placed via WhatsApp chat (' . ($isCod ? 'Cash on Delivery' : 'Razorpay Online') . ')',
-            'shipping_name'    => !empty($conv['customer_name']) ? $conv['customer_name'] : 'WhatsApp Customer',
-            'shipping_phone'   => $peer,
-            'shipping_line1'   => 'Customer Address via WhatsApp',
-            'shipping_country' => 'India',
+            'shipping_name'    => $shipName,
+            'shipping_phone'   => $shipPhone,
+            'shipping_line1'   => $shipLine1,
+            'shipping_line2'   => $shipLine2,
+            'shipping_city'    => $shipCity,
+            'shipping_state'   => $shipState,
+            'shipping_pincode' => $shipPin,
+            'shipping_country' => $shipCountry,
         ];
 
         $orderItems = [];
@@ -1729,9 +2227,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     }
 
     /**
-     * Handle Cash on Delivery (COD) order placement.
+     * Handle Cash on Delivery (COD) order placement with shipping address.
      */
-    private function _place_order_cod(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, array $settings): void {
+    private function _place_order_cod(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, array $settings, int $addrId = 0): void {
         $sessionId = 'wa_' . $peer;
         $cartItems = $this->db->select('c.*, p.name as product_name, p.price as prod_price, p.sale_price as prod_sale, pv.label as variant_label, pv.price as var_price, pv.sale_price as var_sale')
                               ->from('cart c')
@@ -1755,7 +2253,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             $totalVal += ($price * $q);
         }
 
-        $order = $this->_create_whatsapp_order($peer, $vendorId, 'cod', $cartItems, $totalVal, $conv);
+        $order = $this->_create_whatsapp_order($peer, $vendorId, 'cod', $cartItems, $totalVal, $conv, $addrId);
         if (!$order) {
             $waCloud->send_text($peer, "We couldn't process your order right now. Please try again or tap *Talk to our team* for assistance.");
             return;
@@ -1769,9 +2267,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     }
 
     /**
-     * Handle Pay Online order placement (generate Razorpay payment link).
+     * Handle Pay Online order placement (generate Razorpay payment link) with shipping address.
      */
-    private function _place_order_online(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, array $settings): void {
+    private function _place_order_online(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, array $settings, int $addrId = 0): void {
         $sessionId = 'wa_' . $peer;
         $cartItems = $this->db->select('c.*, p.name as product_name, p.price as prod_price, p.sale_price as prod_sale, pv.label as variant_label, pv.price as var_price, pv.sale_price as var_sale')
                               ->from('cart c')
@@ -1799,7 +2297,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
         $cartTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($totalVal) : "₹{$totalVal}";
 
-        $order = $this->_create_whatsapp_order($peer, $vendorId, 'razorpay', $cartItems, $totalVal, $conv);
+        $order = $this->_create_whatsapp_order($peer, $vendorId, 'razorpay', $cartItems, $totalVal, $conv, $addrId);
         if (!$order) {
             $waCloud->send_text($peer, "We couldn't initiate your online order. Please try again or select Cash on Delivery.");
             return;
@@ -1886,7 +2384,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                     'text' => 'Complete Your Order',
                 ],
                 'body'   => [
-                    'text' => "🛍️ *Order #{orderNumber}*\n\n"
+                    'text' => "🛍️ *Order #{$orderNumber}*\n\n"
                             . "Pay online via web checkout below, or switch to Cash on Delivery:\n\n"
                             . "👉 {$checkoutUrl}\n\n"
                             . "• *Total Amount:* *{$cartTot}*",
@@ -1913,7 +2411,6 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                     ],
                 ],
             ];
-            $waCloud->send_interactive($peer, $interactive);
         }
     }
 
@@ -2015,6 +2512,16 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $payTitle = $isCod ? "Cash on Delivery (COD)" : "Razorpay Online (UPI/Card)";
         $payStatusText = $isPaid ? "PAID & VERIFIED ✅" : ($isCod ? "Pay {$cartTot} on Delivery 📦" : "Payment Pending ⏳");
 
+        $destLine = '';
+        if (!empty($order['shipping_line1'])) {
+            $destLine = "🚚 *DELIVERY ADDRESS:*\n"
+                      . "👤 *Recipient:* " . ($order['shipping_name'] ?? $custName) . "\n"
+                      . "📞 *Contact:* +" . ($order['shipping_phone'] ?? $peer) . "\n"
+                      . "🏠 *Address:* " . $order['shipping_line1'] . (!empty($order['shipping_line2']) ? ", " . $order['shipping_line2'] : '') . "\n"
+                      . "🏙️ *City / State:* " . ($order['shipping_city'] ?? '') . ", " . ($order['shipping_state'] ?? '') . " - " . ($order['shipping_pincode'] ?? '') . "\n"
+                      . "🇮🇳 *Country:* " . ($order['shipping_country'] ?? 'India') . "\n\n";
+        }
+
         $invoiceMsg = ($isPaid ? "🎉 *PAYMENT RECEIVED & ORDER CONFIRMED!*" : "🎉 *ORDER CONFIRMED!*") . "\n"
                     . "Thank you for shopping with *{$shopName}*!\n\n"
                     . "🧾 *TAX INVOICE / ORDER SUMMARY*\n"
@@ -2025,6 +2532,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                     . "💳 *Payment Mode:* {$payTitle}\n"
                     . "💵 *Payment Status:* {$payStatusText}\n"
                     . "📦 *Order Status:* Confirmed (Preparing for dispatch)\n\n"
+                    . ($destLine !== '' ? "{$destLine}" : '')
                     . "🛍️ *ITEMIZED DETAILS:*\n"
                     . "{$itemsBlock}\n"
                     . "━━━━━━━━━━━━━━━━━━━━\n"
