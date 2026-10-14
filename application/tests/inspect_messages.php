@@ -17,8 +17,10 @@ while ($r = $res->fetch_assoc()) {
 }
 
 echo "\n=== CONVERSATION #4 ===\n";
-$cres = $mysqli->query("SELECT id, vendor_id, phone, status, thread_owner, handoff_at, unread_count, updated_at FROM wa_cloud_conversations WHERE id = 4");
+$cres = $mysqli->query("SELECT * FROM wa_cloud_conversations WHERE id = 4");
 if ($cres && $row = $cres->fetch_assoc()) {
-    print_r($row);
+    foreach ($row as $k => $v) {
+        echo "$k => $v\n";
+    }
 }
 exit(0);
