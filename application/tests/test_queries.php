@@ -3,6 +3,8 @@ $url = 'https://talkaipilot.com/shopkart-api/meta-agent/connectors/1389144424278
 $apiKey = 'Ved451959';
 
 $queries = [
+    'show prodct details',
+    'show product details',
     'Tell me kanjivaram saree details',
     'Give me the product details',
     'Show the products',
@@ -22,11 +24,14 @@ foreach ($queries as $q) {
     ]);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['query' => $q]));
     $res = curl_exec($ch);
-    $data = json_decode($res, true)['data'] ?? [];
+    $json = json_decode($res, true);
+    $data = $json['data'] ?? [];
     $count = $data['count'] ?? 0;
     $cards = $data['cards'] ?? [];
     $first = $cards[0]['name'] ?? 'NONE';
     $img = $cards[0]['image_url'] ?? 'NONE';
-    printf("Q: %-36s | Count: %2d | First: %-35s | Img: %s\n", $q, $count, substr($first, 0, 35), $img);
+    $ui = $data['ui'] ?? 'none';
+    $summary = $data['summary'] ?? ($json['message'] ?? '');
+    printf("Q: %-32s | Count: %2d | UI: %-13s | First: %-30s | Summary: %s\n", $q, $count, $ui, substr($first, 0, 30), substr($summary, 0, 80));
     curl_close($ch);
 }

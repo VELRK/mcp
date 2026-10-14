@@ -30,6 +30,20 @@ function sk_ai_product_is_active(array $product): bool {
     return strtolower(trim((string)($product['status'] ?? ''))) === 'active';
 }
 
+function sk_mcp_conversational_fillers(): array {
+    return [
+        'tell', 'me', 'show', 'give', 'details', 'detail', 'about', 'want', 'need',
+        'looking', 'look', 'can', 'you', 'your', 'item', 'items', 'product', 'products',
+        'prodct', 'prodcts', 'prdct', 'prdcts', 'prouct', 'proucts',
+        'list', 'info', 'information', 'send', 'share', 'the', 'and', 'for', 'are',
+        'stock', 'available', 'price', 'this', 'that', 'with', 'from', 'have', 'has',
+        'more', 'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'gallery',
+        'please', 'all', 'any', 'some', 'what', 'which', 'how', 'much', 'cost', 'rate',
+        'i', 'we', 'am', 'is', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'do', 'does',
+        'our', 'these', 'those', 'there', 'here', 'see', 'buy', 'order', 'shop', 'menu', 'catalog', 'collection', 'options'
+    ];
+}
+
 function sk_mcp_tool_parse_query(?string $query): array {
     $raw = trim((string)$query);
     if ($raw === '') {
@@ -84,16 +98,7 @@ function sk_mcp_tool_parse_query(?string $query): array {
         }
     }
 
-    $conversationalFillers = [
-        'tell', 'me', 'show', 'give', 'details', 'detail', 'about', 'want', 'need',
-        'looking', 'look', 'can', 'you', 'your', 'item', 'items', 'product', 'products',
-        'list', 'info', 'information', 'send', 'share', 'the', 'and', 'for', 'are',
-        'stock', 'available', 'price', 'this', 'that', 'with', 'from', 'have', 'has',
-        'more', 'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'gallery',
-        'please', 'all', 'any', 'some', 'what', 'which', 'how', 'much', 'cost', 'rate',
-        'i', 'we', 'am', 'is', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'do', 'does',
-        'our', 'these', 'those', 'there', 'here', 'see', 'buy', 'order', 'shop', 'menu', 'catalog', 'collection', 'options'
-    ];
+    $conversationalFillers = sk_mcp_conversational_fillers();
 
     $filtered = [];
     foreach ($tokens as $token) {
@@ -181,10 +186,10 @@ function sk_mcp_tool_is_catalog_request(string $query): bool {
     if ($q === '') {
         return true;
     }
-    if (!preg_match('/\b(all|list|products?|items?|catalog|menu|available|collection|details?|sarees?|options)\b/u', $q)) {
+    if (!preg_match('/\b(all|list|products?|prodcts?|prdcts?|proucts?|items?|catalog|menu|available|collection|details?|sarees?|options)\b/u', $q)) {
         return false;
     }
-    $stripped = trim((string)preg_replace('/\b(show|me|all|the|your|list|of|products?|items?|catalog|menu|available|what|do|you|have|please|stock|any|give|tell|detail|details|collection|options|our|see|share|send|item|items)\b/u', ' ', $q));
+    $stripped = trim((string)preg_replace('/\b(show|me|all|the|your|list|of|products?|prodcts?|prdcts?|proucts?|items?|catalog|menu|available|what|do|you|have|please|stock|any|give|tell|detail|details|collection|options|our|see|share|send|item|items|saree|sarees)\b/u', ' ', $q));
     $stripped = trim((string)preg_replace('/[?!.,\-_]/u', ' ', $stripped));
     $stripped = trim((string)preg_replace('/\s+/u', ' ', $stripped));
     return $stripped === '';
@@ -401,14 +406,22 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
 
         $score = 0;
         if ($parsed['product_name'] !== '') {
-            $score += stripos($haystack, mb_strtolower($parsed['product_name'], 'UTF-8')) !== false ? 10 : 0;
+            $pnLower = mb_strtolower($parsed['product_name'], 'UTF-8');
+            if (stripos($haystack, $pnLower) !== false) {
+                $score += 20;
+            } else {
+                $pnWords = preg_split('/\s+/', $pnLower, -1, PREG_SPLIT_NO_EMPTY);
+                foreach ($pnWords as $pnw) {
+                    if (strlen($pnw) >= 3 && stripos($haystack, $pnw) !== false) {
+                        $score += 10;
+                    }
+                }
+            }
         }
+        $fillers = sk_mcp_conversational_fillers();
         foreach ($parsed['terms'] as $term) {
             $term = trim((string)$term);
-            if (strlen($term) < 3) {
-                continue;
-            }
-            if (in_array($term, ['the', 'and', 'for', 'are', 'you', 'stock', 'available', 'price', 'product', 'this', 'that', 'with', 'from', 'have', 'has', 'more', 'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'gallery', 'show', 'please'], true)) {
+            if (strlen($term) < 3 || in_array($term, $fillers, true)) {
                 continue;
             }
             if (stripos($haystack, $term) !== false) {
@@ -448,8 +461,8 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
             $distinctiveTerms = [];
             foreach ($parsed['terms'] as $term) {
                 $term = trim((string)$term);
-                if (strlen($term) < 3 || in_array($term, $conversationalFillers, true)) continue;
-                if (in_array($term, ['saree', 'sarees', 'cloth', 'clothes', 'dress', 'item', 'product'], true)) continue;
+                if (strlen($term) < 3 || in_array($term, $fillers, true)) continue;
+                if (in_array($term, ['saree', 'sarees', 'cloth', 'clothes', 'dress', 'item', 'product', 'prodct'], true)) continue;
                 $distinctiveTerms[] = $term;
             }
             if (!empty($distinctiveTerms)) {

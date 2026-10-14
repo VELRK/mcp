@@ -24,3 +24,14 @@ $settings = sk_meta_ba_get_settings($phone);
 echo "=== SETTINGS ===\n";
 echo json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n";
 
+if (!empty($connectors['data']['connectors'][0]['id'])) {
+    $cId = $connectors['data']['connectors'][0]['id'];
+    $tools = sk_meta_ba_list_connector_tools($phone, $cId);
+    echo "=== TOOLS FOR CONNECTOR $cId ===\n";
+    foreach ($tools['data'] ?? [] as $t) {
+        if (($t['name'] ?? '') === 'search_products') {
+            echo json_encode($t, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+        }
+    }
+}
+

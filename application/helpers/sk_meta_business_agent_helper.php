@@ -1417,10 +1417,10 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId, ?bool $userAuthRe
             $cartAuth
         ),
 
-        $tool('search_products', 'ONLY tool for product/price/stock, and again when they ask for more photos. Never for hi/hello. Returns this shop\'s active products. One product is one photo plus Shop now. gallery_cards are extra photos of that product. Two or more products are a reply carousel. Do not send a website link or a text list.', [
+        $tool('search_products', 'Search products, prices, stock, and catalog. Returns active products in this shop. For catalog inquiries, returns the available products list and the featured photo. For single product inquiries, returns that product details and photo. Always write out the product names and prices as text inside this WhatsApp chat. Do not send external website links.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
-            'limit'  => $bodyField('integer', 'Max results (1-3)'),
+            'limit'  => $bodyField('integer', 'Max results (1-10)'),
         ]),
         $tool('identify_customer', 'Find customer by phone when starting an order. Not for greetings.', [
             'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
@@ -1483,10 +1483,15 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
     if (trim((string)$cfg['connector_api_key']) === '') {
         return ['ok' => false, 'error' => 'META_BA_CONNECTOR_API_KEY is missing.', 'data' => null];
     }
-    $CI =& get_instance();
-    $CI->load->model('Sk_Vendor_meta_agent_model');
-    $row = $CI->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
-    $connectorId = trim((string)($row['connector_id'] ?? ''));
+    $connectorId = '';
+    if (function_exists('get_instance')) {
+        $CI =& get_instance();
+        if (isset($CI->load)) {
+            $CI->load->model('Sk_Vendor_meta_agent_model');
+            $row = $CI->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
+            $connectorId = trim((string)($row['connector_id'] ?? ''));
+        }
+    }
     $baseUrl = rtrim($cfg['connector_base_url'], '/') . '/shopkart-api/meta-agent/connectors/' . $phoneNumberId;
 
     if ($connectorId === '') {
@@ -1501,11 +1506,27 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
             'requires_certificate' => false,
         ], $settings);
         if (!$create['ok']) {
-            return $create;
-        }
-        $connectorId = (string)($create['data']['id'] ?? $create['data']['connector_id'] ?? '');
-        if ($connectorId === '' && is_array($create['data']['data'] ?? null)) {
-            $connectorId = (string)($create['data']['data']['id'] ?? $create['data']['data']['connector_id'] ?? '');
+            if (($create['http'] ?? 0) === 409 || stripos((string)($create['error'] ?? ''), 'already exists') !== false) {
+                $listed = sk_meta_ba_list_connectors($phoneNumberId, $settings);
+                if ($listed['ok'] && is_array($listed['data'])) {
+                    $items = $listed['data']['connectors'] ?? sk_meta_ba_normalize_connector_items($listed['data']);
+                    foreach ($items as $item) {
+                        if (!is_array($item)) continue;
+                        $n = strtolower((string)($item['name'] ?? ''));
+                        if (strpos($n, 'talk_ai_pilot') !== false || strpos($n, 'talk ai pilot') !== false) {
+                            $connectorId = (string)($item['id'] ?? $item['connector_id'] ?? '');
+                            break;
+                        }
+                    }
+                }
+            } else {
+                return $create;
+            }
+        } else {
+            $connectorId = (string)($create['data']['id'] ?? $create['data']['connector_id'] ?? '');
+            if ($connectorId === '' && is_array($create['data']['data'] ?? null)) {
+                $connectorId = (string)($create['data']['data']['id'] ?? $create['data']['data']['connector_id'] ?? '');
+            }
         }
         if ($connectorId === '') {
             // Try list and pick matching name
@@ -1633,13 +1654,19 @@ function sk_meta_ba_sync_connector_for_phone(string $phoneNumberId, int $vendorI
         ];
     }
 
-    $CI->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
-        'vendor_id'      => $vendorId,
-        'connector_id'   => $connectorId,
-        'sync_status'    => 'synced',
-        'last_error'     => '',
-        'last_synced_at' => date('Y-m-d H:i:s'),
-    ]);
+    if (function_exists('get_instance')) {
+        $CI = get_instance();
+        if ($CI && isset($CI->load)) {
+            $CI->load->model('Sk_Vendor_meta_agent_model');
+            $CI->Sk_Vendor_meta_agent_model->upsert($phoneNumberId, [
+                'vendor_id'      => $vendorId,
+                'connector_id'   => $connectorId,
+                'sync_status'    => 'synced',
+                'last_error'     => '',
+                'last_synced_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+    }
 
     return [
         'ok'    => true,

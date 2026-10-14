@@ -22,6 +22,10 @@ echo "Syncing Sales skills for {$phone} ({$shop})...\n";
 $salesRes = sk_meta_ba_sync_sales_skills($phone, $shop);
 echo "Sales Skills Result: " . json_encode($salesRes, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n";
 
+echo "Syncing Connector Tools for {$phone}...\n";
+$toolRes = sk_meta_ba_sync_connector_for_phone($phone);
+echo "Tools Result: " . json_encode($toolRes, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n";
+
 echo "Updating agent settings (never_say_phrases) for {$phone}...\n";
 $setRes = sk_meta_ba_put_settings($phone, [
     'never_say_phrases' => [
