@@ -9,8 +9,14 @@ require_once __DIR__ . '/../config/database.php';
 $dbCfg = $db['default'];
 $mysqli = new mysqli($dbCfg['hostname'], $dbCfg['username'], $dbCfg['password'], $dbCfg['database']);
 
-$res = $mysqli->query("SELECT id, wamid, direction, type, body, status, created_at FROM wa_cloud_messages ORDER BY id DESC LIMIT 15");
-echo "=== LAST 15 MESSAGES IN wa_cloud_messages ===\n";
+$res = $mysqli->query("SELECT id, wamid, direction, type, body, raw_json, status, created_at FROM wa_cloud_messages WHERE id >= 325 ORDER BY id ASC");
+echo "=== MESSAGES >= 325 ===\n";
 while ($r = $res->fetch_assoc()) {
-    echo sprintf("[%d] %s | %s | %s | %s | %s\n", $r['id'], $r['created_at'], $r['direction'], $r['wamid'], $r['status'], $r['body']);
+    echo sprintf("[%d] %s | %s | %s | %s\n", $r['id'], $r['created_at'], $r['direction'], $r['type'], $r['body']);
+    $decoded = json_decode($r['raw_json'] ?? '', true);
+    if (!empty($decoded['interactive'])) {
+        echo "  Interactive: " . json_encode($decoded['interactive']) . "\n";
+    } elseif (!empty($decoded['text'])) {
+        echo "  Text: " . json_encode($decoded['text']) . "\n";
+    }
 }
