@@ -756,6 +756,9 @@ function sk_ai_mcp_tool_registry(): array {
         'get_customer',
         'save_customer', // legacy alias
         // Catalog
+        'get_main_menu',
+        'get_categories',
+        'get_offers',
         'search_products',
         'get_product',
         'get_product_price',
@@ -1943,6 +1946,60 @@ function sk_ai_mcp_execute_tool(string $tool, array $params = [], array $tenant 
             ];
         }
         return ['success' => true, 'data' => ['tenant_id' => $tenantId, 'categories' => $out], 'error' => null];
+    }
+
+    if ($tool === 'get_main_menu') {
+        $shopName = 'our shop';
+        if ($tenantId > 0 && function_exists('sk_whatsapp_shop_name')) {
+            $biz = sk_whatsapp_shop_name($tenantId);
+            if ($biz !== '') $shopName = $biz;
+        }
+        $rows = [
+            ['id' => 'browse_products', 'title' => '🛍️ Browse products', 'description' => 'Explore collections & categories'],
+            ['id' => 'offers_deals', 'title' => '🏷️ Offers & Deals', 'description' => 'Today\'s discounts & promo codes'],
+            ['id' => 'search_product', 'title' => '🔎 Search a product', 'description' => 'Find by name, style, or color'],
+            ['id' => 'track_order', 'title' => '📦 Track my order', 'description' => 'Check order & shipment status'],
+            ['id' => 'talk_to_team', 'title' => '🙋 Talk to our team', 'description' => 'Chat with our support team'],
+        ];
+        return [
+            'success' => true,
+            'data' => [
+                'ui' => 'interactive_list',
+                'menu_options' => $rows,
+                'message' => "Hi! 👋 Welcome to {$shopName}.\nHow can I help you today?\n1. 🛍️ Browse products\n2. 🏷️ Offers & Deals\n3. 🔎 Search for a product\n4. 📦 Track my order\n5. 🙋 Talk to our team",
+            ],
+            'error' => null,
+        ];
+    }
+
+    if ($tool === 'get_categories') {
+        $CI =& get_instance();
+        $sql = "SELECT c.id, c.name, COUNT(p.id) as product_count 
+                FROM categories c 
+                INNER JOIN products p ON p.category_id = c.id 
+                WHERE p.vendor_id = ? AND p.status = 'active' 
+                GROUP BY c.id HAVING product_count > 0 
+                ORDER BY c.name ASC";
+        $rows = $CI->db->query($sql, [$tenantId])->result_array();
+        if (empty($rows)) {
+            $rows = $CI->db->query("SELECT id, name FROM categories ORDER BY name ASC LIMIT 10")->result_array();
+        }
+        return ['success' => true, 'data' => ['categories' => $rows, 'count' => count($rows)], 'error' => null];
+    }
+
+    if ($tool === 'get_offers') {
+        $CI =& get_instance();
+        $now = date('Y-m-d H:i:s');
+        $sql = "SELECT p.id, p.sku, p.name, p.price, p.sale_price, c.name as category_name 
+                FROM products p 
+                LEFT JOIN categories c ON c.id = p.category_id 
+                WHERE p.vendor_id = ? AND p.status = 'active' 
+                  AND p.sale_price IS NOT NULL AND p.sale_price > 0 AND p.sale_price < p.price
+                  AND (p.sale_start_at IS NULL OR p.sale_start_at <= ?)
+                  AND (p.sale_end_at IS NULL OR p.sale_end_at >= ?)
+                ORDER BY (p.price - p.sale_price) DESC LIMIT 10";
+        $discounted = $CI->db->query($sql, [$tenantId, $now, $now])->result_array();
+        return ['success' => true, 'data' => ['offers' => $discounted, 'count' => count($discounted)], 'error' => null];
     }
 
     if ($tool === 'create_order') {

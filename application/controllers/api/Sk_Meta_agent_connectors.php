@@ -522,17 +522,119 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
     public function create_payment_link($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'create_payment_link'); }
     public function get_payment_status($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_payment_status'); }
     public function generate_invoice($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'generate_invoice'); }
-    public function handover_to_human($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'handover_to_human'); }
-    public function human_handoff($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'human_handoff'); }
+    public function human_handoff($phoneNumberId = '') { $this->handover_to_human($phoneNumberId); }
     public function get_tenant_config($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_tenant_config'); }
     public function save_conversation_state($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'save_conversation_state'); }
-    public function get_order_status($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_order_status'); }
     public function get_delivery_status($phoneNumberId = '') { $this->_run_tool((string)$phoneNumberId, 'get_delivery_status'); }
 
+    private function _get_shop_name(int $vendorId, array $tenant): string {
+        $shopName = 'Vel Saree';
+        if (function_exists('sk_whatsapp_shop_name')) {
+            $biz = sk_whatsapp_shop_name($vendorId);
+            if ($biz !== '' && strcasecmp($biz, 'Shop') !== 0) {
+                return $biz;
+            }
+        }
+        if (!empty($tenant['vendor_id']) && $this->db->table_exists('vendors')) {
+            $vendor = $this->db->select('business_name')->where('id', (int)$tenant['vendor_id'])->get('vendors')->row_array();
+            if (!empty($vendor['business_name'])) {
+                return $vendor['business_name'];
+            }
+        }
+        return $shopName;
+    }
+
+    /**
+     * Menu Option: 5 Options Interactive Main Menu & Sales Flow Trigger.
+     */
+    public function get_main_menu($phoneNumberId = '') {
+        $this->_require_connector_auth();
+        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
+        $vendorId = (int)$tenant['vendor_id'];
+        $shopName = $this->_get_shop_name($vendorId, $tenant);
+
+        $headerText = function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : substr($shopName, 0, 60);
+        $buttonText = 'View Menu'; // <= 20 chars
+
+        $rows = [
+            [
+                'id'          => 'browse_products',
+                'title'       => '🛍️ Browse products', // <= 24 chars
+                'description' => 'Explore collections & categories', // <= 72 chars
+            ],
+            [
+                'id'          => 'offers_deals',
+                'title'       => '🏷️ Offers & Deals',
+                'description' => "Today's discounts & promo codes",
+            ],
+            [
+                'id'          => 'search_product',
+                'title'       => '🔎 Search a product',
+                'description' => 'Find by name, style, or color',
+            ],
+            [
+                'id'          => 'track_order',
+                'title'       => '📦 Track my order',
+                'description' => 'Check order & shipment status',
+            ],
+            [
+                'id'          => 'talk_to_team',
+                'title'       => '🙋 Talk to our team',
+                'description' => 'Chat with our support team',
+            ],
+        ];
+
+        $interactive = [
+            'type'   => 'list',
+            'header' => [
+                'type' => 'text',
+                'text' => $headerText,
+            ],
+            'body'   => [
+                'text' => "Welcome to {$shopName}! 👋\nHow can I help you today? Please choose an option below:",
+            ],
+            'footer' => [
+                'text' => 'Select an option to proceed',
+            ],
+            'action' => [
+                'button'   => $buttonText,
+                'sections' => [
+                    [
+                        'title' => 'Main Menu', // <= 24 chars
+                        'rows'  => $rows,
+                    ],
+                ],
+            ],
+        ];
+
+        $message = "Hi! 👋 Welcome to {$shopName}.\nHow can I help you today?\n"
+            . "1. 🛍️ Browse products\n"
+            . "2. 🏷️ Offers & Deals\n"
+            . "3. 🔎 Search for a product\n"
+            . "4. 📦 Track my order\n"
+            . "5. 🙋 Talk to our team\n\n"
+            . "Tap \"View Menu\" or reply with an option number!";
+
+        $summary = "Send the WhatsApp interactive list drawer (button 'View Menu') with the 5 options: 1. Browse products, 2. Offers & Deals, 3. Search for a product, 4. Track my order, 5. Talk to our team. In text, greet the customer warmly and provide the numbered options as fallback.";
+
+        $this->success([
+            'ui'               => 'interactive_list',
+            'interactive'      => $interactive,
+            'interactive_list' => $interactive,
+            'menu_options'     => $rows,
+            'message'          => $message,
+            'summary'          => $summary,
+        ], 'Main menu generated.');
+    }
+
+    /**
+     * Button 1: Browse active categories with interactive list and text fallback.
+     */
     public function get_categories($phoneNumberId = '') {
         $this->_require_connector_auth();
         $tenant = $this->_resolve_tenant((string)$phoneNumberId);
         $vendorId = (int)$tenant['vendor_id'];
+        $shopName = $this->_get_shop_name($vendorId, $tenant);
 
         $sql = "SELECT c.id, c.name, COUNT(p.id) as product_count 
                 FROM categories c 
@@ -563,6 +665,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
 
         $categories = [];
         $lines = [];
+        $catRows = [];
         foreach ($rows as $r) {
             $name = trim((string)$r['name']);
             if ($name === '') continue;
@@ -574,27 +677,441 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
                     break;
                 }
             }
+            $pCount = (int)($r['product_count'] ?? 0);
             $catItem = [
                 'id'            => (int)($r['id'] ?? 0),
                 'name'          => $name,
                 'icon'          => $icon,
                 'display'       => "{$icon} {$name}",
-                'product_count' => (int)($r['product_count'] ?? 0),
+                'product_count' => $pCount,
             ];
             $categories[] = $catItem;
-            $lines[] = "{$icon} {$name}";
+            $lines[] = "{$icon} {$name}" . ($pCount > 0 ? " ({$pCount} items)" : '');
+
+            $catTitle = function_exists('mb_substr') ? mb_substr("{$icon} {$name}", 0, 24) : substr("{$icon} {$name}", 0, 24);
+            $catDesc = $pCount > 0 ? "{$pCount} items available" : 'Browse category';
+            $catRows[] = [
+                'id'          => 'cat_' . ($r['id'] ?? $name),
+                'title'       => $catTitle,
+                'description' => function_exists('mb_substr') ? mb_substr($catDesc, 0, 72) : substr($catDesc, 0, 72),
+            ];
         }
 
+        $headerText = function_exists('mb_substr') ? mb_substr($shopName . ' Categories', 0, 60) : substr($shopName . ' Categories', 0, 60);
+        $interactive = [
+            'type'   => 'list',
+            'header' => [
+                'type' => 'text',
+                'text' => $headerText,
+            ],
+            'body'   => [
+                'text' => "What would you like to shop for? 😊\nTap below to explore our categories:",
+            ],
+            'footer' => [
+                'text' => 'Select a category to view items',
+            ],
+            'action' => [
+                'button'   => 'View Categories', // <= 20 chars
+                'sections' => [
+                    [
+                        'title' => 'Product Categories',
+                        'rows'  => array_slice($catRows, 0, 10),
+                    ],
+                ],
+            ],
+        ];
+
         $listFormatted = implode("\n", $lines);
-        $message = "What are you looking for? 😊\n" . $listFormatted;
+        $message = "What are you looking for? 😊\n" . $listFormatted . "\n\nReply with any category or saree name, or tap \"View Categories\"!";
         $summary = "Available categories for this seller:\n{$listFormatted}\nIn your WhatsApp message, ask: 'What are you looking for? 😊' and list these exact categories. Do not invent categories that are not on this list.";
 
         $this->success([
-            'categories' => $categories,
-            'count'      => count($categories),
-            'message'    => $message,
-            'summary'    => $summary,
+            'ui'               => 'interactive_list',
+            'interactive'      => $interactive,
+            'interactive_list' => $interactive,
+            'categories'       => $categories,
+            'count'            => count($categories),
+            'message'          => $message,
+            'summary'          => $summary,
         ], 'Categories retrieved.');
+    }
+
+    /**
+     * Button 2: Offers & Deals. Active product discounts & verified promo codes.
+     */
+    public function get_offers($phoneNumberId = '') {
+        $this->_require_connector_auth();
+        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
+        $vendorId = (int)$tenant['vendor_id'];
+        $shopName = $this->_get_shop_name($vendorId, $tenant);
+
+        // 1. Fetch active discounted products for this vendor
+        $now = date('Y-m-d H:i:s');
+        $sql = "SELECT p.*, c.name as category_name 
+                FROM products p 
+                LEFT JOIN categories c ON c.id = p.category_id 
+                WHERE p.vendor_id = ? AND p.status = 'active' 
+                  AND p.sale_price IS NOT NULL AND p.sale_price > 0 AND p.sale_price < p.price
+                  AND (p.sale_start_at IS NULL OR p.sale_start_at <= ?)
+                  AND (p.sale_end_at IS NULL OR p.sale_end_at >= ?)
+                ORDER BY (p.price - p.sale_price) DESC 
+                LIMIT 10";
+        $discounted = $this->db->query($sql, [$vendorId, $now, $now])->result_array();
+
+        if (empty($discounted)) {
+            $sqlHot = "SELECT p.*, c.name as category_name 
+                       FROM products p 
+                       LEFT JOIN categories c ON c.id = p.category_id 
+                       WHERE p.vendor_id = ? AND p.status = 'active' 
+                         AND (p.hot_sale = 1 OR p.special_product = 1 OR p.featured = 1)
+                       ORDER BY p.id DESC 
+                       LIMIT 5";
+            $discounted = $this->db->query($sqlHot, [$vendorId])->result_array();
+        }
+
+        // 2. Fetch active promo codes / coupons
+        $today = date('Y-m-d');
+        $coupons = [];
+        if ($this->db->table_exists('promo_codes')) {
+            $sqlPromo = "SELECT * FROM promo_codes 
+                         WHERE status = 1 
+                           AND (vendor_id = ? OR vendor_id IS NULL OR vendor_id = 0 OR scope = 'global')
+                           AND (starts_at IS NULL OR starts_at <= ?)
+                           AND (expires_at IS NULL OR expires_at >= ?)
+                         ORDER BY id DESC LIMIT 3";
+            $coupons = $this->db->query($sqlPromo, [$vendorId, $today, $today])->result_array();
+        }
+
+        $items = [];
+        $offerLines = [];
+        $rows = [];
+        foreach ($discounted as $idx => $p) {
+            $origPrice = (float)($p['price'] ?? 0);
+            $salePrice = isset($p['sale_price']) && (float)$p['sale_price'] > 0 ? (float)$p['sale_price'] : $origPrice;
+            $savings = max(0, $origPrice - $salePrice);
+            $discountPct = $origPrice > 0 && $savings > 0 ? round(($savings / $origPrice) * 100) : 0;
+            $pName = trim((string)($p['name'] ?? 'Product'));
+            $priceStr = sk_mcp_tool_inr($salePrice);
+            $origStr = sk_mcp_tool_inr($origPrice);
+
+            $item = [
+                'id'              => (int)$p['id'],
+                'sku'             => (string)($p['sku'] ?? ('prod_' . $p['id'])),
+                'name'            => $pName,
+                'price'           => $origPrice,
+                'sale_price'      => $salePrice,
+                'effective_price' => $salePrice,
+                'discount_pct'    => $discountPct,
+                'savings'         => $savings,
+                'image_url'       => sk_mcp_tool_resolve_product_image_url($p),
+            ];
+            $items[] = $item;
+
+            $desc = $discountPct > 0 ? "{$priceStr} (Was {$origStr}, {$discountPct}% OFF)" : $priceStr;
+            $offerLines[] = ($idx + 1) . ". *{$pName}* — {$priceStr}" . ($discountPct > 0 ? " ~{$origStr}~ (_{$discountPct}% OFF_)" : '');
+
+            $rows[] = [
+                'id'          => (string)($p['sku'] ?? ('prod_' . $p['id'])),
+                'title'       => function_exists('mb_substr') ? mb_substr($pName, 0, 24) : substr($pName, 0, 24),
+                'description' => function_exists('mb_substr') ? mb_substr($desc, 0, 72) : substr($desc, 0, 72),
+            ];
+        }
+
+        $couponLines = [];
+        foreach ($coupons as $c) {
+            $cCode = strtoupper(trim((string)$c['code']));
+            $cVal = (float)($c['value'] ?? 0);
+            $cType = (string)($c['type'] ?? 'percent');
+            $valText = $cType === 'percent' ? "{$cVal}% OFF" : "₹{$cVal} OFF";
+            $minOrder = (float)($c['min_order'] ?? 0);
+            $minText = $minOrder > 0 ? " on orders above " . sk_mcp_tool_inr($minOrder) : '';
+            $couponLines[] = "🎟️ Code *{$cCode}*: {$valText}{$minText}";
+        }
+
+        $count = count($items);
+        if ($count > 0 || !empty($couponLines)) {
+            $msg = "🎉 Here are today's offers & deals at {$shopName}!\n\n";
+            if (!empty($offerLines)) {
+                $msg .= "🏷️ *Discounted Products:*\n" . implode("\n", $offerLines) . "\n\n";
+            }
+            if (!empty($couponLines)) {
+                $msg .= "💰 *Active Coupons:*\n" . implode("\n", $couponLines) . "\n\n";
+            }
+            $msg .= "Which product would you like to view, or reply with a number!";
+
+            $interactive = null;
+            if ($count > 0) {
+                $headerText = function_exists('mb_substr') ? mb_substr($shopName . ' Offers', 0, 60) : substr($shopName . ' Offers', 0, 60);
+                $interactive = [
+                    'type'   => 'list',
+                    'header' => [
+                        'type' => 'text',
+                        'text' => $headerText,
+                    ],
+                    'body'   => [
+                        'text' => "🎉 Tap below to explore today's special discounts and deals:",
+                    ],
+                    'footer' => [
+                        'text' => 'Limited time offers',
+                    ],
+                    'action' => [
+                        'button'   => 'View Offers',
+                        'sections' => [
+                            [
+                                'title' => "Today's Deals",
+                                'rows'  => array_slice($rows, 0, 10),
+                            ],
+                        ],
+                    ],
+                ];
+            }
+
+            $summary = "Found {$count} active discounted products and " . count($coupons) . " coupons. Tell the customer about these offers. In text, ask which product they would like to order or if they'd like to browse categories.";
+
+            $this->success([
+                'count'            => $count,
+                'ui'               => $count > 1 ? 'interactive_list' : ($count === 1 ? 'product-photo' : 'none'),
+                'interactive'      => $interactive,
+                'interactive_list' => $interactive,
+                'offers'           => $items,
+                'coupons'          => $coupons,
+                'message'          => $msg,
+                'summary'          => $summary,
+            ], 'Active offers retrieved.');
+        } else {
+            $msg = "No active offers right now 😊 Would you like to browse our products?\n"
+                . "1. 🛍️ Browse products\n"
+                . "2. 🔎 Search for a product\n"
+                . "3. 🙋 Talk to our team";
+            $summary = "No active offers right now. In your WhatsApp text message, tell the customer: 'No active offers right now 😊 Would you like to browse our products?' and offer to browse categories or return to the main menu.";
+
+            $this->success([
+                'count'   => 0,
+                'ui'      => 'none',
+                'offers'  => [],
+                'coupons' => [],
+                'message' => $msg,
+                'summary' => $summary,
+            ], 'No active offers found.');
+        }
+    }
+
+    /**
+     * Button 4: Track My Order. Lookup by order number or WhatsApp phone with ownership verification.
+     */
+    public function get_order_status($phoneNumberId = '') {
+        $this->_require_connector_auth();
+        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
+        $vendorId = (int)$tenant['vendor_id'];
+        $shopName = $this->_get_shop_name($vendorId, $tenant);
+        $payload = $this->_payload();
+
+        $orderNo = trim((string)($payload['order_number'] ?? $payload['order_id'] ?? ''));
+        $phone = trim((string)($payload['phone'] ?? $payload['customer_phone'] ?? ''));
+
+        if ($orderNo !== '') {
+            $order = null;
+            if (is_numeric($orderNo) && (int)$orderNo > 0) {
+                $order = $this->db->where('id', (int)$orderNo)->get('orders')->row_array();
+            }
+            if (!$order) {
+                $order = $this->db->where('order_number', $orderNo)->get('orders')->row_array();
+            }
+            if (!$order) {
+                $cleanNo = ltrim($orderNo, '#');
+                $order = $this->db->where('order_number', $cleanNo)->get('orders')->row_array();
+            }
+
+            if (!$order) {
+                $this->error("Order '{$orderNo}' not found.", 404, ['code' => 'ORDER_NOT_FOUND']);
+            }
+
+            // Tenant security check
+            if (!sk_ai_order_in_shop($order, $vendorId)) {
+                $this->error("Order '{$orderNo}' does not belong to this shop.", 403, ['code' => 'ORDER_FORBIDDEN']);
+            }
+
+            $orderId = (int)$order['id'];
+            $items = $this->db->where('order_id', $orderId)->get('order_items')->result_array();
+            $itemSummaries = [];
+            foreach ($items as $it) {
+                $itName = trim((string)($it['product_name'] ?? $it['name'] ?? 'Product'));
+                $itQty = (int)($it['quantity'] ?? 1);
+                $itemSummaries[] = "{$itName} x {$itQty}";
+            }
+            $itemsText = !empty($itemSummaries) ? implode(', ', $itemSummaries) : 'Items ordered';
+
+            $oNum = (string)($order['order_number'] ?? $order['id']);
+            $oDate = !empty($order['created_at']) ? date('d M Y, h:i A', strtotime($order['created_at'])) : 'Recent';
+            $oStatus = ucfirst((string)($order['status'] ?? 'pending'));
+            $pStatus = ucfirst((string)($order['payment_status'] ?? 'pending'));
+            $oTotal = sk_mcp_tool_inr((float)($order['total'] ?? 0));
+            $courier = trim((string)($order['courier_provider'] ?? ''));
+            $trackNo = trim((string)($order['tracking_number'] ?? ''));
+
+            $msg = "📦 *Order Status for #{$oNum}*\n"
+                . "📅 Date: {$oDate}\n"
+                . "🛍️ Items: {$itemsText}\n"
+                . "💳 Payment: *{$pStatus}*\n"
+                . "🚚 Status: *{$oStatus}*\n"
+                . "💰 Total: {$oTotal}\n";
+            if ($trackNo !== '') {
+                $msg .= "📍 Courier: " . ($courier !== '' ? $courier : 'Standard') . "\n"
+                     . "🔎 Tracking #: `{$trackNo}`\n";
+            }
+            $msg .= "\nIf you have any questions about your delivery, reply '5' to talk to our team!";
+
+            $summary = "Order #{$oNum} status: {$oStatus}, Payment: {$pStatus}, Total: {$oTotal}. Tell the customer these exact order details.";
+
+            $this->success([
+                'count'           => 1,
+                'order_id'        => $orderId,
+                'order_number'    => $oNum,
+                'status'          => $order['status'] ?? 'pending',
+                'payment_status'  => $order['payment_status'] ?? 'pending',
+                'total'           => (float)($order['total'] ?? 0),
+                'tracking_number' => $trackNo,
+                'courier'         => $courier,
+                'items'           => $items,
+                'message'         => $msg,
+                'summary'         => $summary,
+            ], 'Order status retrieved.');
+        }
+
+        // Phone-based lookup
+        if ($phone !== '') {
+            $digits = preg_replace('/\D+/', '', $phone);
+            $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+            $this->db->select('o.*')
+                     ->from('orders o')
+                     ->group_start()
+                       ->like('o.shipping_phone', $last10)
+                       ->or_like('o.billing_phone', $last10)
+                     ->group_end()
+                     ->order_by('o.id', 'DESC')
+                     ->limit(5);
+
+            $rows = $this->db->get()->result_array();
+            // Filter by vendor
+            $filtered = [];
+            foreach ($rows as $r) {
+                if (sk_ai_order_in_shop($r, $vendorId)) {
+                    $filtered[] = $r;
+                }
+            }
+
+            if (empty($filtered)) {
+                $msg = "We couldn't find any orders linked to +{$digits} at {$shopName} 😊\n\n"
+                    . "If you placed your order under another phone number, please reply with your Order Number (e.g. #G2D1001) or choose an option:\n"
+                    . "1. 🛍️ Browse products\n"
+                    . "2. 🙋 Talk to our team";
+                $summary = "No orders found for phone +{$digits}. Tell the customer kindly that no orders were found under this phone number and ask if they have an order number or want to talk to our team.";
+
+                $this->success([
+                    'count'   => 0,
+                    'orders'  => [],
+                    'message' => $msg,
+                    'summary' => $summary,
+                ], 'No orders found.');
+            }
+
+            if (count($filtered) === 1) {
+                $order = $filtered[0];
+                $orderId = (int)$order['id'];
+                $items = $this->db->where('order_id', $orderId)->get('order_items')->result_array();
+                $itemSummaries = [];
+                foreach ($items as $it) {
+                    $itName = trim((string)($it['product_name'] ?? $it['name'] ?? 'Product'));
+                    $itQty = (int)($it['quantity'] ?? 1);
+                    $itemSummaries[] = "{$itName} x {$itQty}";
+                }
+                $itemsText = !empty($itemSummaries) ? implode(', ', $itemSummaries) : 'Items ordered';
+
+                $oNum = (string)($order['order_number'] ?? $order['id']);
+                $oDate = !empty($order['created_at']) ? date('d M Y', strtotime($order['created_at'])) : 'Recent';
+                $oStatus = ucfirst((string)($order['status'] ?? 'pending'));
+                $pStatus = ucfirst((string)($order['payment_status'] ?? 'pending'));
+                $oTotal = sk_mcp_tool_inr((float)($order['total'] ?? 0));
+                $trackNo = trim((string)($order['tracking_number'] ?? ''));
+
+                $msg = "📦 *Your Order #{$oNum}*\n"
+                    . "📅 Date: {$oDate}\n"
+                    . "🛍️ Items: {$itemsText}\n"
+                    . "💳 Payment: *{$pStatus}*\n"
+                    . "🚚 Status: *{$oStatus}*\n"
+                    . "💰 Total: {$oTotal}\n";
+                if ($trackNo !== '') {
+                    $msg .= "🔎 Tracking #: `{$trackNo}`\n";
+                }
+                $msg .= "\nNeed help? Reply '5' to talk to our team!";
+
+                $summary = "Found 1 order #{$oNum} ({$oStatus}, {$pStatus}, {$oTotal}). Tell the customer their order status.";
+
+                $this->success([
+                    'count'          => 1,
+                    'order_id'       => $orderId,
+                    'order_number'   => $oNum,
+                    'status'         => $order['status'] ?? 'pending',
+                    'payment_status' => $order['payment_status'] ?? 'pending',
+                    'total'          => (float)($order['total'] ?? 0),
+                    'message'        => $msg,
+                    'summary'        => $summary,
+                ], 'Order retrieved.');
+            }
+
+            // Multiple orders found
+            $lines = [];
+            foreach ($filtered as $idx => $o) {
+                $num = (string)($o['order_number'] ?? $o['id']);
+                $st = ucfirst((string)($o['status'] ?? 'pending'));
+                $tot = sk_mcp_tool_inr((float)($o['total'] ?? 0));
+                $dt = !empty($o['created_at']) ? date('d M Y', strtotime($o['created_at'])) : '';
+                $lines[] = ($idx + 1) . ". *#{$num}* — {$tot} (Status: {$st}" . ($dt !== '' ? ", Date: {$dt}" : '') . ")";
+            }
+            $msg = "📦 You have " . count($filtered) . " recent orders:\n\n"
+                . implode("\n", $lines) . "\n\n"
+                . "Which order would you like to track? Reply with the order number (e.g. #" . ($filtered[0]['order_number'] ?? '') . ")!";
+
+            $summary = "Customer has " . count($filtered) . " recent orders. In your text message, list them and ask which order number they want to track.";
+
+            $this->success([
+                'count'   => count($filtered),
+                'orders'  => $filtered,
+                'message' => $msg,
+                'summary' => $summary,
+            ], 'Multiple orders found.');
+        }
+
+        // Neither order number nor phone provided
+        $msg = "To track your order, please reply with your *Order Number* (e.g. #G2D1001) or share your registered phone number! 📦";
+        $this->success([
+            'count'   => 0,
+            'message' => $msg,
+            'summary' => "Ask the customer for their order number or phone number to look up their order.",
+        ], 'Prompted for order info.');
+    }
+
+    /**
+     * Button 5: Talk to Our Team. Initiates handoff, alerts staff, pauses sales bot.
+     */
+    public function handover_to_human($phoneNumberId = '') {
+        $this->_require_connector_auth();
+        $tenant = $this->_resolve_tenant((string)$phoneNumberId);
+        $vendorId = (int)$tenant['vendor_id'];
+        $payload = $this->_payload();
+
+        $result = sk_ai_human_handoff($payload, $vendorId);
+
+        $msg = "Of course 😊 I am connecting you with our team.\nPlease wait while our team reviews your message. A teammate will join this chat shortly!";
+        $summary = "Conversation handed off to staff. Reply: 'Of course 😊 I am connecting you with our team. Please wait while our team reviews your message.'";
+
+        $this->success([
+            'handoff' => true,
+            'message' => $msg,
+            'summary' => $summary,
+            'data'    => $result['data'] ?? null,
+        ], 'Handover completed.');
     }
 
     public function search_products($phoneNumberId = '') {
@@ -658,18 +1175,7 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
             $summary = "Product found: {$pName} ({$pPrice}). Send the product photo with caption \"{$pName} - {$pPrice}\". IN YOUR WHATSAPP TEXT MESSAGE, write:\n\n'Here are the details for *{$pName}*:\nPrice: {$pPrice}\n" . ($pSpecs !== '' ? "Details: {$pSpecs}\n" : '') . "How many would you like to order?'";
         } elseif ($count > 1) {
             $ui = 'interactive_list';
-            $shopName = 'Vel Saree';
-            if (function_exists('sk_whatsapp_shop_name')) {
-                $biz = sk_whatsapp_shop_name($vendorId);
-                if ($biz !== '' && strcasecmp($biz, 'Shop') !== 0) {
-                    $shopName = $biz;
-                }
-            } elseif (!empty($tenant['vendor_id']) && $this->db->table_exists('vendors')) {
-                $vendor = $this->db->select('business_name')->where('id', (int)$tenant['vendor_id'])->get('vendors')->row_array();
-                if (!empty($vendor['business_name'])) {
-                    $shopName = $vendor['business_name'];
-                }
-            }
+            $shopName = $this->_get_shop_name($vendorId, $tenant);
             $interactive = sk_mcp_tool_build_product_interactive_list($products, $shopName, $footer);
             // Only send 1 featured card so WhatsApp never drops multiple media messages
             $cards = array_slice($cards, 0, 1);

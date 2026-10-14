@@ -91,8 +91,11 @@ assert_true(sk_meta_ba_connector_auth_ok('wrong-key') === false, 'connector auth
 assert_true(sk_meta_ba_connector_auth_ok('') === false, 'connector auth rejects empty key');
 $tools = sk_meta_ba_connector_tool_defs('PHONE123');
 $names = array_map(static function ($t) { return $t['name']; }, $tools);
+assert_true(in_array('get_main_menu', $names, true), 'tool get_main_menu defined');
 assert_true(in_array('get_categories', $names, true), 'tool get_categories defined');
+assert_true(in_array('get_offers', $names, true), 'tool get_offers defined');
 assert_true(in_array('search_products', $names, true), 'tool search_products defined');
+assert_true(in_array('get_order_status', $names, true), 'tool get_order_status defined');
 assert_true(in_array('create_order', $names, true), 'tool create_order defined');
 assert_true(in_array('handover_to_human', $names, true), 'tool handover_to_human defined');
 assert_true(in_array('create_payment_link', $names, true), 'tool create_payment_link defined');
@@ -101,6 +104,13 @@ assert_true(in_array('add_cart_item', $names, true), 'tool add_cart_item defined
 assert_true(in_array('update_cart_item', $names, true), 'tool update_cart_item defined');
 assert_true(in_array('remove_cart_item', $names, true), 'tool remove_cart_item defined');
 assert_true(in_array('apply_discount_code', $names, true), 'tool apply_discount_code defined');
+
+$uiDefs = sk_meta_ba_shop_ui_skill_defs('TestShop');
+$uiTitles = array_map(static function ($u) { return $u['title']; }, $uiDefs);
+assert_true(in_array('main-menu-list', $uiTitles, true), 'UI skill main-menu-list defined');
+assert_true(in_array('category-list', $uiTitles, true), 'UI skill category-list defined');
+assert_true(in_array('product-choice-list', $uiTitles, true), 'UI skill product-choice-list defined');
+assert_true(in_array('product-photo', $uiTitles, true), 'UI skill product-photo defined');
 
 $toolsByName = [];
 foreach ($tools as $t) {

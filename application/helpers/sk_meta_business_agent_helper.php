@@ -577,20 +577,23 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'our shop';
     $extra = trim($extraInstructions);
     $skill = "You are the WhatsApp sales manager for {$shopName}. "
-        . "Sell whatever get_categories and search_products return. "
+        . "Sell whatever get_categories, search_products, and get_offers return. "
         . "Sound like a real shopkeeper: warm, short, natural. Match the customer's language (Tamil/English/Tanglish). "
         . "Never mention AI, tools, databases, APIs, or internal IDs. Selling happens only in this WhatsApp chat. Products come only from search_products. Never send a website link or external URL. "
-        . "Strictly follow this 6-step customer flow in order: "
-        . "STEP 1 — GREETING: When a customer says 'Hi', 'Hello', 'Hey', 'Vanakkam', or starts a conversation without naming a product, reply with this warm greeting:\n"
-        . "'Hi! 👋 Welcome to {$shopName}.\nHow can I help you today?\n- 🛍️ Browse products\n- 🏷️ Offers & Deals\n- 🔎 Search for a product\n- 📦 Track my order\n- 🙋 Talk to our team'\n"
-        . "Call NO tools on greeting. "
-        . "STEP 2 — BROWSE CATEGORIES: When the customer asks to browse products, asks what you sell, asks for categories, or asks for offers/deals, call get_categories. In your message, ask: 'What are you looking for? 😊' and list ONLY the categories returned by get_categories (with icons). Never invent a category that does not exist for this seller. "
-        . "STEP 3 — SHOW PRODUCT CARDS: When the customer chooses a category (e.g. Silk Sarees) or searches for a product, call search_products with that category/product name. Present the matching products with their clean photo from image_url, name, price in ₹, fabric/color details, and live stock. Caption is '[Product Name] - [Price]'. In text, write out the product details and ask: 'Which saree and quantity would you like to order?' "
-        . "STEP 4 — SELECT VARIANT & QUANTITY: When the customer specifies their choice and quantity (e.g. 'Maroon, 2 pieces'), check stock and reply:\n"
+        . "Strictly follow this menu navigation and sales flow: "
+        . "STEP 1 — GREETING & MAIN MENU: When a customer says 'Hi', 'Hello', 'Hey', 'Vanakkam', 'Menu', or starts a conversation without naming a specific product, call get_main_menu and send the interactive list 'main-menu-list' (button 'View Menu') with these 5 options:\n"
+        . "- 🛍️ Browse products\n- 🏷️ Offers & Deals\n- 🔎 Search for a product\n- 📦 Track my order\n- 🙋 Talk to our team\n"
+        . "In your text message, greet warmly and list the 5 numbered options as fallback so the customer can tap the menu or reply with a number (1-5). "
+        . "STEP 2 — BROWSE CATEGORIES (BUTTON 1): When the customer selects 'browse_products', asks to browse products, asks what you sell, or asks for categories, call get_categories. In your message, ask: 'What would you like to shop for? 😊' and present the categories from get_categories using the interactive list ('View Categories') or numbered list. When the customer picks a category, call search_products for that category and show matching products with photo, name, price in ₹, fabric/color details, and live stock. Caption is '[Product Name] - [Price]'. In text, write out the product details and ask: 'Which item and quantity would you like to order?' "
+        . "STEP 3 — OFFERS & DEALS (BUTTON 2): When the customer selects 'offers_deals' or asks for discounts, deals, or promo codes, call get_offers. If active offers exist, show the discounted products with original price, discount price, and verified savings, plus active coupons. If no active offers exist, reply: 'No active offers right now 😊 Would you like to browse our products?' and offer to browse categories or return to the main menu. "
+        . "STEP 4 — SEARCH FOR A PRODUCT (BUTTON 3): When the customer selects 'search_product', ask: 'What product are you looking for? 🔎 (You can share name, color, style, or fabric!)'. If the customer types a product name or keyword directly at any time, do not force them back to the menu — call search_products immediately! Show matching products with photo and price. "
+        . "STEP 5 — TRACK MY ORDER (BUTTON 4): When the customer selects 'track_order' or asks about their order, call get_order_status with their phone number or order number. If an order exists, display the order number, date, status, payment status, courier tracking if available, and total. If multiple orders exist, list them and ask which one they want to track. If no orders exist, explain kindly and offer to browse products or talk to the team. "
+        . "STEP 6 — TALK TO OUR TEAM (BUTTON 5): When the customer selects 'talk_to_team' or asks to speak with support/human, call handover_to_human. Reply: 'Of course 😊 I am connecting you with our team. Please wait while our team reviews your message. A teammate will join shortly!' "
+        . "STEP 7 — SELECT VARIANT & QUANTITY: When the customer specifies their choice and quantity (e.g. 'Maroon, 2 pieces'), check stock and reply:\n"
         . "'Sure! 😊 [Product Name] — [Variant]\nQuantity: [Qty]\nTotal: [Total Amount]\nWould you like to add this to your cart?' "
-        . "STEP 5 — CART & CHECKOUT: Once the customer confirms, call add_cart_item, then call get_cart and show the cart summary (items, quantity, total). When they are ready to checkout, collect their delivery details in this chat, one at a time: name, phone number, door number, street, landmark, pincode (6 digits). Call create_customer and update_customer. "
-        . "STEP 6 — PAYMENT & ORDER CONFIRMATION: Confirm the whole basket and delivery address once. Call create_order with confirmed=true. Then call create_payment_link once. Send the total and the payment_link as plain text. The invoice is sent only after payment. "
-        . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
+        . "STEP 8 — CART & CHECKOUT: Once the customer confirms, call add_cart_item, then call get_cart and show the cart summary (items, quantity, total). When they are ready to checkout, collect their delivery details in this chat, one at a time: name, phone number, door number, street, landmark, pincode (6 digits). Call create_customer and update_customer. "
+        . "STEP 9 — PAYMENT & ORDER CONFIRMATION: Confirm the whole basket and delivery address once. Call create_order with confirmed=true. Then call create_payment_link once. Send the total and the payment_link as plain text. The invoice is sent only after payment. "
+        . "Always support Tamil, Tanglish, and English. Keep replies short (1-3 sentences) and helpful.";
     if ($extra !== '') {
         $skill .= ' Extra shop notes: ' . $extra;
     }
@@ -598,7 +601,7 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         sk_meta_ba_cart_management_skill_def(),
         [
             'title'       => 'shop-sales-assistant',
-            'description' => 'General shop. Greeting menu, category browsing, product photo, variant and quantity confirmation, cart checkout, and payment link.',
+            'description' => 'General shop. Greeting menu (Browse, Deals, Search, Track, Support), category browsing, product photo, variant and quantity confirmation, cart checkout, and payment link.',
             'skill'       => $skill,
         ],
     ];
@@ -1132,16 +1135,28 @@ function sk_meta_ba_shop_ui_skill_defs(string $shopName, string $catalogUrl = ''
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'Shop';
     $defs = [
         [
-            'title'           => 'product-photo',
-            'component_type'  => 'image',
+            'title'           => 'main-menu-list',
+            'component_type'  => 'interactive_list',
             'status'          => 'enabled',
-            'instruction'     => 'Send the single product photo from image_url with caption format "[Product Name] - [Price]". In text, always write out the full product names and prices from the catalog response.',
+            'instruction'     => 'When a customer sends a greeting (such as "Hi", "Hello", "Hey", "Vanakkam", "Menu") or asks for the main menu, or when get_main_menu is called, send an interactive list message. Button text: "View Menu". Header: "' . $shopName . '". Body: "Welcome to ' . $shopName . '! How can I help you today? Please choose an option below:". Sections: "Main Menu" with 5 rows: 1) id "browse_products", title "🛍️ Browse products", description "Explore categories & catalog"; 2) id "offers_deals", title "🏷️ Offers & Deals", description "Today\'s discounts & promo codes"; 3) id "search_product", title "🔎 Search a product", description "Find by name, style, or color"; 4) id "track_order", title "📦 Track my order", description "Check order & shipment status"; 5) id "talk_to_team", title "🙋 Talk to our team", description "Chat with our support team". In text, always include a warm greeting and the 5 numbered choices as a fallback.',
+        ],
+        [
+            'title'           => 'category-list',
+            'component_type'  => 'interactive_list',
+            'status'          => 'enabled',
+            'instruction'     => 'When get_categories is called or customer asks to browse categories, send an interactive list drawer. Button text: "View Categories". Sections contain the categories returned by get_categories with row id as category name or id, title as category name (up to 24 chars), and description with product count.',
         ],
         [
             'title'           => 'product-choice-list',
             'component_type'  => 'interactive_list',
             'status'          => 'enabled',
-            'instruction'     => 'When search_products returns multiple products or ui is interactive_list, send an interactive list drawer. Button text "🛍️ Browse Sarees". Sections contain the saree rows with title as product name (up to 24 chars) and description with price and color.',
+            'instruction'     => 'When search_products or get_offers returns multiple products or ui is interactive_list, send an interactive list drawer. Button text: "🛍️ View Products". Sections contain the product rows with row id as SKU, title as product name (up to 24 chars) and description with price and variant/color.',
+        ],
+        [
+            'title'           => 'product-photo',
+            'component_type'  => 'image',
+            'status'          => 'enabled',
+            'instruction'     => 'Send the single product photo from image_url with caption format "[Product Name] - [Price]". In text, always write out the full product names and prices from the catalog response.',
         ],
     ];
     return $defs;
@@ -1428,11 +1443,18 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId, ?bool $userAuthRe
             $cartAuth
         ),
 
-        $tool('get_categories', 'Returns the available product categories that actually exist for this shop. Call this when customer wants to browse products, asks what categories are available, or asks for offers/deals.', []),
+        $tool('get_main_menu', 'Returns the 5 interactive main menu options (Browse products, Offers & Deals, Search, Track order, Talk to team) with interactive list payload and text fallback. Call this on greetings (Hi, Hello, Menu) or when customer asks for the menu.', []),
+        $tool('get_categories', 'Returns active product categories for this shop. Call this when customer wants to browse products, asks what categories are available, or selects Browse products.', []),
+        $tool('get_offers', 'Returns active discounts, deals, and coupon codes for this shop. Call this when customer asks for offers, deals, discounts, or selects Offers & Deals.', []),
         $tool('search_products', 'Search products, prices, stock, and catalog. Returns active products in this shop. For catalog inquiries, returns the available products list and the featured photo. For single product inquiries, returns that product details and photo. Always write out the product names and prices as text inside this WhatsApp chat. Do not send external website links.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
             'limit'  => $bodyField('integer', 'Max results (1-10)'),
+        ]),
+        $tool('get_order_status', 'Check status, delivery, and courier tracking of an order. Call this when customer selects Track my order or asks about their order status. Lookup by customer phone number or order number.', [
+            'phone'        => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
+            'order_number' => $bodyField('string', 'Order reference (e.g. #G2D1001)'),
+            'order_id'     => $bodyField('integer', 'Order id if known'),
         ]),
         $tool('identify_customer', 'Find customer by phone when starting an order. Not for greetings.', [
             'phone' => $bodyField('string', 'Customer WhatsApp phone with country code', $waPhone),
@@ -1453,9 +1475,6 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId, ?bool $userAuthRe
             'pincode'     => $bodyField('string', 'Pincode'),
             'phone'       => $bodyField('string', 'Phone', $waPhone),
         ], ['customer_id']),
-        $tool('calculate_order_total', 'Compute the combined total for every product in the cart before create_order.', [
-            'items' => $bodyField('string', 'JSON array of {product_id, quantity}'),
-        ], ['items']),
         $tool('create_order', 'Create one order only after the address was confirmed once. confirmed must be true. items includes every cart line as product_id, variant_id, variant_label, and quantity. name, phone, address, and pincode are the confirmed delivery details.', [
             'confirmed'        => $bodyField('boolean', 'Must be true'),
             'items'            => $bodyField('string', 'JSON array of {product_id, variant_id, variant_label, quantity}'),
@@ -1468,10 +1487,6 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId, ?bool $userAuthRe
             'pincode'          => $bodyField('string', 'Pincode'),
             'idempotency_key'  => $bodyField('string', 'Optional idempotency key'),
         ], ['confirmed', 'items']),
-        $tool('get_order', 'Get order by id or order_number.', [
-            'order_id'     => $bodyField('integer', 'Order id'),
-            'order_number' => $bodyField('string', 'Order number'),
-        ]),
         $tool('create_payment_link', 'Create one Razorpay payment link after create_order. One product uses card.body with the photo, variant, Qty, Amount, and Pay now. Two or more products use checkout_cards, one card per product, each with its image, variant, amount, and the same Pay now link. Do not paste the link as text.', [
             'order_id' => $bodyField('integer', 'Order id'),
         ], ['order_id']),
