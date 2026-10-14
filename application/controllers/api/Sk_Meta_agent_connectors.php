@@ -43,6 +43,16 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
 
     private function _payload(): array {
         $payload = $this->body();
+        if (!is_array($payload) || empty($payload)) {
+            $post = $this->input->post(null, true);
+            if (is_array($post) && !empty($post)) {
+                $payload = $post;
+            }
+        }
+        $get = $this->input->get(null, true);
+        if (is_array($get) && !empty($get)) {
+            $payload = array_merge($get, is_array($payload) ? $payload : []);
+        }
         return is_array($payload) ? $payload : [];
     }
 
