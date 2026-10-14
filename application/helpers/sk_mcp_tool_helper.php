@@ -84,6 +84,17 @@ function sk_mcp_tool_parse_query(?string $query): array {
         }
     }
 
+    $conversationalFillers = [
+        'tell', 'me', 'show', 'give', 'details', 'detail', 'about', 'want', 'need',
+        'looking', 'look', 'can', 'you', 'your', 'item', 'items', 'product', 'products',
+        'list', 'info', 'information', 'send', 'share', 'the', 'and', 'for', 'are',
+        'stock', 'available', 'price', 'this', 'that', 'with', 'from', 'have', 'has',
+        'more', 'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'gallery',
+        'please', 'all', 'any', 'some', 'what', 'which', 'how', 'much', 'cost', 'rate',
+        'i', 'we', 'am', 'is', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'do', 'does',
+        'our', 'these', 'those', 'there', 'here', 'see', 'buy', 'order', 'shop', 'menu', 'catalog', 'collection', 'options'
+    ];
+
     $filtered = [];
     foreach ($tokens as $token) {
         $token = trim($token);
@@ -94,16 +105,13 @@ function sk_mcp_tool_parse_query(?string $query): array {
         if ($ignore) {
             continue;
         }
-        if (in_array($token, ['size', 'color', 'available', 'price', 'stock', 'item', 'product', 'shirt', 'dress', 'saree', 'top', 'jeans'], true)) {
+        if (in_array($token, $conversationalFillers, true)) {
             continue;
         }
         $filtered[] = $token;
     }
 
     $productName = trim(implode(' ', $filtered));
-    if ($productName === '') {
-        $productName = trim(preg_replace('/\b(size|color|available|price|stock|item|product)\b/ui', '', $lower));
-    }
 
     return [
         'query' => $normalized,
@@ -123,10 +131,29 @@ function sk_mcp_tool_product_image_path(array $product): string {
         }
         $path = trim((string)($img['image'] ?? ''));
         if ($path !== '') {
+            $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+                return $path;
+            }
+        }
+    }
+    $thumb = trim((string)($product['thumbnail'] ?? ''));
+    if ($thumb !== '') {
+        $ext = strtolower(pathinfo($thumb, PATHINFO_EXTENSION));
+        if (in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+            return $thumb;
+        }
+    }
+    foreach ($images as $img) {
+        if (!is_array($img)) {
+            continue;
+        }
+        $path = trim((string)($img['image'] ?? ''));
+        if ($path !== '') {
             return $path;
         }
     }
-    return trim((string)($product['thumbnail'] ?? ''));
+    return $thumb;
 }
 
 /** Main image, gallery rows, and variant photos, in that order, without duplicates. */
@@ -151,10 +178,14 @@ function sk_mcp_tool_product_gallery_paths(array $product): array {
 
 function sk_mcp_tool_is_catalog_request(string $query): bool {
     $q = mb_strtolower(trim($query), 'UTF-8');
-    if (!preg_match('/\b(all|list|products?|items?|catalog|menu|available)\b/u', $q)) {
+    if ($q === '') {
+        return true;
+    }
+    if (!preg_match('/\b(all|list|products?|items?|catalog|menu|available|collection|details?|sarees?|options)\b/u', $q)) {
         return false;
     }
-    $stripped = trim((string)preg_replace('/\b(show|me|all|the|your|list|of|products?|items?|catalog|menu|available|what|do|you|have|please|stock|any)\b/u', ' ', $q));
+    $stripped = trim((string)preg_replace('/\b(show|me|all|the|your|list|of|products?|items?|catalog|menu|available|what|do|you|have|please|stock|any|give|tell|detail|details|collection|options|our|see|share|send|item|items)\b/u', ' ', $q));
+    $stripped = trim((string)preg_replace('/[?!.,\-_]/u', ' ', $stripped));
     $stripped = trim((string)preg_replace('/\s+/u', ' ', $stripped));
     return $stripped === '';
 }
@@ -313,40 +344,53 @@ function sk_mcp_tool_find_products(?string $query, ?array $tenant = null, int $l
 
     $parsed = sk_mcp_tool_parse_query($query);
     $tenantInfo = sk_mcp_tool_resolve_tenant($tenant['tenant'] ?? null);
-    $searchBase = trim($parsed['product_name'] !== '' ? $parsed['product_name'] : $parsed['query']);
-    $useful = [];
-    foreach ($parsed['terms'] as $term) {
-        $term = trim((string)$term);
-        if (strlen($term) < 3) {
-            continue;
-        }
-        if (in_array($term, ['the', 'and', 'for', 'are', 'you', 'stock', 'available', 'price', 'product', 'this', 'that', 'with', 'from', 'have', 'has', 'sticks', 'more', 'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'gallery', 'show', 'please'], true)) {
-            continue;
-        }
-        $useful[] = $term;
-    }
-    if ($useful) {
-        $searchBase = $useful[0];
-    }
-    $search = trim($searchBase . ' ' . ($parsed['color'] !== '' ? $parsed['color'] : ''));
-    $search = preg_replace('/\s+/', ' ', $search);
-
     $tenantId = (int)($tenant['tenant_id'] ?? $tenant['tenant'] ?? 0);
-    $catalog = sk_mcp_tool_is_catalog_request((string)$query);
+
+    $isCatReq = sk_mcp_tool_is_catalog_request((string)$query);
+    $catalog = $isCatReq || ($parsed['product_name'] === '' && $parsed['color'] === '' && $parsed['size'] === '');
+
+    $search = '';
+    if (!$catalog) {
+        $search = trim($parsed['product_name'] . ' ' . $parsed['color']);
+        $search = trim((string)preg_replace('/\s+/', ' ', $search));
+    }
+
     $filters = ['status' => 'active', 'search' => $catalog ? '' : $search, 'sort' => 'newest'];
     if ($tenantId > 0) {
         $filters['vendor_id'] = $tenantId;
     }
 
-    $result = ($catalog || $search !== '')
-        ? $CI->Sk_Product_model->get_all($filters, max(1, min(10, $limit)), 0)
-        : ['data' => []];
-
+    $result = $CI->Sk_Product_model->get_all($filters, max(1, min(10, $limit)), 0);
     $items = is_array($result['data'] ?? null) ? $result['data'] : [];
+
+    // Fallback 1: If multi-word search returned 0 items, try searching with individual significant words
+    if (empty($items) && !$catalog && $search !== '') {
+        $words = preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY);
+        foreach ($words as $word) {
+            if (strlen($word) < 3) continue;
+            $filters['search'] = $word;
+            $fallback = $CI->Sk_Product_model->get_all($filters, max(1, min(10, $limit)), 0);
+            $fallbackItems = is_array($fallback['data'] ?? null) ? $fallback['data'] : [];
+            if (!empty($fallbackItems)) {
+                $items = $fallbackItems;
+                break;
+            }
+        }
+    }
+
+    // Fallback 2: If still empty, return catalog products so customer always gets products
+    if (empty($items)) {
+        $filters['search'] = '';
+        $fallback = $CI->Sk_Product_model->get_all($filters, max(1, min(10, $limit)), 0);
+        $items = is_array($fallback['data'] ?? null) ? $fallback['data'] : [];
+        $catalog = true;
+    }
+
     $matchRows = [];
 
     foreach ($items as $product) {
-        if ($tenantId > 0 && (int)($product['vendor_id'] ?? 0) !== $tenantId) {
+        $pVendor = (int)($product['vendor_id'] ?? 0);
+        if ($tenantId > 0 && $pVendor > 0 && $pVendor !== $tenantId) {
             continue;
         }
         $productName = trim((string)($product['name'] ?? ''));

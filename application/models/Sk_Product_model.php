@@ -53,8 +53,12 @@ class Sk_Product_model extends CI_Model {
         }
         // Tenant / vendor scope — required for Meta BA + MCP catalog tools.
         if (!empty($filters['vendor_id'])) {
-            $this->db->where('p.vendor_id', (int)$filters['vendor_id']);
-            $this->db->where('p.vendor_id >', 0);
+            $vId = (int)$filters['vendor_id'];
+            $this->db->group_start()
+                     ->where('p.vendor_id', $vId)
+                     ->or_where('p.vendor_id IS NULL', null, false)
+                     ->or_where('p.vendor_id', 0)
+                     ->group_end();
         }
         if (!empty($filters['featured'])) {
             $this->db->where('p.featured', 1);
@@ -69,15 +73,27 @@ class Sk_Product_model extends CI_Model {
             $this->db->where('p.hot_sale', 1);
         }
         if (!empty($filters['search'])) {
+            $rawSearch = trim((string)$filters['search']);
+            $words = preg_split('/\s+/', $rawSearch, -1, PREG_SPLIT_NO_EMPTY);
             $this->db->group_start()
-                     ->like('p.name', $filters['search'])
-                     ->or_like('p.sku', $filters['search'])
-                     ->or_like('p.tags', $filters['search'])
-                     ->or_like('p.saree_type', $filters['search'])
-                     ->or_like('p.fabric', $filters['search'])
-                     ->or_like('p.color', $filters['search'])
-                     ->or_like('p.origin_state', $filters['search'])
-                     ->group_end();
+                     ->like('p.name', $rawSearch)
+                     ->or_like('p.sku', $rawSearch)
+                     ->or_like('p.tags', $rawSearch)
+                     ->or_like('p.saree_type', $rawSearch)
+                     ->or_like('p.fabric', $rawSearch)
+                     ->or_like('p.color', $rawSearch)
+                     ->or_like('p.origin_state', $rawSearch);
+            if (count($words) > 1) {
+                foreach ($words as $w) {
+                    if (strlen($w) < 3) continue;
+                    $this->db->or_like('p.name', $w)
+                             ->or_like('p.tags', $w)
+                             ->or_like('p.saree_type', $w)
+                             ->or_like('p.fabric', $w)
+                             ->or_like('p.color', $w);
+                }
+            }
+            $this->db->group_end();
         }
         if (!empty($filters['min_price'])) {
             $this->db->where('p.price >=', $filters['min_price']);

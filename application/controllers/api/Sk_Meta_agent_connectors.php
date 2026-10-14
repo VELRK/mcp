@@ -577,24 +577,33 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         }
         $photoCount = count($photoCards);
         $ui = 'none';
+        $detailText = '';
         if ($count === 1) {
             $galleryCards = $this->_gallery_cards($products[0], $footer);
-            $ui = $photoCount === 1 ? 'product-photo' : 'none';
-            $summary = 'Send the product photo from image_url with product name and price. In text, tell the shopper the available sizes/variants from the database and ask which size and quantity they want to add to their cart right here in WhatsApp. When they reply, confirm quantity and call get_cart then add_cart_item. All shopping happens in WhatsApp.';
+            $ui = $photoCount >= 1 ? 'product-photo' : 'none';
+            $pName = (string)($products[0]['name'] ?? 'product');
+            $pPrice = sk_mcp_tool_inr((float)($products[0]['price'] ?? 0));
+            $summary = "Product found: {$pName} ({$pPrice}). Send the product photo with caption \"{$pName} - {$pPrice}\". In text, describe the fabric, color, design, and price from the database, and ask which size and quantity to add to cart in this WhatsApp chat.";
+            $detailText = (string)($cards[0]['detail'] ?? '');
         } elseif ($count > 1) {
             $ui = 'product-photo';
-            $summary = 'Product list. Send the product photo for each product. In text, ask which item, size, and quantity they would like to add to their basket in this chat.';
+            $summary = "Found {$count} products in catalog. Send the product photo for each product with its name and price. In text, describe the products and ask which item, size, and quantity they would like to order in this WhatsApp chat.";
+            $lines = [];
+            foreach ($cards as $c) {
+                $lines[] = (string)($c['name'] ?? '') . ' - ' . (string)($c['body'] ?? '');
+            }
+            $detailText = implode("\n", $lines);
         } else {
-            $summary = 'No matching products in this shop.';
+            $summary = 'No matching products found in the catalog.';
         }
         $products = array_values($products);
-        $sheet = $count === 1 ? ($cards[0] ?? []) : [];
+        $sheet = $count >= 1 ? ($cards[0] ?? []) : [];
         $this->success([
             'query'    => $query,
             'count'    => $count,
             'ui'       => $ui,
             'summary'  => $summary,
-            'detail'   => (string)($sheet['detail'] ?? ''),
+            'detail'   => $detailText !== '' ? $detailText : (string)($sheet['detail'] ?? ''),
             'footer'   => (string)($sheet['footer'] ?? $footer),
             'cards'    => $cards,
             'gallery_cards' => $galleryCards,
@@ -643,12 +652,21 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         $cardImage = function_exists('sk_meta_generate_product_card_image')
             ? sk_meta_generate_product_card_image($product)
             : '';
+        $rawImageValid = false;
+        if ($rawImage !== '') {
+            $parsed = parse_url($rawImage);
+            $localRel = ltrim($parsed['path'] ?? '', '/');
+            if (defined('FCPATH') && $localRel !== '' && file_exists(FCPATH . $localRel)) {
+                $rawImageValid = true;
+            }
+        }
+        $chosenImage = $rawImageValid ? $rawImage : ($cardImage !== '' ? $cardImage : $rawImage);
         return [
             'name'          => $name,
             'body'          => $this->_shop_card_body($product),
             'detail'        => $this->_shop_detail_body($product),
             'footer'        => $footer,
-            'image_url'     => $rawImage !== '' ? $rawImage : $cardImage,
+            'image_url'     => $chosenImage,
             'raw_image_url' => $rawImage,
             'card_image_url'=> $cardImage,
             'button_label'  => $button ?: 'Shop now',
@@ -664,6 +682,11 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         foreach ((array)($product['gallery'] ?? []) as $url) {
             $url = trim((string)$url);
             if ($url === '') {
+                continue;
+            }
+            $parsed = parse_url($url);
+            $localRel = ltrim($parsed['path'] ?? '', '/');
+            if (defined('FCPATH') && $localRel !== '' && !file_exists(FCPATH . $localRel)) {
                 continue;
             }
             $card['image_url'] = $url;
