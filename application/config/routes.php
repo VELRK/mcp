@@ -682,6 +682,28 @@ $route['shopkart-api/shipping/track']['POST'] = 'api/Sk_Shipping/track';
 $route['shopkart-api/whatsapp/webhook']['GET']  = 'api/Sk_Whatsapp_webhook/index';
 $route['shopkart-api/whatsapp/webhook']['POST'] = 'api/Sk_Whatsapp_webhook/index';
 // Meta Business Agent commerce connectors (API key auth; tenant from phone_number_id)
+// Multi-item Cart Management routes
+$route['shopkart-api/meta-agent/connectors/(:any)/cart']['GET']                  = 'api/Sk_Meta_agent_connectors/get_cart/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/cart']['POST']                 = 'api/Sk_Meta_agent_connectors/get_cart/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/cart/items']['POST']           = 'api/Sk_Meta_agent_connectors/add_cart_item/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/cart/items/(:any)']['PUT']    = 'api/Sk_Meta_agent_connectors/update_cart_item/$1/$2';
+$route['shopkart-api/meta-agent/connectors/(:any)/cart/items/(:any)']['POST']   = 'api/Sk_Meta_agent_connectors/update_cart_item/$1/$2';
+$route['shopkart-api/meta-agent/connectors/(:any)/cart/items/(:any)']['DELETE'] = 'api/Sk_Meta_agent_connectors/remove_cart_item/$1/$2';
+$route['shopkart-api/meta-agent/connectors/(:any)/cart/discount']['POST']        = 'api/Sk_Meta_agent_connectors/apply_discount_code/$1';
+// Direct tool-name aliases
+$route['shopkart-api/meta-agent/connectors/(:any)/get_cart']['GET']              = 'api/Sk_Meta_agent_connectors/get_cart/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/get_cart']['POST']             = 'api/Sk_Meta_agent_connectors/get_cart/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/add_cart_item']['POST']        = 'api/Sk_Meta_agent_connectors/add_cart_item/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/update_cart_item']['PUT']      = 'api/Sk_Meta_agent_connectors/update_cart_item/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/update_cart_item']['POST']     = 'api/Sk_Meta_agent_connectors/update_cart_item/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/update_cart_item/(:any)']['PUT']  = 'api/Sk_Meta_agent_connectors/update_cart_item/$1/$2';
+$route['shopkart-api/meta-agent/connectors/(:any)/update_cart_item/(:any)']['POST'] = 'api/Sk_Meta_agent_connectors/update_cart_item/$1/$2';
+$route['shopkart-api/meta-agent/connectors/(:any)/remove_cart_item']['DELETE']   = 'api/Sk_Meta_agent_connectors/remove_cart_item/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/remove_cart_item']['POST']     = 'api/Sk_Meta_agent_connectors/remove_cart_item/$1';
+$route['shopkart-api/meta-agent/connectors/(:any)/remove_cart_item/(:any)']['DELETE'] = 'api/Sk_Meta_agent_connectors/remove_cart_item/$1/$2';
+$route['shopkart-api/meta-agent/connectors/(:any)/remove_cart_item/(:any)']['POST']   = 'api/Sk_Meta_agent_connectors/remove_cart_item/$1/$2';
+$route['shopkart-api/meta-agent/connectors/(:any)/apply_discount_code']['POST']  = 'api/Sk_Meta_agent_connectors/apply_discount_code/$1';
+
 $route['shopkart-api/meta-agent/connectors/(:any)/search_products']['POST']       = 'api/Sk_Meta_agent_connectors/search_products/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/identify_customer']['POST']     = 'api/Sk_Meta_agent_connectors/identify_customer/$1';
 $route['shopkart-api/meta-agent/connectors/(:any)/create_customer']['POST']       = 'api/Sk_Meta_agent_connectors/create_customer/$1';

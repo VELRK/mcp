@@ -57,15 +57,19 @@ function sk_meta_ba_connector_auth_ok(?string $provided): bool {
 
 function sk_meta_ba_request_token_from_headers(): string {
     $CI =& get_instance();
-    $auth = (string)$CI->input->get_request_header('Authorization', true);
-    if (stripos($auth, 'Bearer ') === 0) {
-        return trim(substr($auth, 7));
-    }
     $hdr = (string)$CI->input->get_request_header('X-Api-Key', true);
     if ($hdr !== '') {
         return trim($hdr);
     }
-    return trim((string)$CI->input->get_request_header('X-MCP-Token', true));
+    $hdr = (string)$CI->input->get_request_header('X-MCP-Token', true);
+    if ($hdr !== '') {
+        return trim($hdr);
+    }
+    $auth = (string)$CI->input->get_request_header('Authorization', true);
+    if (stripos($auth, 'Bearer ') === 0) {
+        return trim(substr($auth, 7));
+    }
+    return '';
 }
 
 /**
@@ -537,6 +541,14 @@ function sk_meta_ba_upsert_instructions(string $phoneNumberId, string $instructi
     return sk_meta_ba_sync_sales_skills($phoneNumberId, $instructions, $settings);
 }
 
+function sk_meta_ba_cart_management_skill_def(): array {
+    return [
+        'title'       => 'cart-management',
+        'description' => 'Applied whenever a shopper adds something to their basket, changes a quantity, removes an item, asks what is in the basket, or asks for the total.',
+        'skill'       => 'Call get_cart before every change and again after it, and describe the basket only from the most recent read. Never state a quantity, price, or total from an earlier turn. Ask how many the shopper wants before adding anything, and never assume one. Confirm which item they mean when their words match more than one product, and never guess between two candidates. Take line identifiers from the current get_cart response only. When a change is rejected because of a limit, tell the shopper the limit and what is currently in the basket, and make no partial change. When the shopper asks for the total, read the cart and report the figure it returns rather than adding the items up yourself. Read the whole basket back for confirmation before checkout and wait for an explicit yes. Do not start checkout, take payment details, or promise a delivery date in this conversation.',
+    ];
+}
+
 function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions = ''): array {
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'our shop';
     $extra = trim($extraInstructions);
@@ -549,17 +561,18 @@ function sk_meta_ba_sales_skill_defs(string $shopName, string $extraInstructions
         . "2. PRODUCTS: On any product, price, or stock question, call search_products exactly once. The tool result is the whole catalog. Offer only those products. If it is empty, say so in one sentence. Never add a product from memory or another shop. Never invent facts. Infer typos such as donu have = do you have and amount/prise = price. "
         . "3. SHOW THE PRODUCTS: Send only the product image. One image per product, up to 10. Caption is the name and the price. Do not send a detail card, Add to cart, Buy, a carousel, a variant list, or quantity buttons. If there is no image, write the name and price as one text line. Do not invent delivery days, fabric, or ratings. Do not send a website link. "
         . "4. MORE PHOTOS: If they ask for more images, call search_products again with that product name. Send each extra JPEG or PNG as its own image. No carousel and no buttons. No photos: say there are no extra photos. Never invent a photo. "
-        . "5. QUANTITY: Ask how many in one short question. The customer types the number. That number is the quantity. Do not send Qty + or Qty -. If variants exist and none is chosen, ask which one in text and wait. Out of stock is not added. The same product and variant updates the existing line. Quantity 0 removes the line. Do not create the order. Then repeat the cart as text: name, variant when chosen, quantity, amount, and the total. "
-        . "6. DELIVERY DETAILS: When they say buy or checkout, do not confirm the order and do not create it. Ask in this chat for each missing item, one at a time, in this order: name, phone number, door number, landmark, street, pincode. A pincode is 6 digits. Do not send a location card, a map, or a link. Do not skip a field. "
+        . "5. BASKET & CART: Always call get_cart before any change and again after it. Never assume quantity 1. When adding an item, ask how many first, then call add_cart_item with sku and quantity. When setting a total, call update_cart_item with the line_id from get_cart. To remove an item, call remove_cart_item with line_id. If a discount code is given, call apply_discount_code with the code verbatim. If a change is rejected for limit or stock, report the exact limit and headroom without guessing. "
+        . "6. DELIVERY DETAILS: When they say buy or checkout, confirm the basket once in plain text. Ask in this chat for each missing item, one at a time, in this order: name, phone number, door number, landmark, street, pincode. A pincode is 6 digits. Do not send a location card, a map, or a link. Do not skip a field. "
         . "7. CUSTOMER: After the name and phone number are known, call identify_customer or create_customer with that name and phone. Then call update_customer. The address text is Door {door number}, {street}. Landmark: {landmark}. Save the pincode. Create the customer only after the name and phone are collected. "
-        . "8. CONFIRM ONCE: After the customer and the full address are saved, confirm once in text. Repeat the name, phone number, door number, landmark, street, pincode, every cart product, each quantity, and the combined total. Ask them to reply Confirm. Do not send confirm buttons. Create the order only after they reply Confirm. create_order items must include every cart product. The order name, phone, address, and pincode are the ones just confirmed. calculate_order_total uses that same product list. Do not ask for the address again. "
-        . "9. PAY: After that one confirmation, create_order with confirmed=true. Each item is product_id, variant_id, variant_label, and quantity. Then create_payment_link once. Send the total and the payment_link as plain text. Do not send a Pay card, a checkout carousel, or any other designed message. One new link per order. Never reuse or invent a link. "
+        . "8. CONFIRM ONCE: Read the whole basket back from get_cart for confirmation before checkout: every item with quantity, price, line total, subtotal, discount, item count, and note that delivery is added at checkout. Wait for an explicit yes before creating an order. Ask them to reply Confirm. Do not send confirm buttons. create_order items includes every cart product. Do not ask for the address again. "
+        . "9. PAY: After that one confirmation, create_order with confirmed=true. Then create_payment_link once. Send the total and the payment_link as plain text. Do not send a Pay card, a checkout carousel, or any other designed message. One new link per order. Never reuse or invent a link. "
         . "The invoice is sent only after payment. Do not send the invoice before the payment link. Never hand off for a simple product or price question. "
         . "Soft handoff: keep chatting after handover_to_human. Keep replies to 1-3 short sentences.";
     if ($extra !== '') {
         $skill .= ' Extra shop notes: ' . $extra;
     }
     return [
+        sk_meta_ba_cart_management_skill_def(),
         [
             'title'       => 'shop-sales-assistant',
             'description' => 'General shop. Show only the product image. Quantity is typed as text. Confirm the address once, send the payment link as text, and the invoice follows payment.',
@@ -1258,29 +1271,115 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
         'kind'  => 'macro',
         'macro' => 'WHATSAPP_PHONE_NUMBER',
     ];
-    $tool = static function (string $name, string $description, array $params, array $required = []) use ($bodyField): array {
-        $paramsNode = $params;
-        if ($paramsNode === []) {
-            $paramsNode = new stdClass();
+    $customTool = static function (
+        string $name,
+        string $description,
+        string $method = 'POST',
+        string $path = '',
+        array $params = [],
+        array $required = [],
+        array $pathParams = [],
+        bool $userAuthRequired = false
+    ) use ($bodyField): array {
+        $reqDef = [
+            'method' => strtoupper($method),
+            'path'   => $path !== '' ? $path : ('/' . $name),
+        ];
+        if (!empty($pathParams)) {
+            $reqDef['path_parameters'] = $pathParams;
+        }
+        if (in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'], true) && (!empty($params) || !empty($required))) {
+            $paramsNode = $params;
+            if ($paramsNode === []) {
+                $paramsNode = new stdClass();
+            }
+            $reqDef['body'] = [
+                'content_type' => 'application/json',
+                'params'       => $paramsNode,
+                'required'     => $required,
+            ];
         }
         return [
-            'name' => $name,
-            'description' => $description,
-            'user_auth_required' => false,
-            'request_definition' => [
-                'method' => 'POST',
-                'path'   => '/' . $name,
-                'body'   => [
-                    'content_type' => 'application/json',
-                    'params' => $paramsNode,
-                    'required' => $required,
-                ],
-            ],
+            'name'               => $name,
+            'description'        => $description,
+            'user_auth_required' => $userAuthRequired,
+            'request_definition' => $reqDef,
         ];
     };
+    $tool = static function (string $name, string $description, array $params, array $required = []) use ($customTool): array {
+        return $customTool($name, $description, 'POST', '/' . $name, $params, $required, [], false);
+    };
 
-    // Keep this list SMALL — Meta latency grows with tool count (19 tools was ~19s; 9 tools ~14s).
     return [
+        // ── Multi-item Cart Management Tools ───────────────────────────
+        $customTool(
+            'get_cart',
+            'Returns the current basket: every line with its line ID, product name, SKU, unit price, quantity, and line total, plus the basket subtotal, any discount applied, and the number of items. Call this before every change and again after every change. This is the only source of truth for what is in the basket; never describe the basket from memory.',
+            'GET',
+            '/cart',
+            [],
+            [],
+            [],
+            true
+        ),
+        $customTool(
+            'add_cart_item',
+            'Adds units of one product to the basket and returns the updated basket. The quantity is the number of units to ADD, not the total the shopper should end up with; to set a total, use update_cart_item instead. Call get_cart first. Only call this after the shopper has stated a quantity and, where several products matched, confirmed which one they mean. The whole call is rejected if it would breach a limit, so nothing is partially added.',
+            'POST',
+            '/cart/items',
+            [
+                'sku'      => $bodyField('string', 'The SKU of the product to add, exactly as it appears in the catalog.'),
+                'quantity' => $bodyField('integer', 'How many units to add to the existing quantity. Never send the desired total here.'),
+            ],
+            ['sku', 'quantity'],
+            [],
+            true
+        ),
+        $customTool(
+            'update_cart_item',
+            'Sets one basket line to a specific quantity and returns the updated basket. The quantity is the TOTAL the line should end up at, not an increment. Use this whenever the shopper says make it, change it to, or I only want. Call get_cart immediately before and take line_id from that response. Setting a quantity of zero is rejected; use remove_cart_item instead.',
+            'PUT',
+            '/cart/items/{line_id}',
+            [
+                'quantity' => $bodyField('integer', 'The total quantity this line should have after the change.'),
+            ],
+            ['quantity'],
+            [
+                'line_id' => [
+                    'type'        => 'string',
+                    'description' => 'The line to change, taken from the get_cart response in this turn. Never reuse a line ID from an earlier turn.',
+                ],
+            ],
+            true
+        ),
+        $customTool(
+            'remove_cart_item',
+            'Removes one line from the basket entirely and returns the updated basket. Call get_cart immediately before and take line_id from that response. When the shopper words could match more than one line, ask which before removing. Never remove more than one line in a single turn without confirming each.',
+            'DELETE',
+            '/cart/items/{line_id}',
+            [],
+            [],
+            [
+                'line_id' => [
+                    'type'        => 'string',
+                    'description' => 'The line to remove, taken from the get_cart response in this turn.',
+                ],
+            ],
+            true
+        ),
+        $customTool(
+            'apply_discount_code',
+            'Applies a discount code to the basket and returns the updated basket with the discount shown, or a reason the code was not accepted. Send the code exactly as the shopper typed it, without changing its case or removing characters. Report the reason the service gives; do not explain why a code might have failed or suggest other codes.',
+            'POST',
+            '/cart/discount',
+            [
+                'code' => $bodyField('string', 'The discount code the shopper gave, character for character as they typed it.'),
+            ],
+            ['code'],
+            [],
+            true
+        ),
+
         $tool('search_products', 'ONLY tool for product/price/stock, and again when they ask for more photos. Never for hi/hello. Returns this shop\'s active products. One product is one photo plus Shop now. gallery_cards are extra photos of that product. Two or more products are a reply carousel. Do not send a website link or a text list.', [
             'query'  => $bodyField('string', 'Customer words describing the product'),
             'search' => $bodyField('string', 'Alias for query'),
@@ -1520,3 +1619,264 @@ function sk_meta_ba_default_instructions(string $shopName = 'our shop'): string 
     $shopName = trim($shopName) !== '' ? trim($shopName) : 'our shop';
     return $shopName;
 }
+
+/**
+ * Dynamically generates a high-resolution, branded product card image
+ * matching the exact WhatsApp card mockup (Photo, Title, Price, Sizes, Stepper, Add to Cart).
+ */
+function sk_meta_generate_product_card_image(array $product, ?int $variantId = null): string {
+    $defaultImage = (string)($product['image_url'] ?? $product['image'] ?? $product['thumbnail'] ?? '');
+    if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) {
+        return $defaultImage;
+    }
+
+    $productId = (int)($product['id'] ?? 0);
+    if ($productId <= 0) {
+        return $defaultImage;
+    }
+
+    $title = trim((string)($product['name'] ?? 'Product'));
+    $price = (float)($product['effective_price'] ?? $product['price'] ?? 0);
+    if ($price <= 0) {
+        $price = (float)($product['price'] ?? 0);
+    }
+    $priceText = '₹' . number_format($price, 0);
+
+    $color = trim((string)($product['color'] ?? ''));
+    $availText = 'Available' . ($color !== '' ? '  ·  ' . $color : '');
+
+    // Sizes
+    $sizes = [];
+    if (!empty($product['variants']) && is_array($product['variants'])) {
+        foreach ($product['variants'] as $v) {
+            $lbl = trim((string)($v['label'] ?? ''));
+            if ($lbl !== '' && !in_array($lbl, $sizes, true)) {
+                $sizes[] = $lbl;
+            }
+        }
+    }
+    if (empty($sizes) && !empty($product['sizes'])) {
+        $parts = preg_split('/[,\s\/]+/', (string)$product['sizes']);
+        foreach ($parts as $p) {
+            $p = trim($p);
+            if ($p !== '' && !in_array($p, $sizes, true)) {
+                $sizes[] = $p;
+            }
+        }
+    }
+    if (empty($sizes)) {
+        $sizes = ['M', 'L', 'XL'];
+    }
+    $sizes = array_slice($sizes, 0, 4);
+
+    $activeSize = count($sizes) >= 2 ? $sizes[1] : $sizes[0];
+
+    // Determine local photo path on disk
+    $photoPath = '';
+    $rawPhoto = trim((string)($product['thumbnail'] ?? $product['image'] ?? ''));
+    if ($rawPhoto !== '') {
+        $candidate = defined('FCPATH') ? (FCPATH . ltrim($rawPhoto, '/\\')) : $rawPhoto;
+        if (file_exists($candidate)) {
+            $photoPath = $candidate;
+        }
+    }
+    if ($photoPath === '' && !empty($product['image_url'])) {
+        $parsed = parse_url($product['image_url']);
+        if (!empty($parsed['path'])) {
+            $local = defined('FCPATH') ? (FCPATH . ltrim($parsed['path'], '/\\')) : '';
+            if ($local !== '' && file_exists($local)) {
+                $photoPath = $local;
+            }
+        }
+    }
+    // Fallback sample image if none exists
+    if ($photoPath === '' && defined('FCPATH')) {
+        $fallback = FCPATH . 'assets/aquiry/images/apps/ecommrece/jacket.png';
+        if (file_exists($fallback)) {
+            $photoPath = $fallback;
+        }
+    }
+
+    $mtime = !empty($product['updated_at']) ? strtotime($product['updated_at']) : (file_exists($photoPath) ? filemtime($photoPath) : 1);
+    $cacheName = "card_{$productId}_" . ($variantId ?: 0) . "_{$mtime}.png";
+    $cacheRel = 'assets/uploads/product_cards/' . $cacheName;
+    $cacheFull = defined('FCPATH') ? (FCPATH . $cacheRel) : $cacheRel;
+
+    if (file_exists($cacheFull) && filesize($cacheFull) > 1000) {
+        $url = function_exists('base_url') ? base_url($cacheRel) : ('/' . $cacheRel);
+        return function_exists('sk_mcp_tool_whatsapp_image_url') ? sk_mcp_tool_whatsapp_image_url($url) : $url;
+    }
+
+    $cacheDir = dirname($cacheFull);
+    if (!is_dir($cacheDir)) {
+        @mkdir($cacheDir, 0777, true);
+    }
+
+    $fontBold = defined('FCPATH') ? (FCPATH . 'assets/fonts/font-bold.ttf') : 'assets/fonts/font-bold.ttf';
+    $fontRegular = defined('FCPATH') ? (FCPATH . 'assets/fonts/font-regular.ttf') : 'assets/fonts/font-regular.ttf';
+    $hasTTF = file_exists($fontBold) && function_exists('imagettftext');
+
+    $W = 820;
+    $H = 500;
+    $img = imagecreatetruecolor($W, $H);
+    imagealphablending($img, true);
+    imagesavealpha($img, true);
+
+    $bgChat = imagecolorallocate($img, 248, 250, 252);
+    imagefilledrectangle($img, 0, 0, $W, $H, $bgChat);
+
+    $cardBg = imagecolorallocate($img, 255, 255, 255);
+    $cardBorder = imagecolorallocate($img, 226, 232, 240);
+    $photoBg = imagecolorallocate($img, 241, 245, 249);
+    $textDark = imagecolorallocate($img, 15, 23, 42);
+    $textGreen = imagecolorallocate($img, 5, 150, 105);
+    $btnGreen = imagecolorallocate($img, 4, 120, 87);
+    $textMuted = imagecolorallocate($img, 100, 116, 139);
+    $pillBorder = imagecolorallocate($img, 203, 213, 225);
+    $stepperBg = imagecolorallocate($img, 241, 245, 249);
+    $white = imagecolorallocate($img, 255, 255, 255);
+
+    $drawRounded = static function ($im, $x, $y, $w, $h, $r, $col, $filled = true) {
+        if ($filled) {
+            imagefilledrectangle($im, $x + $r, $y, $x + $w - $r, $y + $h, $col);
+            imagefilledrectangle($im, $x, $y + $r, $x + $w, $y + $h - $r, $col);
+            imagefilledellipse($im, $x + $r, $y + $r, $r * 2, $r * 2, $col);
+            imagefilledellipse($im, $x + $w - $r, $y + $r, $r * 2, $r * 2, $col);
+            imagefilledellipse($im, $x + $r, $y + $h - $r, $r * 2, $r * 2, $col);
+            imagefilledellipse($im, $x + $w - $r, $y + $h - $r, $r * 2, $r * 2, $col);
+        } else {
+            imageline($im, $x + $r, $y, $x + $w - $r, $y, $col);
+            imageline($im, $x + $r, $y + $h, $x + $w - $r, $y + $h, $col);
+            imageline($im, $x, $y + $r, $x, $y + $h - $r, $col);
+            imageline($im, $x + $w, $y + $r, $x + $w, $y + $h - $r, $col);
+            imagearc($im, $x + $r, $y + $r, $r * 2, $r * 2, 180, 270, $col);
+            imagearc($im, $x + $w - $r, $y + $r, $r * 2, $r * 2, 270, 360, $col);
+            imagearc($im, $x + $r, $y + $h - $r, $r * 2, $r * 2, 90, 180, $col);
+            imagearc($im, $x + $w - $r, $y + $h - $r, $r * 2, $r * 2, 0, 90, $col);
+        }
+    };
+
+    // Outer card
+    $cardX = 16; $cardY = 16; $cardW = $W - 32; $cardH = $H - 32;
+    $drawRounded($img, $cardX, $cardY, $cardW, $cardH, 24, $cardBg, true);
+    $drawRounded($img, $cardX, $cardY, $cardW, $cardH, 24, $cardBorder, false);
+
+    // Left photo box
+    $pBoxX = $cardX + 24; $pBoxY = $cardY + 24; $pBoxW = 320; $pBoxH = $cardH - 48;
+    $drawRounded($img, $pBoxX, $pBoxY, $pBoxW, $pBoxH, 20, $photoBg, true);
+
+    if ($photoPath !== '' && file_exists($photoPath)) {
+        $info = @getimagesize($photoPath);
+        if ($info) {
+            $src = null;
+            if ($info[2] === IMAGETYPE_JPEG) $src = @imagecreatefromjpeg($photoPath);
+            elseif ($info[2] === IMAGETYPE_PNG) $src = @imagecreatefrompng($photoPath);
+            elseif ($info[2] === IMAGETYPE_WEBP && function_exists('imagecreatefromwebp')) $src = @imagecreatefromwebp($photoPath);
+
+            if ($src) {
+                $sw = imagesx($src);
+                $sh = imagesy($src);
+                $maxW = $pBoxW - 24;
+                $maxH = $pBoxH - 24;
+                $scale = min($maxW / max(1, $sw), $maxH / max(1, $sh));
+                $dw = (int)($sw * $scale);
+                $dh = (int)($sh * $scale);
+                $dx = $pBoxX + (int)(($pBoxW - $dw) / 2);
+                $dy = $pBoxY + (int)(($pBoxH - $dh) / 2);
+                imagecopyresampled($img, $src, $dx, $dy, 0, 0, $dw, $dh, $sw, $sh);
+                imagedestroy($src);
+            }
+        }
+    }
+
+    // Right side content
+    $contentX = $pBoxX + $pBoxW + 36;
+    $currY = $cardY + 54;
+
+    if ($hasTTF) {
+        if (function_exists('mb_substr') && mb_strlen($title) > 28) {
+            $title = mb_substr($title, 0, 26) . '...';
+        }
+        imagettftext($img, 20, 0, $contentX, $currY, $textDark, $fontBold, $title);
+
+        $currY += 46;
+        imagettftext($img, 26, 0, $contentX, $currY, $textGreen, $fontBold, $priceText);
+
+        $currY += 34;
+        imagettftext($img, 13, 0, $contentX, $currY, $textMuted, $fontRegular, $availText);
+
+        $currY += 46;
+        imagettftext($img, 13, 0, $contentX, $currY, $textDark, $fontBold, 'Size');
+
+        // Size pills
+        $pillY = $currY + 12;
+        $pillX = $contentX;
+        $pillW = 56;
+        $pillH = 40;
+        $pillR = 18;
+
+        foreach ($sizes as $s) {
+            $isActive = (strcasecmp($s, $activeSize) === 0);
+            if ($isActive) {
+                $drawRounded($img, $pillX, $pillY, $pillW, $pillH, $pillR, $btnGreen, true);
+                $textColor = $white;
+            } else {
+                $drawRounded($img, $pillX, $pillY, $pillW, $pillH, $pillR, $cardBg, true);
+                $drawRounded($img, $pillX, $pillY, $pillW, $pillH, $pillR, $pillBorder, false);
+                $textColor = $textDark;
+            }
+            $box = imagettfbbox(13, 0, $fontBold, $s);
+            $tw = abs($box[4] - $box[0]);
+            $th = abs($box[5] - $box[1]);
+            $tx = $pillX + (int)(($pillW - $tw) / 2);
+            $ty = $pillY + (int)(($pillH + $th) / 2) - 2;
+            imagettftext($img, 13, 0, $tx, $ty, $textColor, $fontBold, $s);
+
+            $pillX += $pillW + 14;
+        }
+
+        // Stepper: [ - ] 1 [ + ]
+        $stepY = $pillY + $pillH + 20;
+        $stepW = 160;
+        $stepH = 42;
+        $stepR = 21;
+        $stepX = $contentX + 30;
+        $drawRounded($img, $stepX, $stepY, $stepW, $stepH, $stepR, $stepperBg, true);
+
+        imagettftext($img, 17, 0, $stepX + 22, $stepY + 28, $btnGreen, $fontBold, '−');
+        imagettftext($img, 15, 0, $stepX + 74, $stepY + 28, $textDark, $fontBold, '1');
+        imagettftext($img, 17, 0, $stepX + 124, $stepY + 29, $btnGreen, $fontBold, '+');
+
+        // Add to Cart Button
+        $btnY = $stepY + $stepH + 18;
+        $btnW = 260;
+        $btnH = 50;
+        $btnR = 25;
+        $btnX = $contentX + (int)(($W - $contentX - 40 - $btnW) / 2);
+        if ($btnX < $contentX) $btnX = $contentX;
+
+        $drawRounded($img, $btnX, $btnY, $btnW, $btnH, $btnR, $btnGreen, true);
+
+        $box = imagettfbbox(14, 0, $fontBold, 'Add to Cart');
+        $tw = abs($box[4] - $box[0]);
+        $cartX = $btnX + (int)(($btnW - $tw - 30) / 2);
+
+        // Shopping cart icon
+        imageline($img, $cartX, $btnY + 20, $cartX + 6, $btnY + 20, $white);
+        imageline($img, $cartX + 6, $btnY + 20, $cartX + 11, $btnY + 32, $white);
+        imageline($img, $cartX + 11, $btnY + 32, $cartX + 24, $btnY + 32, $white);
+        imageline($img, $cartX + 24, $btnY + 32, $cartX + 28, $btnY + 22, $white);
+        imageline($img, $cartX + 8, $btnY + 22, $cartX + 28, $btnY + 22, $white);
+        imagefilledellipse($img, $cartX + 13, $btnY + 36, 4, 4, $white);
+        imagefilledellipse($img, $cartX + 22, $btnY + 36, 4, 4, $white);
+
+        imagettftext($img, 14, 0, $cartX + 34, $btnY + 32, $white, $fontBold, 'Add to Cart');
+    }
+
+    imagepng($img, $cacheFull);
+    imagedestroy($img);
+
+    $url = function_exists('base_url') ? base_url($cacheRel) : ('/' . $cacheRel);
+    return function_exists('sk_mcp_tool_whatsapp_image_url') ? sk_mcp_tool_whatsapp_image_url($url) : $url;
+}
+

@@ -96,8 +96,37 @@ assert_true(in_array('search_products', $names, true), 'tool search_products def
 assert_true(in_array('create_order', $names, true), 'tool create_order defined');
 assert_true(in_array('handover_to_human', $names, true), 'tool handover_to_human defined');
 assert_true(in_array('create_payment_link', $names, true), 'tool create_payment_link defined');
+assert_true(in_array('get_cart', $names, true), 'tool get_cart defined');
+assert_true(in_array('add_cart_item', $names, true), 'tool add_cart_item defined');
+assert_true(in_array('update_cart_item', $names, true), 'tool update_cart_item defined');
+assert_true(in_array('remove_cart_item', $names, true), 'tool remove_cart_item defined');
+assert_true(in_array('apply_discount_code', $names, true), 'tool apply_discount_code defined');
+
+$toolsByName = [];
+foreach ($tools as $t) {
+    $toolsByName[$t['name']] = $t;
+}
+assert_true(!empty($toolsByName['get_cart']['user_auth_required']), 'get_cart has user_auth_required: true');
+assert_true(!empty($toolsByName['add_cart_item']['user_auth_required']), 'add_cart_item has user_auth_required: true');
+assert_true(!empty($toolsByName['update_cart_item']['user_auth_required']), 'update_cart_item has user_auth_required: true');
+assert_true(!empty($toolsByName['remove_cart_item']['user_auth_required']), 'remove_cart_item has user_auth_required: true');
+assert_true(!empty($toolsByName['apply_discount_code']['user_auth_required']), 'apply_discount_code has user_auth_required: true');
+assert_true(isset($toolsByName['update_cart_item']['request_definition']['path_parameters']['line_id']), 'update_cart_item defines line_id path parameter');
+
 assert_true(!in_array('get_product_price', $names, true), 'extra get_product_price removed from Meta tool list');
-assert_true(count($names) <= 12, 'Meta tool list kept small for speed');
+assert_true(count($names) <= 16, 'Meta tool list kept small for speed (<= 16)');
+
+// Cart management skill validation
+$cartSkill = sk_meta_ba_cart_management_skill_def();
+assert_true($cartSkill['title'] === 'cart-management', 'cart-management skill title is exact');
+assert_true(strpos($cartSkill['skill'], 'Call get_cart before every change') !== false, 'cart-management enforces read-before-and-after');
+assert_true(strpos($cartSkill['skill'], 'never assume one') !== false, 'cart-management forbids assuming quantity 1');
+assert_true(strpos($cartSkill['skill'], 'wait for an explicit yes') !== false, 'cart-management enforces explicit confirmation before checkout');
+
+$salesSkills = sk_meta_ba_sales_skill_defs('Shop');
+$skillTitles = array_map(static function ($s) { return $s['title']; }, $salesSkills);
+assert_true(in_array('cart-management', $skillTitles, true), 'sales skills bundle includes cart-management');
+assert_true(in_array('shop-sales-assistant', $skillTitles, true), 'sales skills bundle includes shop-sales-assistant');
 
 $list = sk_meta_ba_normalize_skill_items([['id' => 'a', 'title' => 'x', 'skill' => 'y']]);
 assert_true(count($list) === 1 && ($list[0]['id'] ?? '') === 'a', 'normalize_skill_items accepts top-level array');

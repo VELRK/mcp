@@ -58,6 +58,25 @@ class Sk_Vendor_meta_agent_model extends CI_Model {
                     ADD COLUMN `agent_state` MEDIUMTEXT NULL AFTER `handoff_reason`");
             }
         }
+
+        // Persistent cart sessions for conversational basket state & discounts
+        if (!$this->db->table_exists('cart_sessions')) {
+            $this->db->query("CREATE TABLE `cart_sessions` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `session_id` VARCHAR(128) NOT NULL,
+                `vendor_id` BIGINT NOT NULL DEFAULT 0,
+                `user_id` INT UNSIGNED NULL DEFAULT NULL,
+                `customer_phone` VARCHAR(30) NULL DEFAULT NULL,
+                `discount_code` VARCHAR(50) NULL DEFAULT NULL,
+                `discount_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                `created_at` DATETIME NOT NULL,
+                `updated_at` DATETIME NOT NULL,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uniq_sess_vendor` (`session_id`, `vendor_id`),
+                KEY `idx_cust_phone` (`customer_phone`),
+                KEY `idx_user` (`user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
     }
 
     public function get_by_phone(string $phoneNumberId): ?array {

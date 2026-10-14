@@ -601,6 +601,12 @@ function sk_ai_mcp_tool_registry(): array {
         'create_cart',
         'add_to_cart',
         'update_cart',
+        // Multi-item Cart Management (Meta Business Agent standard)
+        'get_cart',
+        'add_cart_item',
+        'update_cart_item',
+        'remove_cart_item',
+        'apply_discount_code',
         'create_order',
         'get_order',
         'update_order',
