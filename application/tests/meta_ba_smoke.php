@@ -106,12 +106,17 @@ $toolsByName = [];
 foreach ($tools as $t) {
     $toolsByName[$t['name']] = $t;
 }
-assert_true(!empty($toolsByName['get_cart']['user_auth_required']), 'get_cart has user_auth_required: true');
-assert_true(!empty($toolsByName['add_cart_item']['user_auth_required']), 'add_cart_item has user_auth_required: true');
-assert_true(!empty($toolsByName['update_cart_item']['user_auth_required']), 'update_cart_item has user_auth_required: true');
-assert_true(!empty($toolsByName['remove_cart_item']['user_auth_required']), 'remove_cart_item has user_auth_required: true');
-assert_true(!empty($toolsByName['apply_discount_code']['user_auth_required']), 'apply_discount_code has user_auth_required: true');
+assert_true(isset($toolsByName['get_cart']['user_auth_required']), 'get_cart defines user_auth_required');
+assert_true(isset($toolsByName['add_cart_item']['user_auth_required']), 'add_cart_item defines user_auth_required');
+assert_true(isset($toolsByName['update_cart_item']['user_auth_required']), 'update_cart_item defines user_auth_required');
+assert_true(isset($toolsByName['remove_cart_item']['user_auth_required']), 'remove_cart_item defines user_auth_required');
+assert_true(isset($toolsByName['apply_discount_code']['user_auth_required']), 'apply_discount_code defines user_auth_required');
 assert_true(isset($toolsByName['update_cart_item']['request_definition']['path_parameters']['line_id']), 'update_cart_item defines line_id path parameter');
+
+$authTools = sk_meta_ba_connector_tool_defs('PHONE123', true);
+$authToolsByName = [];
+foreach ($authTools as $at) { $authToolsByName[$at['name']] = $at; }
+assert_true(!empty($authToolsByName['get_cart']['user_auth_required']), 'get_cart supports user_auth_required: true when user auth configured');
 
 assert_true(!in_array('get_product_price', $names, true), 'extra get_product_price removed from Meta tool list');
 assert_true(count($names) <= 16, 'Meta tool list kept small for speed (<= 16)');

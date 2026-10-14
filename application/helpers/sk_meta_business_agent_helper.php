@@ -1254,9 +1254,15 @@ function sk_meta_ba_thread_control(string $phoneNumberId, string $to, string $ac
     return ['ok' => $ok, 'error' => $err, 'http' => $http, 'data' => $data];
 }
 
-function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
+function sk_meta_ba_connector_tool_defs(string $phoneNumberId, ?bool $userAuthRequired = null): array {
     // Paths are relative to the connector base_url.
     unset($phoneNumberId);
+    $cfg = sk_meta_ba_config_array();
+    // Only set user_auth_required to true if the connector actually has user auth injection configured.
+    // Standard API_KEY connectors must have user_auth_required: false, otherwise Meta rejects tool creation with:
+    // "user_auth_required is true, but the connector is missing user auth injection config".
+    $cartAuth = $userAuthRequired !== null ? (bool)$userAuthRequired : !empty($cfg['user_auth_enabled']);
+
     $bodyField = static function (string $type, string $desc, ?array $binding = null): array {
         $node = [
             'type'        => $type,
@@ -1279,7 +1285,8 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
         array $params = [],
         array $required = [],
         array $pathParams = [],
-        bool $userAuthRequired = false
+        bool $userAuthRequired = false,
+        array $queryParams = []
     ) use ($bodyField): array {
         $reqDef = [
             'method' => strtoupper($method),
@@ -1287,6 +1294,9 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
         ];
         if (!empty($pathParams)) {
             $reqDef['path_parameters'] = $pathParams;
+        }
+        if (!empty($queryParams)) {
+            $reqDef['query_parameters'] = $queryParams;
         }
         if (in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'], true) && (!empty($params) || !empty($required))) {
             $paramsNode = $params;
@@ -1320,7 +1330,10 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             [],
             [],
             [],
-            true
+            $cartAuth,
+            [
+                'customer_phone' => $bodyField('string', 'Customer phone', $waPhone),
+            ]
         ),
         $customTool(
             'add_cart_item',
@@ -1328,12 +1341,13 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'POST',
             '/cart/items',
             [
-                'sku'      => $bodyField('string', 'The SKU of the product to add, exactly as it appears in the catalog.'),
-                'quantity' => $bodyField('integer', 'How many units to add to the existing quantity. Never send the desired total here.'),
+                'sku'            => $bodyField('string', 'The SKU of the product to add, exactly as it appears in the catalog.'),
+                'quantity'       => $bodyField('integer', 'How many units to add to the existing quantity. Never send the desired total here.'),
+                'customer_phone' => $bodyField('string', 'Customer phone', $waPhone),
             ],
             ['sku', 'quantity'],
             [],
-            true
+            $cartAuth
         ),
         $customTool(
             'update_cart_item',
@@ -1341,7 +1355,8 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'PUT',
             '/cart/items/{line_id}',
             [
-                'quantity' => $bodyField('integer', 'The total quantity this line should have after the change.'),
+                'quantity'       => $bodyField('integer', 'The total quantity this line should have after the change.'),
+                'customer_phone' => $bodyField('string', 'Customer phone', $waPhone),
             ],
             ['quantity'],
             [
@@ -1350,7 +1365,7 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
                     'description' => 'The line to change, taken from the get_cart response in this turn. Never reuse a line ID from an earlier turn.',
                 ],
             ],
-            true
+            $cartAuth
         ),
         $customTool(
             'remove_cart_item',
@@ -1365,7 +1380,10 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
                     'description' => 'The line to remove, taken from the get_cart response in this turn.',
                 ],
             ],
-            true
+            $cartAuth,
+            [
+                'customer_phone' => $bodyField('string', 'Customer phone', $waPhone),
+            ]
         ),
         $customTool(
             'apply_discount_code',
@@ -1373,11 +1391,12 @@ function sk_meta_ba_connector_tool_defs(string $phoneNumberId): array {
             'POST',
             '/cart/discount',
             [
-                'code' => $bodyField('string', 'The discount code the shopper gave, character for character as they typed it.'),
+                'code'           => $bodyField('string', 'The discount code the shopper gave, character for character as they typed it.'),
+                'customer_phone' => $bodyField('string', 'Customer phone', $waPhone),
             ],
             ['code'],
             [],
-            true
+            $cartAuth
         ),
 
         $tool('search_products', 'ONLY tool for product/price/stock, and again when they ask for more photos. Never for hi/hello. Returns this shop\'s active products. One product is one photo plus Shop now. gallery_cards are extra photos of that product. Two or more products are a reply carousel. Do not send a website link or a text list.', [
