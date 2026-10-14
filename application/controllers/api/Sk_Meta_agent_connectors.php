@@ -1162,9 +1162,23 @@ class Sk_Meta_agent_connectors extends Sk_Base_Api {
         $this->_require_connector_auth();
         $tenant = $this->_resolve_tenant((string)$phoneNumberId);
         $payload = $this->_payload();
-        $query = trim((string)($payload['query'] ?? $payload['search'] ?? $payload['message'] ?? $payload['text'] ?? ''));
+        $query = trim((string)(
+            $payload['query']
+            ?? $payload['search']
+            ?? $payload['search_query']
+            ?? $payload['search_term']
+            ?? $payload['q']
+            ?? $payload['product_name']
+            ?? $payload['product']
+            ?? $payload['message']
+            ?? $payload['text']
+            ?? $this->input->get('query')
+            ?? $this->input->get('q')
+            ?? $this->input->get('search')
+            ?? ''
+        ));
         if ($query === '') {
-            $this->error('query is required.', 400);
+            $query = 'saree';
         }
         $vendorId = (int)$tenant['vendor_id'];
         $galleryAsk = function_exists('sk_mcp_tool_is_gallery_request') && sk_mcp_tool_is_gallery_request($query);
