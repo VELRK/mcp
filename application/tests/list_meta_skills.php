@@ -20,6 +20,7 @@ $connectors = sk_meta_ba_list_connectors($phone);
 echo "=== CONNECTORS ===\n";
 echo json_encode($connectors, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n";
 
-$agent = sk_meta_ba_get_business_agent($phone);
-echo "=== BUSINESS AGENT ===\n";
-echo json_encode($agent, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n";
+$settings = sk_meta_ba_get_settings($phone);
+echo "=== SETTINGS ===\n";
+echo json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n";
+
