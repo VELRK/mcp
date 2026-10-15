@@ -98,6 +98,25 @@ function sk_meta_catalog_resolve_phone_for_vendor(int $vendorId): ?string {
     return null;
 }
 
+function sk_meta_catalog_access_token(int $vendorId, string $phoneNumberId, ?array $settings = null): string {
+    $vendorId = (int)$vendorId;
+    $phoneNumberId = trim($phoneNumberId);
+    if ($vendorId > 0 && $phoneNumberId !== '' && function_exists('get_instance') && get_instance() !== null) {
+        $CI =& get_instance();
+        if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
+            $CI->load->model('Sk_Vendor_whatsapp_account_model');
+        }
+        $account = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId, true);
+        if ((int)($account['vendor_id'] ?? 0) === $vendorId) {
+            $token = trim((string)($account['access_token'] ?? ''));
+            if ($token !== '') {
+                return $token;
+            }
+        }
+    }
+    return sk_meta_ba_access_token($phoneNumberId, $settings);
+}
+
 function sk_meta_catalog_store_catalog_id(int $vendorId, string $phoneNumberId, string $catalogId, ?string $catalogName = null): void {
     if ($vendorId < 1 || trim($phoneNumberId) === '' || trim($catalogId) === '') {
         return;
@@ -144,7 +163,7 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
     if ($phoneNumberId === '') {
         return ['ok' => false, 'error' => 'No active WhatsApp number is linked to this vendor.'];
     }
-    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    $token = sk_meta_catalog_access_token($vendorId, $phoneNumberId, $settings);
     if ($token === '') {
         return ['ok' => false, 'error' => 'Meta access token is missing.'];
     }
@@ -353,7 +372,7 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
         $rows = [];
     }
 
-    $token = sk_meta_ba_access_token((string)($phoneNumberId ?: $catalog['phone_number_id']), $settings);
+    $token = sk_meta_catalog_access_token($vendorId, (string)($phoneNumberId ?: $catalog['phone_number_id']), $settings);
     $catalogId = trim((string)$catalog['catalog_id']);
     $productsSynced = [];
     foreach ($rows as $product) {
