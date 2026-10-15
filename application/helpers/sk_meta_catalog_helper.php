@@ -141,17 +141,30 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         }
     }
 
-    // A WhatsApp phone_number_id object does not expose a `name` field.
-    // Meta only exposes fields like id, display_phone_number, verified_name, and owner_business_info.
-    $metaUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($phoneNumberId) . '?fields=id,display_phone_number,verified_name,owner_business_info';
+    $metaUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($phoneNumberId) . '?fields=id,display_phone_number,verified_name';
     $metaRes = sk_meta_catalog_http('GET', $metaUrl, $token, null, 30);
     $metaData = is_array($metaRes['data']) ? $metaRes['data'] : [];
     if (!$metaRes['ok']) {
         return ['ok' => false, 'error' => $metaRes['error'] ?: 'Unable to read WhatsApp account metadata.'];
     }
-    $businessId = trim((string)($metaData['owner_business_info']['id'] ?? $metaData['business_id'] ?? ''));
+    $businessId = '';
+    if (function_exists('get_instance') && get_instance() !== null) {
+        $CI =& get_instance();
+        if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
+            $CI->load->model('Sk_Vendor_whatsapp_account_model');
+        }
+        $account = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId, true);
+        $businessId = trim((string)($account['business_id'] ?? ''));
+        if ($businessId === '') {
+            if (!function_exists('sk_wa_cloud_config')) {
+                $CI->load->helper('sk_whatsapp_cloud');
+            }
+            $cloudConfig = sk_wa_cloud_config($settings, $vendorId);
+            $businessId = trim((string)($cloudConfig['business_id'] ?? ''));
+        }
+    }
     if ($businessId === '') {
-        return ['ok' => false, 'error' => 'Meta business id could not be resolved from the WhatsApp number.'];
+        return ['ok' => false, 'error' => 'Meta business id is missing from the linked WhatsApp account settings.'];
     }
 
     $catalogListUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs?fields=id,name,product_count';
