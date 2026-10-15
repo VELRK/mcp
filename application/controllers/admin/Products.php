@@ -7,6 +7,7 @@ class Products extends Sk_Base {
 
     public function __construct() {
         parent::__construct();
+        $this->load->helper('sk_meta_catalog');
         $this->load->model(['Sk_Variant_unit_model', 'Sk_Product_variant_model', 'Sk_Product_model']);
         $this->Sk_Product_model->ensure_schema();
     }
@@ -80,6 +81,24 @@ class Products extends Sk_Base {
             $data['vendors'] = $this->Sk_Vendor_model->get_all(['status' => 'approved'], 200, 0)['rows'];
         }
         return $data;
+    }
+
+    public function sync_catalog() {
+        $vendorId = (int)($this->input->get('vendor_id') ?: $this->current_vendor_id() ?: $this->input->post('vendor_id'));
+        if ($vendorId < 1) {
+            $this->session->set_flashdata('error', 'Select a vendor before syncing the catalog.');
+            redirect('admin/products');
+            return;
+        }
+
+        $result = sk_meta_catalog_sync_vendor_products($vendorId, null, $this->Sk_Admin_model->get_settings());
+        if (!empty($result['ok'])) {
+            $this->session->set_flashdata('success', 'Meta catalog synced successfully.');
+        } else {
+            $this->session->set_flashdata('error', $result['error'] ?? 'Unable to sync the Meta catalog.');
+        }
+
+        redirect('admin/products');
     }
 
     public function add() {

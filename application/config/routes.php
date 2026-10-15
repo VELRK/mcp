@@ -354,6 +354,7 @@ $route['shopkart/products/store'] = 'admin/Products/store';
 $route['shopkart/products/edit/(:num)'] = 'admin/Products/edit/$1';
 $route['shopkart/products/update/(:num)'] = 'admin/Products/update/$1';
 $route['shopkart/products/delete/(:num)'] = 'admin/Products/delete/$1';
+$route['shopkart/products/sync_catalog'] = 'admin/Products/sync_catalog';
 $route['shopkart/products/toggle/(:num)'] = 'admin/Products/toggle/$1';
 $route['shopkart/products/delete_image/(:num)/(:num)'] = 'admin/Products/delete_image/$1/$2';
 $route['shopkart/products/delete_variant_image/(:num)/(:num)'] = 'admin/Products/delete_variant_image/$1/$2';

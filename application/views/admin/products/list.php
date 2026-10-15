@@ -89,9 +89,13 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
 </div>
 
 <div class="card" id="productListCard">
-  <div class="card-header">
-    <h5 class="card-title">Product List</h5>
-    <a href="<?= site_url('shopkart/products/add') ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-plus me-1"></i>Add Product</a>
+  <div class="card-header d-flex justify-content-between align-items-center gap-2">
+    <h5 class="card-title mb-0">Product List</h5>
+    <div class="d-flex align-items-center gap-2">
+      <a href="<?= site_url('shopkart/products/sync_catalog' . (!empty($vendor_id) ? '?vendor_id=' . rawurlencode((string)$vendor_id) : '')) ?>"
+         class="btn btn-sm btn-outline-success"><i class="mdi mdi-cloud-sync me-1"></i>Sync Catalog</a>
+      <a href="<?= site_url('shopkart/products/add') ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-plus me-1"></i>Add Product</a>
+    </div>
   </div>
   <div class="card-body">
     <div class="table-responsive text-nowrap">

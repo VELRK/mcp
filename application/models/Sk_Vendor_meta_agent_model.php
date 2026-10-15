@@ -22,6 +22,8 @@ class Sk_Vendor_meta_agent_model extends CI_Model {
                 `phone_number_id` VARCHAR(128) NOT NULL,
                 `agent_id` VARCHAR(128) NULL,
                 `connector_id` VARCHAR(128) NULL,
+                `catalog_id` VARCHAR(128) NULL,
+                `catalog_name` VARCHAR(255) NULL,
                 `eligible` TINYINT(1) NOT NULL DEFAULT 0,
                 `onboarded` TINYINT(1) NOT NULL DEFAULT 0,
                 `agent_enabled` TINYINT(1) NOT NULL DEFAULT 0,
@@ -37,6 +39,13 @@ class Sk_Vendor_meta_agent_model extends CI_Model {
                 KEY `idx_vendor` (`vendor_id`),
                 KEY `idx_sync` (`sync_status`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+
+        if ($this->db->field_exists('catalog_id', $this->table) === false) {
+            $this->db->query("ALTER TABLE `{$this->table}` ADD COLUMN `catalog_id` VARCHAR(128) NULL");
+        }
+        if ($this->db->field_exists('catalog_name', $this->table) === false) {
+            $this->db->query("ALTER TABLE `{$this->table}` ADD COLUMN `catalog_name` VARCHAR(255) NULL");
         }
 
         // Thread ownership on conversations (Meta agent vs app).

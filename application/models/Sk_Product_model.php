@@ -201,7 +201,9 @@ class Sk_Product_model extends CI_Model {
         $data['slug'] = $this->make_unique_slug($data['name'], 'products');
         $data['created_at'] = date('Y-m-d H:i:s');
         $this->db->insert('products', $data);
-        return $this->db->insert_id();
+        $productId = (int)$this->db->insert_id();
+        $this->_sync_meta_catalog_for_product($productId, 'create', $data);
+        return $productId;
     }
 
     public function update($id, $data) {
@@ -209,11 +211,13 @@ class Sk_Product_model extends CI_Model {
         // Slug is fixed at creation and stays stable for the product's lifetime.
         unset($data['slug']);
         $this->db->where('id', $id)->update('products', $data);
+        $this->_sync_meta_catalog_for_product((int)$id, 'update', $data);
         return $this->db->affected_rows();
     }
 
     public function delete($id) {
         $id = (int)$id;
+        $row = $this->db->where('id', $id)->get('products')->row_array();
         // Disable FK checks so child rows don't block the parent delete
         $this->db->query('SET FOREIGN_KEY_CHECKS=0');
         // Remove all child rows
@@ -237,7 +241,75 @@ class Sk_Product_model extends CI_Model {
         $this->db->where('id', $id)->delete('products');
         $affected = $this->db->affected_rows();
         $this->db->query('SET FOREIGN_KEY_CHECKS=1');
+        $this->_sync_meta_catalog_for_product($id, 'delete', is_array($row) ? $row : []);
         return $affected;
+    }
+
+    private function _sync_meta_catalog_for_product(int $productId, string $event, array $data = []): void {
+        if ($productId < 1) {
+            return;
+        }
+        if (!function_exists('sk_meta_catalog_sync_vendor_products')) {
+            if (file_exists(APPPATH . 'helpers/sk_meta_catalog_helper.php')) {
+                require_once APPPATH . 'helpers/sk_meta_catalog_helper.php';
+            }
+        }
+        if (!function_exists('sk_meta_catalog_sync_vendor_products')) {
+            return;
+        }
+        $row = $this->db->where('id', $productId)->get('products')->row_array();
+        if (!$row && $event !== 'delete') {
+            return;
+        }
+        $vendorId = (int)($row['vendor_id'] ?? $data['vendor_id'] ?? 0);
+        if ($event === 'delete' && !empty($data)) {
+            $vendorId = (int)($data['vendor_id'] ?? $vendorId);
+            $row = $data;
+        }
+        if ($vendorId < 1 && !empty($row) && !empty($row['vendor_id'])) {
+            $vendorId = (int)$row['vendor_id'];
+        }
+        if ($event === 'delete' && $vendorId < 1 && !empty($data['vendor_id'])) {
+            $vendorId = (int)$data['vendor_id'];
+        }
+        if ($vendorId < 1) {
+            return;
+        }
+        $phone = sk_meta_catalog_resolve_phone_for_vendor($vendorId);
+        if ($phone === null || $phone === '') {
+            return;
+        }
+        if ($event === 'delete') {
+            $catalog = sk_meta_catalog_ensure_vendor_catalog($vendorId, $phone);
+            if (!$catalog['ok']) {
+                return;
+            }
+            $token = sk_meta_ba_access_token($phone);
+            if ($token === '') {
+                return;
+            }
+            sk_meta_catalog_delete_product((string)$catalog['catalog_id'], 'product_' . $productId, $token);
+            return;
+        }
+        $catalog = sk_meta_catalog_ensure_vendor_catalog($vendorId, $phone);
+        if (!$catalog['ok']) {
+            return;
+        }
+        $productRow = $row ?: $this->db->where('id', $productId)->get('products')->row_array();
+        if (!$productRow) {
+            return;
+        }
+        $token = sk_meta_ba_access_token($phone);
+        if ($token === '') {
+            return;
+        }
+        sk_meta_catalog_http(
+            'POST',
+            'https://graph.facebook.com/v21.0/' . rawurlencode((string)$catalog['catalog_id']) . '/products',
+            $token,
+            sk_meta_catalog_build_product_payload($productRow),
+            30
+        );
     }
 
     public function save_images($product_id, $images) {
