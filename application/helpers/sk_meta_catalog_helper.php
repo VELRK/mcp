@@ -148,12 +148,17 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         return ['ok' => false, 'error' => $metaRes['error'] ?: 'Unable to read WhatsApp account metadata.'];
     }
     $businessId = '';
+    $account = null;
+    $cloudConfig = [];
     if (function_exists('get_instance') && get_instance() !== null) {
         $CI =& get_instance();
         if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
             $CI->load->model('Sk_Vendor_whatsapp_account_model');
         }
-        $account = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId, true);
+        $candidate = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId, true);
+        if ((int)($candidate['vendor_id'] ?? 0) === $vendorId) {
+            $account = $candidate;
+        }
         $businessId = trim((string)($account['business_id'] ?? ''));
         if ($businessId === '') {
             if (!function_exists('sk_wa_cloud_config')) {
@@ -163,8 +168,41 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
             $businessId = trim((string)($cloudConfig['business_id'] ?? ''));
         }
     }
+    $wabaId = trim((string)($account['waba_id'] ?? $cloudConfig['waba_id'] ?? ''));
+    if ($businessId === '' && $wabaId !== '' && function_exists('sk_wa_meta_graph')) {
+        $businessesRes = sk_wa_meta_graph('GET', 'me/businesses', ['fields' => 'id'], null, $token, $settings);
+        $businesses = $businessesRes['data']['data'] ?? [];
+        if ($businessesRes['ok'] && is_array($businesses)) {
+            foreach ($businesses as $business) {
+                $candidateBusinessId = trim((string)($business['id'] ?? ''));
+                if ($candidateBusinessId === '') {
+                    continue;
+                }
+                foreach (['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts'] as $edge) {
+                    $wabasRes = sk_wa_meta_graph('GET', $candidateBusinessId . '/' . $edge, ['fields' => 'id'], null, $token, $settings);
+                    $wabas = $wabasRes['data']['data'] ?? [];
+                    if (!$wabasRes['ok'] || !is_array($wabas)) {
+                        continue;
+                    }
+                    foreach ($wabas as $waba) {
+                        if (trim((string)($waba['id'] ?? '')) === $wabaId) {
+                            $businessId = $candidateBusinessId;
+                            break 3;
+                        }
+                    }
+                }
+            }
+        }
+        if ($businessId !== '' && is_array($account)) {
+            $CI->Sk_Vendor_whatsapp_account_model->save_for_vendor($vendorId, [
+                'phone_number_id' => $phoneNumberId,
+                'waba_id' => $wabaId,
+                'business_id' => $businessId,
+            ]);
+        }
+    }
     if ($businessId === '') {
-        return ['ok' => false, 'error' => 'Meta business id is missing from the linked WhatsApp account settings.'];
+        return ['ok' => false, 'error' => 'Could not resolve a Meta business for the linked WhatsApp Business Account. Check that its WABA ID is saved and the access token can list business WhatsApp accounts.'];
     }
 
     $catalogListUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs?fields=id,name,product_count';
