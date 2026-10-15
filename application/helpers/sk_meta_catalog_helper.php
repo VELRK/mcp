@@ -141,7 +141,9 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         }
     }
 
-    $metaUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($phoneNumberId) . '?fields=id,name,owner_business_info';
+    // A WhatsApp phone_number_id object does not expose a `name` field.
+    // Meta only exposes fields like id, display_phone_number, verified_name, and owner_business_info.
+    $metaUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($phoneNumberId) . '?fields=id,display_phone_number,verified_name,owner_business_info';
     $metaRes = sk_meta_catalog_http('GET', $metaUrl, $token, null, 30);
     $metaData = is_array($metaRes['data']) ? $metaRes['data'] : [];
     if (!$metaRes['ok']) {
