@@ -92,12 +92,14 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
   <div class="card-header d-flex justify-content-between align-items-center gap-2">
     <h5 class="card-title mb-0">Product List</h5>
     <div class="d-flex align-items-center gap-2">
-      <a href="<?= site_url('shopkart/products/sync_catalog' . (!empty($vendor_id) ? '?vendor_id=' . rawurlencode((string)$vendor_id) : '')) ?>"
-         class="btn btn-sm btn-outline-success"><i class="mdi mdi-cloud-sync me-1"></i>Sync Catalog</a>
+      <button type="button" id="syncCatalogButton"
+         data-url="<?= site_url('shopkart/products/sync_catalog' . (!empty($vendor_id) ? '?vendor_id=' . rawurlencode((string)$vendor_id) : '')) ?>"
+         class="btn btn-sm btn-outline-success"><i class="mdi mdi-cloud-sync me-1"></i>Sync Catalog</button>
       <a href="<?= site_url('shopkart/products/add') ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-plus me-1"></i>Add Product</a>
     </div>
   </div>
   <div class="card-body">
+    <div id="catalogSyncResult" class="alert d-none" role="alert" aria-live="polite"></div>
     <div class="table-responsive text-nowrap">
       <table class="table align-middle mb-0">
         <thead class="table-light">
@@ -246,5 +248,43 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
   }
 
   bindPagination();
+
+  var syncButton = document.getElementById('syncCatalogButton');
+  var syncResult = document.getElementById('catalogSyncResult');
+  if (syncButton && syncResult) {
+    syncButton.addEventListener('click', function() {
+      if (syncButton.disabled) return;
+      var originalHtml = syncButton.innerHTML;
+      syncButton.disabled = true;
+      syncButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Syncing...';
+      syncResult.className = 'alert alert-info';
+      syncResult.textContent = 'Syncing products to the Meta catalog...';
+      fetch(syncButton.dataset.url, {
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+      })
+        .then(function(response) {
+          return response.json().catch(function() {
+            throw new Error('The server returned an unreadable response. Check the application logs and try again.');
+          }).then(function(payload) {
+            if (!response.ok || !payload.success) {
+              throw new Error(payload.message || 'Meta catalog sync failed.');
+            }
+            return payload;
+          });
+        })
+        .then(function(payload) {
+          syncResult.className = 'alert alert-success';
+          syncResult.textContent = payload.message;
+        })
+        .catch(function(error) {
+          syncResult.className = 'alert alert-danger';
+          syncResult.textContent = error.message || 'Meta catalog sync failed.';
+        })
+        .finally(function() {
+          syncButton.disabled = false;
+          syncButton.innerHTML = originalHtml;
+        });
+    });
+  }
 })();
 </script>

@@ -60,6 +60,26 @@ function sk_meta_catalog_http(string $method, string $url, string $token, $body 
     ];
 }
 
+function sk_meta_catalog_error_message(string $operation, array $response): string {
+    $message = trim((string)($response['error'] ?? 'Meta request failed.'));
+    $metaError = is_array($response['data']['error'] ?? null) ? $response['data']['error'] : [];
+    $code = trim((string)($metaError['code'] ?? ''));
+    $subcode = trim((string)($metaError['error_subcode'] ?? ''));
+    $http = (int)($response['http'] ?? 0);
+    $details = [];
+    if ($http > 0) {
+        $details[] = 'HTTP ' . $http;
+    }
+    if ($code !== '') {
+        $details[] = 'Meta code ' . $code . ($subcode !== '' ? '/' . $subcode : '');
+    }
+    $error = $operation . ' failed' . ($details ? ' (' . implode(', ', $details) . ')' : '') . ': ' . ($message !== '' ? $message : 'Meta request failed.');
+    if ($code === '200' || stripos($message, 'permission') !== false) {
+        $error .= ' Check that the current access token has the required Meta permission and access to this business asset.';
+    }
+    return $error;
+}
+
 function sk_meta_catalog_resolve_phone_for_vendor(int $vendorId): ?string {
     if ($vendorId < 1) {
         return null;
@@ -169,14 +189,20 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         }
     }
     $wabaId = trim((string)($account['waba_id'] ?? $cloudConfig['waba_id'] ?? ''));
+    $businessLookupError = '';
     if ($businessId === '' && $wabaId !== '' && function_exists('sk_wa_meta_graph')) {
         $ownerRes = sk_wa_meta_graph('GET', $wabaId, ['fields' => 'owner_business_info'], null, $token, $settings);
         if ($ownerRes['ok']) {
             $businessId = trim((string)($ownerRes['data']['owner_business_info']['id'] ?? ''));
+        } else {
+            $businessLookupError = sk_meta_catalog_error_message('Reading WhatsApp Business Account ownership', $ownerRes);
         }
         if ($businessId === '') {
             $businessesRes = sk_wa_meta_graph('GET', 'me/businesses', ['fields' => 'id'], null, $token, $settings);
             $businesses = $businessesRes['data']['data'] ?? [];
+            if (!$businessesRes['ok']) {
+                $businessLookupError = sk_meta_catalog_error_message('Listing businesses available to the access token', $businessesRes);
+            }
             if ($businessesRes['ok'] && is_array($businesses)) {
                 foreach ($businesses as $business) {
                     $candidateBusinessId = trim((string)($business['id'] ?? ''));
@@ -187,6 +213,9 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
                         $wabasRes = sk_wa_meta_graph('GET', $candidateBusinessId . '/' . $edge, ['fields' => 'id'], null, $token, $settings);
                         $wabas = $wabasRes['data']['data'] ?? [];
                         if (!$wabasRes['ok'] || !is_array($wabas)) {
+                            if (!$wabasRes['ok'] && $businessLookupError === '') {
+                                $businessLookupError = sk_meta_catalog_error_message('Checking WhatsApp accounts for an accessible business', $wabasRes);
+                            }
                             continue;
                         }
                         foreach ($wabas as $waba) {
@@ -208,11 +237,14 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         }
     }
     if ($businessId === '') {
-        return ['ok' => false, 'error' => 'Could not resolve a Meta business for the linked WhatsApp Business Account. Check that its WABA ID is saved and the access token can list business WhatsApp accounts.'];
+        return ['ok' => false, 'error' => $businessLookupError !== '' ? $businessLookupError : 'Could not resolve a Meta business for the linked WhatsApp Business Account. Confirm the correct WABA ID and business are assigned to this vendor.'];
     }
 
     $catalogListUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs?fields=id,name,product_count';
     $listRes = sk_meta_catalog_http('GET', $catalogListUrl, $token, null, 30);
+    if (!$listRes['ok']) {
+        return ['ok' => false, 'error' => sk_meta_catalog_error_message('Listing product catalogs for the business', $listRes)];
+    }
     $catalogData = is_array($listRes['data']) ? $listRes['data'] : [];
     $catalogId = '';
     $catalogName = '';
@@ -234,7 +266,7 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
     if ($catalogId === '') {
         $createRes = sk_meta_catalog_http('POST', 'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs', $token, ['name' => $shopName], 30);
         if (!$createRes['ok']) {
-            return ['ok' => false, 'error' => $createRes['error'] ?: 'Unable to create Meta catalog.'];
+            return ['ok' => false, 'error' => sk_meta_catalog_error_message('Creating a product catalog', $createRes)];
         }
         $catalogId = trim((string)($createRes['data']['id'] ?? ''));
         $catalogName = trim((string)($createRes['data']['name'] ?? $shopName));
@@ -248,7 +280,7 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
     if (!$linkRes['ok']) {
         $err = strtolower((string)$linkRes['error']);
         if (strpos($err, 'already') === false && strpos($err, 'exists') === false) {
-            // Best-effort: catalog creation already succeeded; continue even if linking is noisy.
+            return ['ok' => false, 'error' => sk_meta_catalog_error_message('Linking the product catalog to the WhatsApp number', $linkRes)];
         }
     }
 
@@ -331,7 +363,24 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
             'product_id' => (int)($product['id'] ?? 0),
             'retailer_id' => (string)($payload['retailer_id'] ?? ''),
             'ok' => $res['ok'],
-            'error' => $res['error'] ?: '',
+            'error' => $res['ok'] ? '' : sk_meta_catalog_error_message('Uploading product ' . (string)$payload['retailer_id'], $res),
+        ];
+    }
+
+    $failedProducts = array_values(array_filter($productsSynced, static function (array $product): bool {
+        return empty($product['ok']);
+    }));
+    if ($failedProducts) {
+        $failureSummary = [];
+        foreach (array_slice($failedProducts, 0, 3) as $failedProduct) {
+            $failureSummary[] = ($failedProduct['retailer_id'] ?: 'Product ' . $failedProduct['product_id']) . ': ' . ($failedProduct['error'] ?: 'Meta rejected the product.');
+        }
+        $remaining = count($failedProducts) - count($failureSummary);
+        return [
+            'ok' => false,
+            'error' => count($failedProducts) . ' of ' . count($productsSynced) . ' products failed to sync. ' . implode(' | ', $failureSummary) . ($remaining > 0 ? ' | ' . $remaining . ' additional product failures.' : ''),
+            'catalog_id' => $catalogId,
+            'synced' => $productsSynced,
         ];
     }
 

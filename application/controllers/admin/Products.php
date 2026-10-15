@@ -92,8 +92,25 @@ class Products extends Sk_Base {
         }
 
         $result = sk_meta_catalog_sync_vendor_products($vendorId, null, $this->Sk_Admin_model->get_settings());
+        $accept = (string)$this->input->get_request_header('Accept', true);
+        if (stripos($accept, 'application/json') !== false) {
+            $status = !empty($result['ok']) ? 200 : 502;
+            $payload = [
+                'success' => !empty($result['ok']),
+                'message' => !empty($result['ok'])
+                    ? count($result['synced'] ?? []) . ' products synced to the Meta catalog.'
+                    : (string)($result['error'] ?? 'Unable to sync the Meta catalog.'),
+                'result' => $result,
+            ];
+            $this->output
+                ->set_status_header($status)
+                ->set_content_type('application/json')
+                ->set_output(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            return;
+        }
+
         if (!empty($result['ok'])) {
-            $this->session->set_flashdata('success', 'Meta catalog synced successfully.');
+            $this->session->set_flashdata('success', count($result['synced'] ?? []) . ' products synced to the Meta catalog.');
         } else {
             $this->session->set_flashdata('error', $result['error'] ?? 'Unable to sync the Meta catalog.');
         }
