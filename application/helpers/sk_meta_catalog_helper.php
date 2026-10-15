@@ -170,24 +170,30 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
     }
     $wabaId = trim((string)($account['waba_id'] ?? $cloudConfig['waba_id'] ?? ''));
     if ($businessId === '' && $wabaId !== '' && function_exists('sk_wa_meta_graph')) {
-        $businessesRes = sk_wa_meta_graph('GET', 'me/businesses', ['fields' => 'id'], null, $token, $settings);
-        $businesses = $businessesRes['data']['data'] ?? [];
-        if ($businessesRes['ok'] && is_array($businesses)) {
-            foreach ($businesses as $business) {
-                $candidateBusinessId = trim((string)($business['id'] ?? ''));
-                if ($candidateBusinessId === '') {
-                    continue;
-                }
-                foreach (['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts'] as $edge) {
-                    $wabasRes = sk_wa_meta_graph('GET', $candidateBusinessId . '/' . $edge, ['fields' => 'id'], null, $token, $settings);
-                    $wabas = $wabasRes['data']['data'] ?? [];
-                    if (!$wabasRes['ok'] || !is_array($wabas)) {
+        $ownerRes = sk_wa_meta_graph('GET', $wabaId, ['fields' => 'owner_business_info'], null, $token, $settings);
+        if ($ownerRes['ok']) {
+            $businessId = trim((string)($ownerRes['data']['owner_business_info']['id'] ?? ''));
+        }
+        if ($businessId === '') {
+            $businessesRes = sk_wa_meta_graph('GET', 'me/businesses', ['fields' => 'id'], null, $token, $settings);
+            $businesses = $businessesRes['data']['data'] ?? [];
+            if ($businessesRes['ok'] && is_array($businesses)) {
+                foreach ($businesses as $business) {
+                    $candidateBusinessId = trim((string)($business['id'] ?? ''));
+                    if ($candidateBusinessId === '') {
                         continue;
                     }
-                    foreach ($wabas as $waba) {
-                        if (trim((string)($waba['id'] ?? '')) === $wabaId) {
-                            $businessId = $candidateBusinessId;
-                            break 3;
+                    foreach (['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts'] as $edge) {
+                        $wabasRes = sk_wa_meta_graph('GET', $candidateBusinessId . '/' . $edge, ['fields' => 'id'], null, $token, $settings);
+                        $wabas = $wabasRes['data']['data'] ?? [];
+                        if (!$wabasRes['ok'] || !is_array($wabas)) {
+                            continue;
+                        }
+                        foreach ($wabas as $waba) {
+                            if (trim((string)($waba['id'] ?? '')) === $wabaId) {
+                                $businessId = $candidateBusinessId;
+                                break 3;
+                            }
                         }
                     }
                 }
