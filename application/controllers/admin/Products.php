@@ -102,7 +102,9 @@ class Products extends Sk_Base {
                         . (!empty($result['catalog_name']) ? ' "' . $result['catalog_name'] . '"' : '')
                         . (!empty($result['catalog_id']) ? ' (' . $result['catalog_id'] . ')' : '')
                         . '.'
-                        . (!empty($result['link_warning']) ? ' WhatsApp link note: ' . $result['link_warning'] : '')
+                        . (!empty($result['waba_linked'])
+                            ? ' Linked to your WhatsApp number.'
+                            : (!empty($result['link_warning']) ? ' WhatsApp link note: ' . $result['link_warning'] : ''))
                     : (string)($result['error'] ?? 'Unable to sync the Meta catalog.'),
                 'result' => $result,
             ];

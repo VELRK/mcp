@@ -453,30 +453,79 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         return ['ok' => false, 'error' => 'Meta catalog id could not be resolved.'];
     }
 
-    // Best-effort WhatsApp link. Catalogs owned by another BM (e.g. Sona) may not link to an Intellectworks WABA; product sync still works.
-    $linkTargets = array_values(array_filter([$wabaId]));
+    // Attach catalog to this WhatsApp number's WABA.
+    // If the catalog lives on another BM (e.g. Sona → Intellectworks WABA), share it as an agency asset first.
     $linkOk = false;
-    $linkRes = ['ok' => false, 'error' => '', 'data' => null, 'http' => 0];
-    foreach ($linkTargets as $linkTarget) {
-        foreach ($tokens as $candidateToken) {
-            $linkRes = sk_meta_catalog_http(
-                'POST',
-                'https://graph.facebook.com/v21.0/' . rawurlencode($linkTarget) . '/product_catalogs',
-                $candidateToken,
-                ['catalog_id' => $catalogId],
-                30
-            );
-            if ($linkRes['ok']) {
-                $linkOk = true;
-                $token = $candidateToken;
-                break 2;
-            }
-            $err = strtolower((string)$linkRes['error'] . ' ' . (string)($linkRes['data']['error']['error_user_msg'] ?? ''));
-            if (strpos($err, 'already') !== false || strpos($err, 'exists') !== false) {
-                $linkOk = true;
-                break 2;
+    $linkWarning = '';
+    if ($wabaId !== '') {
+        $already = sk_meta_catalog_http(
+            'GET',
+            'https://graph.facebook.com/v21.0/' . rawurlencode($wabaId) . '/product_catalogs?fields=id,name',
+            $token,
+            null,
+            20
+        );
+        if ($already['ok']) {
+            foreach (($already['data']['data'] ?? []) as $linked) {
+                if (trim((string)($linked['id'] ?? '')) === $catalogId) {
+                    $linkOk = true;
+                    break;
+                }
             }
         }
+
+        if (!$linkOk && $businessId !== '') {
+            foreach ($tokens as $candidateToken) {
+                $shareRes = sk_meta_catalog_http(
+                    'POST',
+                    'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/agencies',
+                    $candidateToken,
+                    [
+                        'business' => $businessId,
+                        'permitted_tasks' => ['MANAGE', 'ADVERTISE'],
+                    ],
+                    30
+                );
+                // success, or already shared / already has access
+                $shareErr = strtolower((string)($shareRes['error'] ?? '') . ' ' . (string)($shareRes['data']['error']['message'] ?? ''));
+                if ($shareRes['ok']
+                    || strpos($shareErr, 'already') !== false
+                    || strpos($shareErr, 'duplicate') !== false
+                    || strpos($shareErr, 'exist') !== false
+                ) {
+                    $token = $candidateToken;
+                    break;
+                }
+            }
+        }
+
+        if (!$linkOk) {
+            $linkRes = ['ok' => false, 'error' => '', 'data' => null, 'http' => 0];
+            foreach ($tokens as $candidateToken) {
+                $linkRes = sk_meta_catalog_http(
+                    'POST',
+                    'https://graph.facebook.com/v21.0/' . rawurlencode($wabaId) . '/product_catalogs',
+                    $candidateToken,
+                    ['catalog_id' => $catalogId],
+                    30
+                );
+                if ($linkRes['ok']) {
+                    $linkOk = true;
+                    $token = $candidateToken;
+                    break;
+                }
+                $err = strtolower((string)$linkRes['error'] . ' ' . (string)($linkRes['data']['error']['error_user_msg'] ?? ''));
+                if (strpos($err, 'already') !== false || strpos($err, 'exists') !== false) {
+                    $linkOk = true;
+                    break;
+                }
+            }
+            if (!$linkOk) {
+                $linkWarning = trim((string)($linkRes['data']['error']['error_user_msg'] ?? $linkRes['error'] ?? 'Could not link catalog to WhatsApp number.'));
+            }
+        }
+    } else {
+        $linkWarning = 'WhatsApp Business Account id is missing for this number.';
     }
 
     sk_meta_catalog_store_catalog_id($vendorId, $phoneNumberId, $catalogId, $catalogName);
@@ -489,7 +538,7 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         'catalog_id'      => $catalogId,
         'catalog_name'    => $catalogName,
         'waba_linked'     => $linkOk,
-        'link_warning'    => $linkOk ? '' : trim((string)($linkRes['data']['error']['error_user_msg'] ?? $linkRes['error'] ?? '')),
+        'link_warning'    => $linkOk ? '' : $linkWarning,
     ];
 }
 
