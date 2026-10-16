@@ -187,11 +187,13 @@ function sk_meta_catalog_store_catalog_id(int $vendorId, string $phoneNumberId, 
     }
 }
 
-function sk_meta_catalog_pick_first_catalog(array $listResponse): array {
+function sk_meta_catalog_pick_first_catalog(array $listResponse, string $preferredName = ''): array {
     $rows = $listResponse['data']['data'] ?? [];
     if (!is_array($rows)) {
         return ['id' => '', 'name' => ''];
     }
+    $preferredName = trim($preferredName);
+    $fallback = ['id' => '', 'name' => ''];
     foreach ($rows as $catalog) {
         if (!is_array($catalog)) {
             continue;
@@ -200,12 +202,36 @@ function sk_meta_catalog_pick_first_catalog(array $listResponse): array {
         if ($candidateId === '') {
             continue;
         }
-        return [
-            'id'   => $candidateId,
-            'name' => trim((string)($catalog['name'] ?? '')),
-        ];
+        $candidateName = trim((string)($catalog['name'] ?? ''));
+        $picked = ['id' => $candidateId, 'name' => $candidateName];
+        if ($fallback['id'] === '') {
+            $fallback = $picked;
+        }
+        if ($preferredName !== '' && strcasecmp($candidateName, $preferredName) === 0) {
+            return $picked;
+        }
     }
-    return ['id' => '', 'name' => ''];
+    return $fallback;
+}
+
+/** Catalogs assigned to the current token user (system user), e.g. VelAi Catalog. */
+function sk_meta_catalog_list_assigned(string $token): array {
+    $token = trim($token);
+    if ($token === '') {
+        return ['ok' => false, 'http' => 0, 'error' => 'Missing token', 'data' => null];
+    }
+    $meRes = sk_meta_catalog_http('GET', 'https://graph.facebook.com/v21.0/me?fields=id', $token, null, 20);
+    $meId = trim((string)($meRes['data']['id'] ?? ''));
+    if ($meId === '') {
+        return $meRes['ok'] ? ['ok' => false, 'http' => $meRes['http'], 'error' => 'Could not resolve token user id', 'data' => $meRes['data']] : $meRes;
+    }
+    return sk_meta_catalog_http(
+        'GET',
+        'https://graph.facebook.com/v21.0/' . rawurlencode($meId) . '/assigned_product_catalogs?fields=id,name,product_count,vertical',
+        $token,
+        null,
+        30
+    );
 }
 
 function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumberId = null, ?array $settings = null): array {
@@ -325,14 +351,10 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
             ]);
         }
     }
-    if ($businessId === '') {
-        return ['ok' => false, 'error' => $businessLookupError !== '' ? $businessLookupError : 'Could not resolve a Meta business for the linked WhatsApp Business Account. Confirm the correct WABA ID and business are assigned to this vendor.'];
-    }
-
     $catalogId = $storedCatalogId;
     $catalogName = $storedCatalogName;
 
-    // Prefer catalogs already linked to this WABA (no create permission needed).
+    // 1) Catalogs already linked to this WABA.
     if ($catalogId === '' && $wabaId !== '') {
         $wabaListRes = sk_meta_catalog_http(
             'GET',
@@ -342,14 +364,34 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
             30
         );
         if ($wabaListRes['ok']) {
-            $picked = sk_meta_catalog_pick_first_catalog($wabaListRes);
+            $picked = sk_meta_catalog_pick_first_catalog($wabaListRes, $shopName);
             $catalogId = $picked['id'];
             $catalogName = $picked['name'];
         }
     }
 
-    $listRes = null;
+    // 2) Catalogs assigned to this system user (e.g. VelAi Catalog on Sona Chips Factory).
     if ($catalogId === '') {
+        foreach ($tokens as $candidateToken) {
+            $assignedRes = sk_meta_catalog_list_assigned($candidateToken);
+            if (!$assignedRes['ok']) {
+                continue;
+            }
+            $picked = sk_meta_catalog_pick_first_catalog($assignedRes, $shopName);
+            if ($picked['id'] === '') {
+                $picked = sk_meta_catalog_pick_first_catalog($assignedRes);
+            }
+            if ($picked['id'] !== '') {
+                $token = $candidateToken;
+                $catalogId = $picked['id'];
+                $catalogName = $picked['name'];
+                break;
+            }
+        }
+    }
+
+    // 3) Catalogs owned by the WABA owner business.
+    if ($catalogId === '' && $businessId !== '') {
         $catalogListUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs?fields=id,name,product_count';
         $listRes = sk_meta_catalog_http('GET', $catalogListUrl, $token, null, 30);
         if (!$listRes['ok'] && count($tokens) > 1) {
@@ -365,16 +407,18 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
                 }
             }
         }
-        if (!$listRes['ok']) {
-            return ['ok' => false, 'error' => sk_meta_catalog_permission_hint(sk_meta_catalog_error_message('Listing product catalogs for the business', $listRes))];
+        if ($listRes['ok']) {
+            $picked = sk_meta_catalog_pick_first_catalog($listRes, $shopName);
+            $catalogId = $picked['id'];
+            $catalogName = $picked['name'];
         }
-        $picked = sk_meta_catalog_pick_first_catalog($listRes);
-        $catalogId = $picked['id'];
-        $catalogName = $picked['name'];
     }
 
-    // No catalog yet → create; existing catalog → reuse and product sync upserts/updates.
+    // 4) No catalog yet → create on the WABA owner business (needs BM Admin there).
     if ($catalogId === '') {
+        if ($businessId === '') {
+            return ['ok' => false, 'error' => $businessLookupError !== '' ? $businessLookupError : 'No Meta catalog is assigned to this token, and the WhatsApp business id could not be resolved to create one.'];
+        }
         $createRes = ['ok' => false, 'http' => 0, 'error' => '', 'data' => null];
         $createPayloads = [
             ['name' => $shopName, 'vertical' => 'commerce'],
@@ -409,7 +453,8 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         return ['ok' => false, 'error' => 'Meta catalog id could not be resolved.'];
     }
 
-    $linkTargets = array_values(array_filter([$wabaId, $phoneNumberId]));
+    // Best-effort WhatsApp link. Catalogs owned by another BM (e.g. Sona) may not link to an Intellectworks WABA; product sync still works.
+    $linkTargets = array_values(array_filter([$wabaId]));
     $linkOk = false;
     $linkRes = ['ok' => false, 'error' => '', 'data' => null, 'http' => 0];
     foreach ($linkTargets as $linkTarget) {
@@ -426,26 +471,25 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
                 $token = $candidateToken;
                 break 2;
             }
-            $err = strtolower((string)$linkRes['error']);
+            $err = strtolower((string)$linkRes['error'] . ' ' . (string)($linkRes['data']['error']['error_user_msg'] ?? ''));
             if (strpos($err, 'already') !== false || strpos($err, 'exists') !== false) {
                 $linkOk = true;
                 break 2;
             }
         }
     }
-    if (!$linkOk) {
-        return ['ok' => false, 'error' => sk_meta_catalog_error_message('Linking the product catalog to the WhatsApp number', $linkRes)];
-    }
 
     sk_meta_catalog_store_catalog_id($vendorId, $phoneNumberId, $catalogId, $catalogName);
 
     return [
-        'ok'             => true,
-        'vendor_id'      => $vendorId,
-        'phone_number_id'=> $phoneNumberId,
-        'business_id'    => $businessId,
-        'catalog_id'     => $catalogId,
-        'catalog_name'   => $catalogName,
+        'ok'              => true,
+        'vendor_id'       => $vendorId,
+        'phone_number_id' => $phoneNumberId,
+        'business_id'     => $businessId,
+        'catalog_id'      => $catalogId,
+        'catalog_name'    => $catalogName,
+        'waba_linked'     => $linkOk,
+        'link_warning'    => $linkOk ? '' : trim((string)($linkRes['data']['error']['error_user_msg'] ?? $linkRes['error'] ?? '')),
     ];
 }
 
@@ -462,14 +506,17 @@ function sk_meta_catalog_build_product_payload(array $product): array {
     }
     $stock = max(0, (int)($product['stock'] ?? 0));
 
+    // Meta Product Catalog price is an integer in the currency's smallest unit (paise for INR).
+    $priceMinor = (int)round(max(0, $price) * 100);
     $payload = [
         'retailer_id' => 'product_' . (int)($product['id'] ?? 0),
         'name'        => $name !== '' ? $name : 'Product',
         'description' => $description !== '' ? mb_substr($description, 0, 1000) : 'Product from local catalog.',
-        'price'       => number_format($price, 2, '.', ''),
+        'price'       => $priceMinor,
         'currency'    => $currency !== '' ? $currency : 'INR',
         'availability'=> $stock > 0 ? 'in stock' : 'out of stock',
         'condition'   => 'new',
+        'url'         => function_exists('base_url') ? rtrim(base_url(), '/') . '/' : 'https://talkaipilot.com/',
     ];
     if ($imageUrl !== '') {
         $payload['image_url'] = $imageUrl;
@@ -533,9 +580,18 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
             'ok' => false,
             'error' => count($failedProducts) . ' of ' . count($productsSynced) . ' products failed to sync. ' . implode(' | ', $failureSummary) . ($remaining > 0 ? ' | ' . $remaining . ' additional product failures.' : ''),
             'catalog_id' => $catalogId,
+            'catalog_name' => (string)($catalog['catalog_name'] ?? ''),
+            'link_warning' => (string)($catalog['link_warning'] ?? ''),
             'synced' => $productsSynced,
         ];
     }
 
-    return ['ok' => true, 'catalog_id' => $catalogId, 'synced' => $productsSynced];
+    return [
+        'ok' => true,
+        'catalog_id' => $catalogId,
+        'catalog_name' => (string)($catalog['catalog_name'] ?? ''),
+        'waba_linked' => !empty($catalog['waba_linked']),
+        'link_warning' => (string)($catalog['link_warning'] ?? ''),
+        'synced' => $productsSynced,
+    ];
 }
