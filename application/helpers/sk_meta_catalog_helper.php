@@ -605,37 +605,96 @@ function sk_meta_catalog_build_product_payload(array $product): array {
     return $payload;
 }
 
-function sk_meta_catalog_delete_product(string $catalogId, string $productId, string $token): array {
+/**
+ * Delete a Meta catalog product item.
+ * Prefer Meta item id (DELETE /{item-id}). Fall back to retailer_id query on the catalog.
+ *
+ * @param string $catalogId Meta catalog id
+ * @param string $retailerId Local retailer_id (e.g. product_12)
+ * @param string $token Access token
+ * @param string $metaItemId Optional Graph product item id
+ */
+function sk_meta_catalog_delete_product(string $catalogId, string $retailerId, string $token, string $metaItemId = ''): array {
     $catalogId = trim($catalogId);
-    $productId = trim($productId);
-    if ($catalogId === '' || $productId === '') {
-        return ['ok' => false, 'error' => 'catalog id and product id are required'];
+    $retailerId = trim($retailerId);
+    $metaItemId = trim($metaItemId);
+    $token = trim($token);
+    if ($token === '') {
+        return ['ok' => false, 'error' => 'Missing token', 'data' => null, 'http' => 0];
     }
-    $url = 'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/products?retailer_id=' . rawurlencode($productId);
+    if ($metaItemId !== '') {
+        $byId = sk_meta_catalog_http('DELETE', 'https://graph.facebook.com/v21.0/' . rawurlencode($metaItemId), $token, null, 30);
+        if ($byId['ok']) {
+            return $byId;
+        }
+    }
+    if ($catalogId === '' || $retailerId === '') {
+        return ['ok' => false, 'error' => 'catalog id and retailer id are required', 'data' => null, 'http' => 0];
+    }
+    // Batch delete by retailer_id (supported on many catalogs).
+    $batch = sk_meta_catalog_http(
+        'POST',
+        'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/items_batch',
+        $token,
+        [
+            'item_type' => 'PRODUCT_ITEM',
+            'requests' => [[
+                'method' => 'DELETE',
+                'retailer_id' => $retailerId,
+            ]],
+        ],
+        40
+    );
+    if ($batch['ok']) {
+        $status = $batch['data']['validation_status'][0] ?? null;
+        $errs = is_array($status) ? ($status['errors'] ?? []) : [];
+        if (!$errs) {
+            return $batch;
+        }
+    }
+    $url = 'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/products?retailer_id=' . rawurlencode($retailerId);
     return sk_meta_catalog_http('DELETE', $url, $token, null, 30);
 }
 
-/** List retailer_ids currently in a Meta catalog (paginated). */
-function sk_meta_catalog_list_retailer_ids(string $catalogId, string $token): array {
-    $ids = [];
+/**
+ * List Meta catalog products as [{id, retailer_id}, ...] (paginated).
+ *
+ * @return array{ok:bool,error:string,items:list<array{id:string,retailer_id:string}>}
+ */
+function sk_meta_catalog_list_items(string $catalogId, string $token): array {
+    $items = [];
     $url = 'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/products?fields=id,retailer_id&limit=100';
     $guard = 0;
     while ($url !== '' && $guard < 20) {
         $guard++;
         $res = sk_meta_catalog_http('GET', $url, $token, null, 30);
         if (!$res['ok']) {
-            return ['ok' => false, 'error' => sk_meta_catalog_error_message('Listing Meta catalog products', $res), 'ids' => $ids];
+            return ['ok' => false, 'error' => sk_meta_catalog_error_message('Listing Meta catalog products', $res), 'items' => $items];
         }
         foreach (($res['data']['data'] ?? []) as $row) {
+            $id = trim((string)($row['id'] ?? ''));
             $rid = trim((string)($row['retailer_id'] ?? ''));
-            if ($rid !== '') {
-                $ids[] = $rid;
+            if ($id === '' && $rid === '') {
+                continue;
             }
+            $items[] = ['id' => $id, 'retailer_id' => $rid];
         }
         $next = trim((string)($res['data']['paging']['next'] ?? ''));
         $url = $next;
     }
-    return ['ok' => true, 'ids' => array_values(array_unique($ids)), 'error' => ''];
+    return ['ok' => true, 'items' => $items, 'error' => ''];
+}
+
+/** @deprecated use sk_meta_catalog_list_items */
+function sk_meta_catalog_list_retailer_ids(string $catalogId, string $token): array {
+    $listed = sk_meta_catalog_list_items($catalogId, $token);
+    $ids = [];
+    foreach ($listed['items'] as $item) {
+        if ($item['retailer_id'] !== '') {
+            $ids[] = $item['retailer_id'];
+        }
+    }
+    return ['ok' => !empty($listed['ok']), 'ids' => $ids, 'error' => (string)($listed['error'] ?? '')];
 }
 
 /**
@@ -724,7 +783,7 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
 
     // Remove Meta catalog items that no longer exist (or are inactive) in this shop.
     $deleted = [];
-    $remote = sk_meta_catalog_list_retailer_ids($catalogId, $token);
+    $remote = sk_meta_catalog_list_items($catalogId, $token);
     if (!$remote['ok']) {
         return [
             'ok' => false,
@@ -735,20 +794,23 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
             'deleted' => $deleted,
         ];
     }
-    foreach ($remote['ids'] as $remoteRetailerId) {
+    foreach ($remote['items'] as $remoteItem) {
+        $remoteRetailerId = (string)($remoteItem['retailer_id'] ?? '');
+        $remoteMetaId = (string)($remoteItem['id'] ?? '');
         // Only manage items we own (product_* / probe). Leave unrelated catalog rows alone.
-        if (strpos($remoteRetailerId, 'product_') !== 0 && strpos($remoteRetailerId, 'product_probe_') !== 0) {
+        if ($remoteRetailerId !== '' && strpos($remoteRetailerId, 'product_') !== 0 && strpos($remoteRetailerId, 'product_probe_') !== 0) {
             continue;
         }
-        if (isset($keepRetailerIds[$remoteRetailerId])) {
+        if ($remoteRetailerId !== '' && isset($keepRetailerIds[$remoteRetailerId])) {
             continue;
         }
-        $delRes = sk_meta_catalog_delete_product($catalogId, $remoteRetailerId, $token);
+        $delRes = sk_meta_catalog_delete_product($catalogId, $remoteRetailerId, $token, $remoteMetaId);
         $deleted[] = [
             'retailer_id' => $remoteRetailerId,
+            'meta_id' => $remoteMetaId,
             'action' => 'delete',
             'ok' => !empty($delRes['ok']),
-            'error' => !empty($delRes['ok']) ? '' : sk_meta_catalog_error_message('Deleting product ' . $remoteRetailerId, $delRes),
+            'error' => !empty($delRes['ok']) ? '' : sk_meta_catalog_error_message('Deleting product ' . ($remoteRetailerId ?: $remoteMetaId), $delRes),
         ];
     }
 
