@@ -98,13 +98,14 @@ class Products extends Sk_Base {
             $payload = [
                 'success' => !empty($result['ok']),
                 'message' => !empty($result['ok'])
-                    ? count($result['synced'] ?? []) . ' products synced to Meta catalog'
+                    ? ((int)($result['kept'] ?? count($result['synced'] ?? [])) . ' product(s) upserted'
+                        . ', ' . (int)($result['removed'] ?? count($result['deleted'] ?? [])) . ' removed from Meta catalog'
                         . (!empty($result['catalog_name']) ? ' "' . $result['catalog_name'] . '"' : '')
                         . (!empty($result['catalog_id']) ? ' (' . $result['catalog_id'] . ')' : '')
                         . '.'
                         . (!empty($result['waba_linked'])
                             ? ' Linked to your WhatsApp number.'
-                            : (!empty($result['link_warning']) ? ' WhatsApp link note: ' . $result['link_warning'] : ''))
+                            : (!empty($result['link_warning']) ? ' WhatsApp link note: ' . $result['link_warning'] : '')))
                     : (string)($result['error'] ?? 'Unable to sync the Meta catalog.'),
                 'result' => $result,
             ];

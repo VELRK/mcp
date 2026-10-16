@@ -565,6 +565,10 @@ function sk_meta_catalog_build_product_payload(array $product): array {
     $name = trim((string)($product['name'] ?? ''));
     $description = trim((string)($product['short_desc'] ?? $product['description'] ?? ''));
     $price = (float)($product['price'] ?? 0);
+    $sale = (float)($product['sale_price'] ?? 0);
+    if ($sale > 0 && ($price <= 0 || $sale < $price)) {
+        $price = $sale;
+    }
     $currency = strtoupper(trim((string)($product['currency'] ?? 'INR')));
     $imageUrl = trim((string)($product['thumbnail'] ?? $product['image_url'] ?? ''));
     if ($imageUrl !== '' && !preg_match('#^https?://#i', $imageUrl)) {
@@ -573,9 +577,16 @@ function sk_meta_catalog_build_product_payload(array $product): array {
         }
     }
     $stock = max(0, (int)($product['stock'] ?? 0));
+    $status = strtolower(trim((string)($product['status'] ?? 'active')));
+    if ($status !== '' && $status !== 'active') {
+        $stock = 0;
+    }
 
     // Meta Product Catalog price is an integer in the currency's smallest unit (paise for INR).
     $priceMinor = (int)round(max(0, $price) * 100);
+    if ($priceMinor < 1) {
+        $priceMinor = 100;
+    }
     $payload = [
         'retailer_id' => 'product_' . (int)($product['id'] ?? 0),
         'name'        => $name !== '' ? $name : 'Product',
@@ -584,6 +595,8 @@ function sk_meta_catalog_build_product_payload(array $product): array {
         'currency'    => $currency !== '' ? $currency : 'INR',
         'availability'=> $stock > 0 ? 'in stock' : 'out of stock',
         'condition'   => 'new',
+        'brand'       => 'Shop',
+        'origin_country' => 'IN',
         'url'         => function_exists('base_url') ? rtrim(base_url(), '/') . '/' : 'https://talkaipilot.com/',
     ];
     if ($imageUrl !== '') {
@@ -602,6 +615,34 @@ function sk_meta_catalog_delete_product(string $catalogId, string $productId, st
     return sk_meta_catalog_http('DELETE', $url, $token, null, 30);
 }
 
+/** List retailer_ids currently in a Meta catalog (paginated). */
+function sk_meta_catalog_list_retailer_ids(string $catalogId, string $token): array {
+    $ids = [];
+    $url = 'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/products?fields=id,retailer_id&limit=100';
+    $guard = 0;
+    while ($url !== '' && $guard < 20) {
+        $guard++;
+        $res = sk_meta_catalog_http('GET', $url, $token, null, 30);
+        if (!$res['ok']) {
+            return ['ok' => false, 'error' => sk_meta_catalog_error_message('Listing Meta catalog products', $res), 'ids' => $ids];
+        }
+        foreach (($res['data']['data'] ?? []) as $row) {
+            $rid = trim((string)($row['retailer_id'] ?? ''));
+            if ($rid !== '') {
+                $ids[] = $rid;
+            }
+        }
+        $next = trim((string)($res['data']['paging']['next'] ?? ''));
+        $url = $next;
+    }
+    return ['ok' => true, 'ids' => array_values(array_unique($ids)), 'error' => ''];
+}
+
+/**
+ * Sync local shop products → Meta catalog.
+ * - Upsert each active local product (create or update by retailer_id).
+ * - Delete Meta items for this shop that are no longer in the local active set.
+ */
 function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumberId = null, ?array $settings = null): array {
     $vendorId = (int)$vendorId;
     if ($vendorId < 1) {
@@ -612,45 +653,128 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
         return ['ok' => false, 'error' => $catalog['error']];
     }
 
+    $rows = [];
     if (function_exists('get_instance') && get_instance() !== null) {
         $CI =& get_instance();
-        $CI->load->model('Sk_Product_model');
-        $thisProductQuery = $CI->db->where('vendor_id', $vendorId)->or_where('vendor_id', 0)->get('products');
-        $rows = $thisProductQuery->result_array();
-    } else {
-        $rows = [];
+        // Only this vendor's products (do not or_where vendor_id=0 — that leaks other shops).
+        $CI->db->from('products')->where('vendor_id', $vendorId);
+        if ($CI->db->field_exists('status', 'products')) {
+            $CI->db->where('status', 'active');
+        }
+        $rows = $CI->db->order_by('id', 'ASC')->get()->result_array();
     }
 
-    $token = sk_meta_catalog_access_token($vendorId, (string)($phoneNumberId ?: $catalog['phone_number_id']), $settings);
+    $tokens = sk_meta_catalog_candidate_tokens($vendorId, (string)($phoneNumberId ?: $catalog['phone_number_id']), $settings);
+    $token = $tokens[0] ?? sk_meta_catalog_access_token($vendorId, (string)($phoneNumberId ?: $catalog['phone_number_id']), $settings);
     $catalogId = trim((string)$catalog['catalog_id']);
+    $keepRetailerIds = [];
     $productsSynced = [];
+
     foreach ($rows as $product) {
         $payload = sk_meta_catalog_build_product_payload($product);
-        $res = sk_meta_catalog_http('POST', 'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/products', $token, $payload, 30);
+        $retailerId = (string)($payload['retailer_id'] ?? '');
+        if ($retailerId !== '') {
+            $keepRetailerIds[$retailerId] = true;
+        }
+        $res = ['ok' => false, 'error' => 'No token', 'data' => null, 'http' => 0];
+        foreach ($tokens ?: [$token] as $candidateToken) {
+            if ($candidateToken === '') {
+                continue;
+            }
+            // Prefer batch UPDATE so existing items refresh; fall back to create-style POST.
+            $batchData = $payload;
+            unset($batchData['retailer_id']);
+            $res = sk_meta_catalog_http(
+                'POST',
+                'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/items_batch',
+                $candidateToken,
+                [
+                    'item_type' => 'PRODUCT_ITEM',
+                    'allow_upsert' => true,
+                    'requests' => [[
+                        'method' => 'UPDATE',
+                        'retailer_id' => $retailerId,
+                        'data' => $batchData,
+                    ]],
+                ],
+                40
+            );
+            if (!$res['ok']) {
+                $res = sk_meta_catalog_http(
+                    'POST',
+                    'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/products',
+                    $candidateToken,
+                    $payload,
+                    30
+                );
+            }
+            if ($res['ok']) {
+                $token = $candidateToken;
+                break;
+            }
+        }
         $productsSynced[] = [
-            'product_id' => (int)($product['id'] ?? 0),
-            'retailer_id' => (string)($payload['retailer_id'] ?? ''),
-            'ok' => $res['ok'],
-            'error' => $res['ok'] ? '' : sk_meta_catalog_error_message('Uploading product ' . (string)$payload['retailer_id'], $res),
+            'product_id'  => (int)($product['id'] ?? 0),
+            'retailer_id' => $retailerId,
+            'action'      => 'upsert',
+            'ok'          => !empty($res['ok']),
+            'error'       => !empty($res['ok']) ? '' : sk_meta_catalog_error_message('Updating product ' . $retailerId, $res),
         ];
     }
 
-    $failedProducts = array_values(array_filter($productsSynced, static function (array $product): bool {
-        return empty($product['ok']);
-    }));
-    if ($failedProducts) {
-        $failureSummary = [];
-        foreach (array_slice($failedProducts, 0, 3) as $failedProduct) {
-            $failureSummary[] = ($failedProduct['retailer_id'] ?: 'Product ' . $failedProduct['product_id']) . ': ' . ($failedProduct['error'] ?: 'Meta rejected the product.');
-        }
-        $remaining = count($failedProducts) - count($failureSummary);
+    // Remove Meta catalog items that no longer exist (or are inactive) in this shop.
+    $deleted = [];
+    $remote = sk_meta_catalog_list_retailer_ids($catalogId, $token);
+    if (!$remote['ok']) {
         return [
             'ok' => false,
-            'error' => count($failedProducts) . ' of ' . count($productsSynced) . ' products failed to sync. ' . implode(' | ', $failureSummary) . ($remaining > 0 ? ' | ' . $remaining . ' additional product failures.' : ''),
+            'error' => $remote['error'] ?: 'Could not list Meta catalog products for cleanup.',
             'catalog_id' => $catalogId,
             'catalog_name' => (string)($catalog['catalog_name'] ?? ''),
+            'synced' => $productsSynced,
+            'deleted' => $deleted,
+        ];
+    }
+    foreach ($remote['ids'] as $remoteRetailerId) {
+        // Only manage items we own (product_* / probe). Leave unrelated catalog rows alone.
+        if (strpos($remoteRetailerId, 'product_') !== 0 && strpos($remoteRetailerId, 'product_probe_') !== 0) {
+            continue;
+        }
+        if (isset($keepRetailerIds[$remoteRetailerId])) {
+            continue;
+        }
+        $delRes = sk_meta_catalog_delete_product($catalogId, $remoteRetailerId, $token);
+        $deleted[] = [
+            'retailer_id' => $remoteRetailerId,
+            'action' => 'delete',
+            'ok' => !empty($delRes['ok']),
+            'error' => !empty($delRes['ok']) ? '' : sk_meta_catalog_error_message('Deleting product ' . $remoteRetailerId, $delRes),
+        ];
+    }
+
+    $failedUpserts = array_values(array_filter($productsSynced, static function (array $p): bool {
+        return empty($p['ok']);
+    }));
+    $failedDeletes = array_values(array_filter($deleted, static function (array $p): bool {
+        return empty($p['ok']);
+    }));
+    if ($failedUpserts || $failedDeletes) {
+        $parts = [];
+        if ($failedUpserts) {
+            $parts[] = count($failedUpserts) . ' update(s) failed';
+        }
+        if ($failedDeletes) {
+            $parts[] = count($failedDeletes) . ' delete(s) failed';
+        }
+        return [
+            'ok' => false,
+            'error' => implode('; ', $parts) . '.',
+            'catalog_id' => $catalogId,
+            'catalog_name' => (string)($catalog['catalog_name'] ?? ''),
+            'waba_linked' => !empty($catalog['waba_linked']),
             'link_warning' => (string)($catalog['link_warning'] ?? ''),
             'synced' => $productsSynced,
+            'deleted' => $deleted,
         ];
     }
 
@@ -661,5 +785,8 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
         'waba_linked' => !empty($catalog['waba_linked']),
         'link_warning' => (string)($catalog['link_warning'] ?? ''),
         'synced' => $productsSynced,
+        'deleted' => $deleted,
+        'kept' => count($keepRetailerIds),
+        'removed' => count($deleted),
     ];
 }
