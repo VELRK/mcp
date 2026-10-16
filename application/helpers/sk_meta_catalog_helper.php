@@ -98,7 +98,21 @@ function sk_meta_catalog_resolve_phone_for_vendor(int $vendorId): ?string {
     return null;
 }
 
-function sk_meta_catalog_access_token(int $vendorId, string $phoneNumberId, ?array $settings = null): string {
+/**
+ * Tokens for catalog create/list need catalog_management (+ business asset access).
+ * Prefer the Meta system-user token; fall back to the vendor WhatsApp Cloud token.
+ *
+ * @return list<string>
+ */
+function sk_meta_catalog_candidate_tokens(int $vendorId, string $phoneNumberId, ?array $settings = null): array {
+    $tokens = [];
+    $system = '';
+    if (function_exists('sk_meta_ba_access_token')) {
+        $system = trim((string)sk_meta_ba_access_token($phoneNumberId, $settings));
+    }
+    if ($system !== '') {
+        $tokens[] = $system;
+    }
     $vendorId = (int)$vendorId;
     $phoneNumberId = trim($phoneNumberId);
     if ($vendorId > 0 && $phoneNumberId !== '' && function_exists('get_instance') && get_instance() !== null) {
@@ -108,13 +122,25 @@ function sk_meta_catalog_access_token(int $vendorId, string $phoneNumberId, ?arr
         }
         $account = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId, true);
         if ((int)($account['vendor_id'] ?? 0) === $vendorId) {
-            $token = trim((string)($account['access_token'] ?? ''));
-            if ($token !== '') {
-                return $token;
+            $vendorTok = trim((string)($account['access_token'] ?? ''));
+            if ($vendorTok !== '' && !in_array($vendorTok, $tokens, true)) {
+                $tokens[] = $vendorTok;
             }
         }
     }
-    return sk_meta_ba_access_token($phoneNumberId, $settings);
+    return $tokens;
+}
+
+function sk_meta_catalog_access_token(int $vendorId, string $phoneNumberId, ?array $settings = null): string {
+    $tokens = sk_meta_catalog_candidate_tokens($vendorId, $phoneNumberId, $settings);
+    return $tokens[0] ?? '';
+}
+
+function sk_meta_catalog_permission_hint(string $operationError = ''): string {
+    $hint = ' Meta needs catalog_management on a system user that can manage this Business Manager asset.'
+        . ' Fastest fix: in Meta Commerce Manager create a Product Catalog for this business, link it to the WhatsApp number, then click Sync again.'
+        . ' Creating the first catalog in Commerce Manager also accepts Meta Terms of Service (required before API create works).';
+    return trim($operationError . $hint);
 }
 
 function sk_meta_catalog_store_catalog_id(int $vendorId, string $phoneNumberId, string $catalogId, ?string $catalogName = null): void {
@@ -154,6 +180,27 @@ function sk_meta_catalog_store_catalog_id(int $vendorId, string $phoneNumberId, 
     }
 }
 
+function sk_meta_catalog_pick_first_catalog(array $listResponse): array {
+    $rows = $listResponse['data']['data'] ?? [];
+    if (!is_array($rows)) {
+        return ['id' => '', 'name' => ''];
+    }
+    foreach ($rows as $catalog) {
+        if (!is_array($catalog)) {
+            continue;
+        }
+        $candidateId = trim((string)($catalog['id'] ?? ''));
+        if ($candidateId === '') {
+            continue;
+        }
+        return [
+            'id'   => $candidateId,
+            'name' => trim((string)($catalog['name'] ?? '')),
+        ];
+    }
+    return ['id' => '', 'name' => ''];
+}
+
 function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumberId = null, ?array $settings = null): array {
     $vendorId = (int)$vendorId;
     if ($vendorId < 1) {
@@ -163,26 +210,42 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
     if ($phoneNumberId === '') {
         return ['ok' => false, 'error' => 'No active WhatsApp number is linked to this vendor.'];
     }
-    $token = sk_meta_catalog_access_token($vendorId, $phoneNumberId, $settings);
-    if ($token === '') {
+    $tokens = sk_meta_catalog_candidate_tokens($vendorId, $phoneNumberId, $settings);
+    if (!$tokens) {
         return ['ok' => false, 'error' => 'Meta access token is missing.'];
     }
+    $token = $tokens[0];
 
     $shopName = 'Shop Catalog';
+    $storedCatalogId = '';
+    $storedCatalogName = '';
     if (function_exists('get_instance') && get_instance() !== null) {
         $CI =& get_instance();
         if (!isset($CI->Sk_Vendor_model)) {
             $CI->load->model('Sk_Vendor_model');
         }
         $vendor = $CI->Sk_Vendor_model->get_by_id($vendorId);
-        if (!empty($vendor['shop_name'])) {
-            $shopName = trim((string)$vendor['shop_name']);
+        $shopName = trim((string)($vendor['business_name'] ?? $vendor['shop_name'] ?? $vendor['owner_name'] ?? ''));
+        if ($shopName === '') {
+            $shopName = 'Shop Catalog';
+        }
+        if (!isset($CI->Sk_Vendor_meta_agent_model)) {
+            $CI->load->model('Sk_Vendor_meta_agent_model');
+        }
+        $CI->Sk_Vendor_meta_agent_model->ensure_schema();
+        $metaRow = $CI->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
+        if ((int)($metaRow['vendor_id'] ?? 0) === $vendorId) {
+            $storedCatalogId = trim((string)($metaRow['catalog_id'] ?? ''));
+            $storedCatalogName = trim((string)($metaRow['catalog_name'] ?? ''));
         }
     }
 
     $metaUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($phoneNumberId) . '?fields=id,display_phone_number,verified_name';
     $metaRes = sk_meta_catalog_http('GET', $metaUrl, $token, null, 30);
-    $metaData = is_array($metaRes['data']) ? $metaRes['data'] : [];
+    if (!$metaRes['ok'] && count($tokens) > 1) {
+        $token = $tokens[1];
+        $metaRes = sk_meta_catalog_http('GET', $metaUrl, $token, null, 30);
+    }
     if (!$metaRes['ok']) {
         return ['ok' => false, 'error' => $metaRes['error'] ?: 'Unable to read WhatsApp account metadata.'];
     }
@@ -259,33 +322,70 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         return ['ok' => false, 'error' => $businessLookupError !== '' ? $businessLookupError : 'Could not resolve a Meta business for the linked WhatsApp Business Account. Confirm the correct WABA ID and business are assigned to this vendor.'];
     }
 
-    $catalogListUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs?fields=id,name,product_count';
-    $listRes = sk_meta_catalog_http('GET', $catalogListUrl, $token, null, 30);
-    if (!$listRes['ok']) {
-        return ['ok' => false, 'error' => sk_meta_catalog_error_message('Listing product catalogs for the business', $listRes)];
-    }
-    $catalogData = is_array($listRes['data']) ? $listRes['data'] : [];
-    $catalogId = '';
-    $catalogName = '';
-    if (!empty($catalogData['data']) && is_array($catalogData['data'])) {
-        foreach ($catalogData['data'] as $catalog) {
-            if (!is_array($catalog)) {
-                continue;
-            }
-            $candidateId = trim((string)($catalog['id'] ?? ''));
-            $candidateName = trim((string)($catalog['name'] ?? ''));
-            if ($candidateId !== '') {
-                $catalogId = $candidateId;
-                $catalogName = $candidateName;
-                break;
-            }
+    $catalogId = $storedCatalogId;
+    $catalogName = $storedCatalogName;
+
+    // Prefer catalogs already linked to this WABA (no create permission needed).
+    if ($catalogId === '' && $wabaId !== '') {
+        $wabaListRes = sk_meta_catalog_http(
+            'GET',
+            'https://graph.facebook.com/v21.0/' . rawurlencode($wabaId) . '/product_catalogs?fields=id,name,product_count',
+            $token,
+            null,
+            30
+        );
+        if ($wabaListRes['ok']) {
+            $picked = sk_meta_catalog_pick_first_catalog($wabaListRes);
+            $catalogId = $picked['id'];
+            $catalogName = $picked['name'];
         }
     }
 
+    $listRes = null;
     if ($catalogId === '') {
-        $createRes = sk_meta_catalog_http('POST', 'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs', $token, ['name' => $shopName], 30);
+        $catalogListUrl = 'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs?fields=id,name,product_count';
+        $listRes = sk_meta_catalog_http('GET', $catalogListUrl, $token, null, 30);
+        if (!$listRes['ok'] && count($tokens) > 1) {
+            foreach ($tokens as $candidateToken) {
+                if ($candidateToken === $token) {
+                    continue;
+                }
+                $altList = sk_meta_catalog_http('GET', $catalogListUrl, $candidateToken, null, 30);
+                if ($altList['ok']) {
+                    $token = $candidateToken;
+                    $listRes = $altList;
+                    break;
+                }
+            }
+        }
+        if (!$listRes['ok']) {
+            return ['ok' => false, 'error' => sk_meta_catalog_permission_hint(sk_meta_catalog_error_message('Listing product catalogs for the business', $listRes))];
+        }
+        $picked = sk_meta_catalog_pick_first_catalog($listRes);
+        $catalogId = $picked['id'];
+        $catalogName = $picked['name'];
+    }
+
+    if ($catalogId === '') {
+        $createRes = ['ok' => false, 'http' => 0, 'error' => '', 'data' => null];
+        foreach ($tokens as $candidateToken) {
+            $createRes = sk_meta_catalog_http(
+                'POST',
+                'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs',
+                $candidateToken,
+                ['name' => $shopName],
+                30
+            );
+            if ($createRes['ok']) {
+                $token = $candidateToken;
+                break;
+            }
+        }
         if (!$createRes['ok']) {
-            return ['ok' => false, 'error' => sk_meta_catalog_error_message('Creating a product catalog', $createRes)];
+            return [
+                'ok' => false,
+                'error' => sk_meta_catalog_permission_hint(sk_meta_catalog_error_message('Creating a product catalog', $createRes)),
+            ];
         }
         $catalogId = trim((string)($createRes['data']['id'] ?? ''));
         $catalogName = trim((string)($createRes['data']['name'] ?? $shopName));
@@ -295,12 +395,32 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         return ['ok' => false, 'error' => 'Meta catalog id could not be resolved.'];
     }
 
-    $linkRes = sk_meta_catalog_http('POST', 'https://graph.facebook.com/v21.0/' . rawurlencode($phoneNumberId) . '/product_catalogs', $token, ['catalog_id' => $catalogId], 30);
-    if (!$linkRes['ok']) {
-        $err = strtolower((string)$linkRes['error']);
-        if (strpos($err, 'already') === false && strpos($err, 'exists') === false) {
-            return ['ok' => false, 'error' => sk_meta_catalog_error_message('Linking the product catalog to the WhatsApp number', $linkRes)];
+    $linkTargets = array_values(array_filter([$wabaId, $phoneNumberId]));
+    $linkOk = false;
+    $linkRes = ['ok' => false, 'error' => '', 'data' => null, 'http' => 0];
+    foreach ($linkTargets as $linkTarget) {
+        foreach ($tokens as $candidateToken) {
+            $linkRes = sk_meta_catalog_http(
+                'POST',
+                'https://graph.facebook.com/v21.0/' . rawurlencode($linkTarget) . '/product_catalogs',
+                $candidateToken,
+                ['catalog_id' => $catalogId],
+                30
+            );
+            if ($linkRes['ok']) {
+                $linkOk = true;
+                $token = $candidateToken;
+                break 2;
+            }
+            $err = strtolower((string)$linkRes['error']);
+            if (strpos($err, 'already') !== false || strpos($err, 'exists') !== false) {
+                $linkOk = true;
+                break 2;
+            }
         }
+    }
+    if (!$linkOk) {
+        return ['ok' => false, 'error' => sk_meta_catalog_error_message('Linking the product catalog to the WhatsApp number', $linkRes)];
     }
 
     sk_meta_catalog_store_catalog_id($vendorId, $phoneNumberId, $catalogId, $catalogName);
