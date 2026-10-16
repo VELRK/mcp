@@ -524,6 +524,25 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
                 $linkWarning = trim((string)($linkRes['data']['error']['error_user_msg'] ?? $linkRes['error'] ?? 'Could not link catalog to WhatsApp number.'));
             }
         }
+
+        // Make catalog visible on the WhatsApp profile for this phone number.
+        if ($linkOk && $phoneNumberId !== '') {
+            foreach ($tokens as $candidateToken) {
+                $commerceRes = sk_meta_catalog_http(
+                    'POST',
+                    'https://graph.facebook.com/v21.0/' . rawurlencode($phoneNumberId) . '/whatsapp_commerce_settings',
+                    $candidateToken,
+                    [
+                        'is_catalog_visible' => true,
+                        'is_cart_enabled' => true,
+                    ],
+                    20
+                );
+                if ($commerceRes['ok']) {
+                    break;
+                }
+            }
+        }
     } else {
         $linkWarning = 'WhatsApp Business Account id is missing for this number.';
     }
