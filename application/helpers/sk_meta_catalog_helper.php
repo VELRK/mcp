@@ -65,6 +65,10 @@ function sk_meta_catalog_error_message(string $operation, array $response): stri
     $metaError = is_array($response['data']['error'] ?? null) ? $response['data']['error'] : [];
     $code = trim((string)($metaError['code'] ?? ''));
     $subcode = trim((string)($metaError['error_subcode'] ?? ''));
+    $userMsg = trim((string)($metaError['error_user_msg'] ?? $metaError['error_user_title'] ?? ''));
+    if ($message === '' && !empty($metaError['message'])) {
+        $message = trim((string)$metaError['message']);
+    }
     $http = (int)($response['http'] ?? 0);
     $details = [];
     if ($http > 0) {
@@ -74,8 +78,11 @@ function sk_meta_catalog_error_message(string $operation, array $response): stri
         $details[] = 'Meta code ' . $code . ($subcode !== '' ? '/' . $subcode : '');
     }
     $error = $operation . ' failed' . ($details ? ' (' . implode(', ', $details) . ')' : '') . ': ' . ($message !== '' ? $message : 'Meta request failed.');
-    if ($code === '200' || stripos($message, 'permission') !== false) {
-        $error .= ' Check that the current access token has the required Meta permission and access to this business asset.';
+    if ($userMsg !== '' && stripos($error, $userMsg) === false) {
+        $error .= ' ' . $userMsg;
+    }
+    if ($code === '10' || $code === '200' || stripos($message, 'permission') !== false || stripos($userMsg, 'admin') !== false) {
+        $error .= ' Token scopes like catalog_management are not enough — the token user must be an Admin of that Business Manager.';
     }
     return $error;
 }
@@ -137,9 +144,9 @@ function sk_meta_catalog_access_token(int $vendorId, string $phoneNumberId, ?arr
 }
 
 function sk_meta_catalog_permission_hint(string $operationError = ''): string {
-    $hint = ' Meta needs catalog_management on a system user that can manage this Business Manager asset.'
-        . ' Fastest fix: in Meta Commerce Manager create a Product Catalog for this business, link it to the WhatsApp number, then click Sync again.'
-        . ' Creating the first catalog in Commerce Manager also accepts Meta Terms of Service (required before API create works).';
+    $hint = ' Fix in Meta Business Manager: open the WhatsApp number’s owning business → Users → System users'
+        . ' → assign this system user as Admin (or Catalog admin) on that business, then Sync again.'
+        . ' Or as a business Admin create one Product Catalog in Commerce Manager, link it to WhatsApp, then Sync will update products.';
     return trim($operationError . $hint);
 }
 
@@ -366,19 +373,26 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
         $catalogName = $picked['name'];
     }
 
+    // No catalog yet → create; existing catalog → reuse and product sync upserts/updates.
     if ($catalogId === '') {
         $createRes = ['ok' => false, 'http' => 0, 'error' => '', 'data' => null];
+        $createPayloads = [
+            ['name' => $shopName, 'vertical' => 'commerce'],
+            ['name' => $shopName],
+        ];
         foreach ($tokens as $candidateToken) {
-            $createRes = sk_meta_catalog_http(
-                'POST',
-                'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs',
-                $candidateToken,
-                ['name' => $shopName],
-                30
-            );
-            if ($createRes['ok']) {
-                $token = $candidateToken;
-                break;
+            foreach ($createPayloads as $payload) {
+                $createRes = sk_meta_catalog_http(
+                    'POST',
+                    'https://graph.facebook.com/v21.0/' . rawurlencode($businessId) . '/owned_product_catalogs',
+                    $candidateToken,
+                    $payload,
+                    30
+                );
+                if ($createRes['ok']) {
+                    $token = $candidateToken;
+                    break 2;
+                }
             }
         }
         if (!$createRes['ok']) {
