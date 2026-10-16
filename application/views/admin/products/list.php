@@ -91,7 +91,11 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
 <div class="card" id="productListCard">
   <div class="card-header d-flex justify-content-between align-items-center gap-2">
     <h5 class="card-title mb-0">Product List</h5>
-    <div class="d-flex align-items-center gap-2">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button type="button" id="bulkDeleteProductsBtn" class="btn btn-sm btn-outline-danger d-none"
+              data-url="<?= site_url('shopkart/products/bulk_delete') ?>">
+        <i class="mdi mdi-trash-can-outline me-1"></i>Delete selected (<span id="bulkDeleteCount">0</span>)
+      </button>
       <button type="button" id="syncCatalogButton"
          data-url="<?= site_url('shopkart/products/sync_catalog' . (!empty($vendor_id) ? '?vendor_id=' . rawurlencode((string)$vendor_id) : '')) ?>"
          class="btn btn-sm btn-outline-success"><i class="mdi mdi-cloud-sync me-1"></i>Sync Catalog</button>
@@ -104,6 +108,9 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
       <table class="table align-middle mb-0">
         <thead class="table-light">
           <tr>
+            <th style="width:36px;">
+              <input type="checkbox" class="form-check-input" id="productSelectAll" aria-label="Select all products on this page">
+            </th>
             <th>ID</th>
             <th>Product</th>
             <?php if ($show_vendor_col): ?><th>Vendor</th><?php endif; ?>
@@ -248,6 +255,93 @@ $this->load->view('admin/partials/page_title', compact('page_title', 'breadcrumb
   }
 
   bindPagination();
+
+  var selectAll = document.getElementById('productSelectAll');
+  var bulkBtn = document.getElementById('bulkDeleteProductsBtn');
+  var bulkCount = document.getElementById('bulkDeleteCount');
+
+  function selectedProductIds() {
+    return Array.prototype.map.call(
+      document.querySelectorAll('.product-row-check:checked'),
+      function(el) { return parseInt(el.value, 10); }
+    ).filter(function(id) { return id > 0; });
+  }
+
+  function refreshBulkUi() {
+    var ids = selectedProductIds();
+    if (bulkCount) bulkCount.textContent = String(ids.length);
+    if (bulkBtn) bulkBtn.classList.toggle('d-none', ids.length < 1);
+    if (selectAll) {
+      var checks = document.querySelectorAll('.product-row-check');
+      selectAll.checked = checks.length > 0 && ids.length === checks.length;
+      selectAll.indeterminate = ids.length > 0 && ids.length < checks.length;
+    }
+  }
+
+  document.addEventListener('change', function(e) {
+    if (!e.target) return;
+    if (e.target.id === 'productSelectAll') {
+      document.querySelectorAll('.product-row-check').forEach(function(cb) {
+        cb.checked = !!e.target.checked;
+      });
+      refreshBulkUi();
+      return;
+    }
+    if (e.target.classList && e.target.classList.contains('product-row-check')) {
+      refreshBulkUi();
+    }
+  });
+
+  if (bulkBtn) {
+    bulkBtn.addEventListener('click', function() {
+      var ids = selectedProductIds();
+      if (!ids.length) return;
+      if (!confirm('Permanently delete ' + ids.length + ' selected product' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) {
+        return;
+      }
+      var original = bulkBtn.innerHTML;
+      bulkBtn.disabled = true;
+      bulkBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Deleting...';
+      var body = new URLSearchParams();
+      ids.forEach(function(id) { body.append('ids[]', String(id)); });
+      fetch(bulkBtn.dataset.url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: body.toString()
+      })
+        .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+        .then(function(res) {
+          if (!res.j || !res.j.success) {
+            throw new Error((res.j && res.j.message) || 'Bulk delete failed.');
+          }
+          ids.forEach(function(id) {
+            var row = document.getElementById('row-' + id);
+            if (row) row.remove();
+          });
+          refreshBulkUi();
+          if (!document.querySelector('#productListBody tr')) {
+            loadProducts(currentPage);
+          }
+        })
+        .catch(function(err) {
+          alert(err.message || 'Bulk delete failed.');
+        })
+        .finally(function() {
+          bulkBtn.disabled = false;
+          bulkBtn.innerHTML = original;
+        });
+    });
+  }
+
+  if (tbody) {
+    var mo = new MutationObserver(function() { refreshBulkUi(); });
+    mo.observe(tbody, { childList: true });
+  }
+  refreshBulkUi();
 
   var syncButton = document.getElementById('syncCatalogButton');
   var syncResult = document.getElementById('catalogSyncResult');

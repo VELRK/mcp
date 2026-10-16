@@ -422,11 +422,67 @@ class Products extends Sk_Base {
     }
 
     public function delete($id) {
+        $id = (int)$id;
         $product = $this->Sk_Product_model->get_by_id($id);
-        $this->assert_product_vendor_access($product);
+        if (!$product) {
+            return $this->json(['success' => false, 'message' => 'Product not found.'], 404);
+        }
+        $own = (int)($this->current_vendor_id() ?? 0);
+        $productVendor = (int)($product['vendor_id'] ?? 0);
+        if ($own > 0 && $productVendor > 0 && $productVendor !== $own) {
+            return $this->json(['success' => false, 'message' => 'Access denied.'], 403);
+        }
         $this->Sk_Product_model->delete($id);
         $this->_clear_product_api_cache();
-        $this->json(['success' => true]);
+        return $this->json(['success' => true, 'message' => 'Product deleted.']);
+    }
+
+    /** Hard-delete many products (raw DB delete of selected ids). */
+    public function bulk_delete() {
+        $ids = $this->input->post('ids');
+        if (!is_array($ids)) {
+            $raw = (string)$this->input->post('ids', TRUE);
+            $ids = array_filter(array_map('intval', preg_split('/[,\s]+/', $raw) ?: []));
+        } else {
+            $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        }
+        if (!$ids) {
+            return $this->json(['success' => false, 'message' => 'Select at least one product.'], 400);
+        }
+        $own = (int)($this->current_vendor_id() ?? 0);
+        $deleted = 0;
+        $skipped = 0;
+        foreach ($ids as $id) {
+            if ($id < 1) {
+                continue;
+            }
+            $product = $this->Sk_Product_model->get_by_id($id);
+            if (!$product) {
+                $skipped++;
+                continue;
+            }
+            if ($own > 0) {
+                $productVendor = (int)($product['vendor_id'] ?? 0);
+                if ($productVendor > 0 && $productVendor !== $own) {
+                    $skipped++;
+                    continue;
+                }
+            }
+            $this->Sk_Product_model->delete($id);
+            $deleted++;
+        }
+        if ($deleted > 0) {
+            $this->_clear_product_api_cache();
+        }
+        return $this->json([
+            'success' => $deleted > 0,
+            'deleted' => $deleted,
+            'skipped' => $skipped,
+            'message' => $deleted > 0
+                ? ($deleted . ' product' . ($deleted === 1 ? '' : 's') . ' deleted'
+                    . ($skipped > 0 ? ', ' . $skipped . ' skipped.' : '.'))
+                : 'No products were deleted.',
+        ], $deleted > 0 ? 200 : 400);
     }
 
     public function toggle($id) {

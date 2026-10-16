@@ -1,7 +1,7 @@
 <?php
 $currency = sk_currency_symbol($settings);
 $show_vendor_col = !empty($show_vendor_col);
-$colspan = $show_vendor_col ? 10 : 9;
+$colspan = $show_vendor_col ? 11 : 10;
 $statusBadge = static function (string $status): string {
     if ($status === 'active') return 'badge-label-success';
     if ($status === 'draft') return 'badge-label-warning';
@@ -14,7 +14,10 @@ $statusBadge = static function (string $status): string {
   $discount = ($sale > 0 && $price > $sale) ? (int) round((1 - ($sale / $price)) * 100) : 0;
   $stock = (int) ($p['stock'] ?? 0);
 ?>
-<tr>
+<tr id="row-<?= (int)$p['id'] ?>">
+  <td>
+    <input type="checkbox" class="form-check-input product-row-check" value="<?= (int)$p['id'] ?>" aria-label="Select product <?= (int)$p['id'] ?>">
+  </td>
   <td><span class="text-muted">#PRD-<?= str_pad((string) $p['id'], 4, '0', STR_PAD_LEFT) ?></span></td>
   <td>
     <a href="<?= site_url('shopkart/products/edit/'.$p['id']) ?>" class="d-flex align-items-center gap-2 text-body">
@@ -73,7 +76,8 @@ $statusBadge = static function (string $status): string {
     <a href="<?= site_url('shopkart/products/edit/'.$p['id']) ?>" class="btn btn-sm btn-label-primary btn-icon" aria-label="Edit">
       <i class="mdi mdi-pencil-outline"></i>
     </a>
-    <button onclick="skConfirmDelete('<?= site_url('shopkart/products/delete/'.$p['id']) ?>','<?= htmlspecialchars($p['name'], ENT_QUOTES) ?>')"
+    <button type="button"
+            onclick="skConfirmDelete('<?= site_url('shopkart/products/delete/'.$p['id']) ?>','row-<?= (int)$p['id'] ?>')"
             class="btn btn-sm btn-label-danger btn-icon" aria-label="Delete">
       <i class="mdi mdi-trash-can-outline"></i>
     </button>

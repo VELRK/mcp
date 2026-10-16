@@ -280,15 +280,32 @@ class Sk_Product_model extends CI_Model {
             return;
         }
         if ($event === 'delete') {
-            $catalog = sk_meta_catalog_ensure_vendor_catalog($vendorId, $phone);
-            if (!$catalog['ok']) {
+            // Prefer a stored catalog id so product delete is not blocked by Meta catalog create/link.
+            $catalogId = '';
+            if ($this->db->table_exists('vendor_meta_agents')) {
+                $meta = $this->db->select('catalog_id')
+                    ->where('vendor_id', $vendorId)
+                    ->where('phone_number_id', $phone)
+                    ->order_by('id', 'DESC')
+                    ->limit(1)
+                    ->get('vendor_meta_agents')
+                    ->row_array();
+                $catalogId = trim((string)($meta['catalog_id'] ?? ''));
+            }
+            if ($catalogId === '') {
                 return;
             }
-            $token = sk_meta_ba_access_token($phone);
+            $token = function_exists('sk_meta_catalog_access_token')
+                ? sk_meta_catalog_access_token($vendorId, $phone)
+                : sk_meta_ba_access_token($phone);
             if ($token === '') {
                 return;
             }
-            sk_meta_catalog_delete_product((string)$catalog['catalog_id'], 'product_' . $productId, $token);
+            try {
+                sk_meta_catalog_delete_product($catalogId, 'product_' . $productId, $token);
+            } catch (Throwable $e) {
+                // Local DB delete already succeeded; Meta cleanup is best-effort.
+            }
             return;
         }
         $catalog = sk_meta_catalog_ensure_vendor_catalog($vendorId, $phone);
