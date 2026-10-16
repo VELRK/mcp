@@ -302,7 +302,14 @@ class Sk_Product_model extends CI_Model {
                 return;
             }
             try {
-                sk_meta_catalog_delete_product($catalogId, 'product_' . $productId, $token);
+                $prefix = 'product_' . $productId;
+                $listed = sk_meta_catalog_list_items($catalogId, $token);
+                foreach (($listed['items'] ?? []) as $item) {
+                    $rid = (string)($item['retailer_id'] ?? '');
+                    if ($rid === $prefix || strpos($rid, $prefix . '_v_') === 0) {
+                        sk_meta_catalog_delete_product($catalogId, $rid, $token, (string)($item['id'] ?? ''));
+                    }
+                }
             } catch (Throwable $e) {
                 // Local DB delete already succeeded; Meta cleanup is best-effort.
             }
@@ -316,17 +323,21 @@ class Sk_Product_model extends CI_Model {
         if (!$productRow) {
             return;
         }
-        $token = sk_meta_ba_access_token($phone);
+        $token = function_exists('sk_meta_catalog_access_token')
+            ? sk_meta_catalog_access_token($vendorId, $phone)
+            : sk_meta_ba_access_token($phone);
         if ($token === '') {
             return;
         }
-        sk_meta_catalog_http(
-            'POST',
-            'https://graph.facebook.com/v21.0/' . rawurlencode((string)$catalog['catalog_id']) . '/products',
-            $token,
-            sk_meta_catalog_build_product_payload($productRow),
-            30
-        );
+        foreach (sk_meta_catalog_expand_product_rows($productRow) as $entry) {
+            sk_meta_catalog_http(
+                'POST',
+                'https://graph.facebook.com/v21.0/' . rawurlencode((string)$catalog['catalog_id']) . '/products',
+                $token,
+                $entry['payload'],
+                30
+            );
+        }
     }
 
     public function save_images($product_id, $images) {

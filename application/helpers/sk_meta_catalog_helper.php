@@ -561,24 +561,73 @@ function sk_meta_catalog_ensure_vendor_catalog(int $vendorId, ?string $phoneNumb
     ];
 }
 
-function sk_meta_catalog_build_product_payload(array $product): array {
+/**
+ * Build one Meta catalog item payload.
+ * Pass $variant to sync a shop product_variants row (grouped under the parent product).
+ */
+function sk_meta_catalog_build_product_payload(array $product, ?array $variant = null): array {
+    $productId = (int)($product['id'] ?? 0);
     $name = trim((string)($product['name'] ?? ''));
     $description = trim((string)($product['short_desc'] ?? $product['description'] ?? ''));
+    $currency = strtoupper(trim((string)($product['currency'] ?? 'INR')));
+    $imageUrl = trim((string)($product['thumbnail'] ?? $product['image_url'] ?? ''));
     $price = (float)($product['price'] ?? 0);
     $sale = (float)($product['sale_price'] ?? 0);
+    $stock = max(0, (int)($product['stock'] ?? 0));
+    $retailerId = 'product_' . $productId;
+    $sizeLabel = '';
+    $itemGroupId = '';
+
+    if (is_array($variant) && !empty($variant['id'])) {
+        $variantId = (int)$variant['id'];
+        $retailerId = 'product_' . $productId . '_v_' . $variantId;
+        $itemGroupId = 'product_' . $productId;
+        $sizeLabel = trim((string)($variant['label'] ?? ''));
+        if ($sizeLabel === '') {
+            $sizeLabel = trim((string)($variant['unit_name'] ?? $variant['unit_symbol'] ?? ''));
+        }
+        if ($sizeLabel !== '') {
+            $name = ($name !== '' ? $name : 'Product') . ' - ' . $sizeLabel;
+        }
+        $price = (float)($variant['price'] ?? $price);
+        $sale = isset($variant['sale_price']) && $variant['sale_price'] !== null && $variant['sale_price'] !== ''
+            ? (float)$variant['sale_price']
+            : 0.0;
+        if (!empty($variant['effective_price'])) {
+            $eff = (float)$variant['effective_price'];
+            if ($eff > 0) {
+                $price = $eff;
+                $sale = 0;
+            }
+        }
+        $stock = max(0, (int)($variant['stock'] ?? 0));
+        $variantImage = trim((string)($variant['image_url'] ?? $variant['image'] ?? ''));
+        if ($variantImage !== '') {
+            $imageUrl = $variantImage;
+        }
+    }
+
     if ($sale > 0 && ($price <= 0 || $sale < $price)) {
         $price = $sale;
     }
-    $currency = strtoupper(trim((string)($product['currency'] ?? 'INR')));
-    $imageUrl = trim((string)($product['thumbnail'] ?? $product['image_url'] ?? ''));
     if ($imageUrl !== '' && !preg_match('#^https?://#i', $imageUrl)) {
-        if (function_exists('base_url')) {
-            $imageUrl = rtrim(base_url(), '/') . '/' . ltrim($imageUrl, '/');
-        }
+        $base = function_exists('base_url') ? rtrim(base_url(), '/') : 'https://talkaipilot.com';
+        $imageUrl = $base . '/' . ltrim($imageUrl, '/');
     }
-    $stock = max(0, (int)($product['stock'] ?? 0));
+    // Meta requires image_url on create — fall back to product thumbnail, then a stable site image.
+    if ($imageUrl === '') {
+        $fallback = trim((string)($product['thumbnail'] ?? $product['image'] ?? ''));
+        if ($fallback !== '' && !preg_match('#^https?://#i', $fallback)) {
+            $base = function_exists('base_url') ? rtrim(base_url(), '/') : 'https://talkaipilot.com';
+            $fallback = $base . '/' . ltrim($fallback, '/');
+        }
+        $imageUrl = $fallback !== '' ? $fallback : 'https://talkaipilot.com/assets/img/logo.png';
+    }
     $status = strtolower(trim((string)($product['status'] ?? 'active')));
     if ($status !== '' && $status !== 'active') {
+        $stock = 0;
+    }
+    if (is_array($variant) && isset($variant['status']) && (int)$variant['status'] !== 1) {
         $stock = 0;
     }
 
@@ -588,7 +637,7 @@ function sk_meta_catalog_build_product_payload(array $product): array {
         $priceMinor = 100;
     }
     $payload = [
-        'retailer_id' => 'product_' . (int)($product['id'] ?? 0),
+        'retailer_id' => $retailerId,
         'name'        => $name !== '' ? $name : 'Product',
         'description' => $description !== '' ? mb_substr($description, 0, 1000) : 'Product from local catalog.',
         'price'       => $priceMinor,
@@ -598,11 +647,81 @@ function sk_meta_catalog_build_product_payload(array $product): array {
         'brand'       => 'Shop',
         'origin_country' => 'IN',
         'url'         => function_exists('base_url') ? rtrim(base_url(), '/') . '/' : 'https://talkaipilot.com/',
+        'image_url'   => $imageUrl,
     ];
-    if ($imageUrl !== '') {
-        $payload['image_url'] = $imageUrl;
+    if ($itemGroupId !== '') {
+        $payload['item_group_id'] = $itemGroupId;
+    }
+    if ($sizeLabel !== '') {
+        $payload['size'] = $sizeLabel;
     }
     return $payload;
+}
+
+/**
+ * Expand a product into Meta catalog rows (one per active variant, or one base product).
+ *
+ * @return list<array{product:array,variant:?array,payload:array}>
+ */
+function sk_meta_catalog_expand_product_rows(array $product): array {
+    $productId = (int)($product['id'] ?? 0);
+    $variants = [];
+    if ($productId > 0 && function_exists('get_instance') && get_instance() !== null) {
+        $CI =& get_instance();
+        // Prefer the variant model (labels, effective_price, image_url).
+        if (!isset($CI->Sk_Product_variant_model) && isset($CI->load) && method_exists($CI->load, 'model')) {
+            try {
+                $CI->load->model('Sk_Product_variant_model');
+            } catch (Throwable $e) {
+                // Fall through to direct query.
+            }
+        }
+        if (isset($CI->Sk_Product_variant_model) && method_exists($CI->Sk_Product_variant_model, 'get_by_product')) {
+            $variants = $CI->Sk_Product_variant_model->get_by_product($productId, true);
+        }
+        // Direct DB fallback when model is unavailable (CLI stubs) or returned nothing.
+        if (empty($variants) && isset($CI->db) && method_exists($CI->db, 'table_exists') && $CI->db->table_exists('product_variants')) {
+            $CI->db->from('product_variants')->where('product_id', $productId)->where('status', 1);
+            if (method_exists($CI->db, 'order_by')) {
+                $CI->db->order_by('is_default', 'DESC')->order_by('sort_order', 'ASC')->order_by('id', 'ASC');
+            }
+            $variants = $CI->db->get()->result_array();
+            foreach ($variants as &$v) {
+                if (empty($v['label']) && !empty($v['unit_value'])) {
+                    $v['label'] = (string)$v['unit_value'];
+                }
+                $base = (float)($v['price'] ?? 0);
+                $sale = isset($v['sale_price']) && $v['sale_price'] !== null && $v['sale_price'] !== ''
+                    ? (float)$v['sale_price'] : null;
+                $v['effective_price'] = ($sale !== null && $sale > 0 && $sale < $base) ? $sale : $base;
+                if (!empty($v['image']) && empty($v['image_url'])) {
+                    $v['image_url'] = $v['image'];
+                }
+            }
+            unset($v);
+        }
+    }
+    $out = [];
+    if (!empty($variants)) {
+        foreach ($variants as $variant) {
+            if (!is_array($variant) || empty($variant['id'])) {
+                continue;
+            }
+            $out[] = [
+                'product' => $product,
+                'variant' => $variant,
+                'payload' => sk_meta_catalog_build_product_payload($product, $variant),
+            ];
+        }
+    }
+    if (!$out) {
+        $out[] = [
+            'product' => $product,
+            'variant' => null,
+            'payload' => sk_meta_catalog_build_product_payload($product, null),
+        ];
+    }
+    return $out;
 }
 
 /**
@@ -699,7 +818,7 @@ function sk_meta_catalog_list_retailer_ids(string $catalogId, string $token): ar
 
 /**
  * Sync local shop products → Meta catalog.
- * - Upsert each active local product (create or update by retailer_id).
+ * - Upsert each active variant (or base product when no variants).
  * - Delete Meta items for this shop that are no longer in the local active set.
  */
 function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumberId = null, ?array $settings = null): array {
@@ -715,6 +834,9 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
     $rows = [];
     if (function_exists('get_instance') && get_instance() !== null) {
         $CI =& get_instance();
+        if (!isset($CI->Sk_Product_variant_model)) {
+            $CI->load->model('Sk_Product_variant_model');
+        }
         // Only this vendor's products (do not or_where vendor_id=0 — that leaks other shops).
         $CI->db->from('products')->where('vendor_id', $vendorId);
         if ($CI->db->field_exists('status', 'products')) {
@@ -730,35 +852,20 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
     $productsSynced = [];
 
     foreach ($rows as $product) {
-        $payload = sk_meta_catalog_build_product_payload($product);
-        $retailerId = (string)($payload['retailer_id'] ?? '');
-        if ($retailerId !== '') {
-            $keepRetailerIds[$retailerId] = true;
-        }
-        $res = ['ok' => false, 'error' => 'No token', 'data' => null, 'http' => 0];
-        foreach ($tokens ?: [$token] as $candidateToken) {
-            if ($candidateToken === '') {
-                continue;
+        foreach (sk_meta_catalog_expand_product_rows($product) as $entry) {
+            $payload = $entry['payload'];
+            $variant = $entry['variant'];
+            $retailerId = (string)($payload['retailer_id'] ?? '');
+            if ($retailerId !== '') {
+                $keepRetailerIds[$retailerId] = true;
             }
-            // Prefer batch UPDATE so existing items refresh; fall back to create-style POST.
-            $batchData = $payload;
-            unset($batchData['retailer_id']);
-            $res = sk_meta_catalog_http(
-                'POST',
-                'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/items_batch',
-                $candidateToken,
-                [
-                    'item_type' => 'PRODUCT_ITEM',
-                    'allow_upsert' => true,
-                    'requests' => [[
-                        'method' => 'UPDATE',
-                        'retailer_id' => $retailerId,
-                        'data' => $batchData,
-                    ]],
-                ],
-                40
-            );
-            if (!$res['ok']) {
+            $res = ['ok' => false, 'error' => 'No token', 'data' => null, 'http' => 0];
+            foreach ($tokens ?: [$token] as $candidateToken) {
+                if ($candidateToken === '') {
+                    continue;
+                }
+                // Create/upsert via /products first (requires image_url). Batch UPDATE alone
+                // can return HTTP 200 without creating a missing retailer_id.
                 $res = sk_meta_catalog_http(
                     'POST',
                     'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/products',
@@ -766,19 +873,59 @@ function sk_meta_catalog_sync_vendor_products(int $vendorId, ?string $phoneNumbe
                     $payload,
                     30
                 );
+                if (!$res['ok']) {
+                    $batchData = $payload;
+                    unset($batchData['retailer_id']);
+                    $batch = sk_meta_catalog_http(
+                        'POST',
+                        'https://graph.facebook.com/v21.0/' . rawurlencode($catalogId) . '/items_batch',
+                        $candidateToken,
+                        [
+                            'item_type' => 'PRODUCT_ITEM',
+                            'allow_upsert' => true,
+                            'requests' => [[
+                                'method' => 'UPDATE',
+                                'retailer_id' => $retailerId,
+                                'data' => $batchData,
+                            ]],
+                        ],
+                        40
+                    );
+                    $batchOk = !empty($batch['ok']);
+                    $handles = $batch['data']['handles'] ?? null;
+                    $validation = $batch['data']['validation_status'][0] ?? null;
+                    if ($batchOk && is_array($validation) && !empty($validation['errors'])) {
+                        $batchOk = false;
+                        $batch['ok'] = false;
+                        $batch['error'] = (string)($validation['errors'][0]['message'] ?? 'items_batch validation failed');
+                    }
+                    if ($batchOk && (empty($handles) || (is_array($handles) && count($handles) < 1))) {
+                        // Accept UPDATE that queued a handle; empty handles after create miss is not success.
+                        // Still allow when Meta returns only validation_status without handles.
+                        if (!empty($validation['errors'])) {
+                            $batchOk = false;
+                        }
+                    }
+                    if ($batchOk) {
+                        $res = $batch;
+                    } elseif (!$res['ok'] && !empty($batch['error'])) {
+                        $res['error'] = trim(($res['error'] ?? '') . ' / batch: ' . $batch['error']);
+                    }
+                }
+                if ($res['ok']) {
+                    $token = $candidateToken;
+                    break;
+                }
             }
-            if ($res['ok']) {
-                $token = $candidateToken;
-                break;
-            }
+            $productsSynced[] = [
+                'product_id'  => (int)($product['id'] ?? 0),
+                'variant_id'  => (int)($variant['id'] ?? 0),
+                'retailer_id' => $retailerId,
+                'action'      => 'upsert',
+                'ok'          => !empty($res['ok']),
+                'error'       => !empty($res['ok']) ? '' : sk_meta_catalog_error_message('Updating product ' . $retailerId, $res),
+            ];
         }
-        $productsSynced[] = [
-            'product_id'  => (int)($product['id'] ?? 0),
-            'retailer_id' => $retailerId,
-            'action'      => 'upsert',
-            'ok'          => !empty($res['ok']),
-            'error'       => !empty($res['ok']) ? '' : sk_meta_catalog_error_message('Updating product ' . $retailerId, $res),
-        ];
     }
 
     // Remove Meta catalog items that no longer exist (or are inactive) in this shop.
