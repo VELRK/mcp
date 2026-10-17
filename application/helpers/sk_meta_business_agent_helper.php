@@ -60,9 +60,8 @@ function sk_meta_ba_config_array(): array {
 
 function sk_meta_ba_is_platform_ready(): bool {
     $cfg = sk_meta_ba_config_array();
-    return $cfg['enabled']
-        && $cfg['system_user_token'] !== ''
-        && $cfg['connector_api_key'] !== '';
+    // Tenant WhatsApp tokens are per-vendor in DB; .env only needs platform connector secrets.
+    return $cfg['enabled'] && $cfg['connector_api_key'] !== '';
 }
 
 function sk_meta_ba_connector_auth_ok(?string $provided): bool {
@@ -98,21 +97,26 @@ function sk_meta_ba_request_token_from_headers(): string {
 
 /**
  * Resolve access token for Meta BA Platform calls for a phone entity.
+ *
+ * SaaS order: each shop uses its own WhatsApp token from vendor_whatsapp_accounts.
+ * META_BA_SYSTEM_USER_TOKEN is only a last-resort platform fallback (your own numbers),
+ * never a shared token for all tenants.
  */
 function sk_meta_ba_access_token(string $phoneNumberId = '', ?array $settings = null): string {
-    $cfg = sk_meta_ba_config_array();
-    if ($cfg['system_user_token'] !== '') {
-        return $cfg['system_user_token'];
-    }
+    $phoneNumberId = trim($phoneNumberId);
     if (function_exists('get_instance') && get_instance() !== null) {
         $CI =& get_instance();
         if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
             $CI->load->model('Sk_Vendor_whatsapp_account_model');
         }
-        $phoneNumberId = trim($phoneNumberId);
         if ($phoneNumberId !== '') {
             $acct = $CI->Sk_Vendor_whatsapp_account_model->get_by_phone($phoneNumberId);
             $tok = trim((string)($acct['access_token'] ?? ''));
+            if ($tok !== '') {
+                return $tok;
+            }
+            // Some rows store the long-lived token in refresh_token after Meta OAuth.
+            $tok = trim((string)($acct['refresh_token'] ?? ''));
             if ($tok !== '') {
                 return $tok;
             }
@@ -120,10 +124,21 @@ function sk_meta_ba_access_token(string $phoneNumberId = '', ?array $settings = 
         if (!function_exists('sk_wa_cloud_config')) {
             $CI->load->helper('sk_whatsapp_cloud');
         }
+        if ($settings === null || !isset($settings['_wa_phone_number_id'])) {
+            $settings = is_array($settings) ? $settings : [];
+            if ($phoneNumberId !== '') {
+                $settings['_wa_phone_number_id'] = $phoneNumberId;
+            }
+        }
         $cloud = sk_wa_cloud_config($settings);
         if (!empty($cloud['access_token'])) {
             return trim((string)$cloud['access_token']);
         }
+    }
+    // Platform-owned numbers only — not per-tenant SaaS credentials.
+    $cfg = sk_meta_ba_config_array();
+    if ($cfg['system_user_token'] !== '') {
+        return $cfg['system_user_token'];
     }
     $envTok = trim((string)(getenv('META_BA_ACCESS_TOKEN') ?: getenv('WHATSAPP_CLOUD_ACCESS_TOKEN') ?: ''));
     return $envTok;
@@ -596,11 +611,131 @@ function sk_meta_ba_ensure_billable_account_id(int $vendorId, bool $force = fals
 }
 
 /**
+ * Business Agent Usage Insights API.
+ * GET https://api.facebook.com/{entity_id}/business_agent_insights (X-API-Version 3.0.0)
+ *
+ * @param array{
+ *   granularity?:string,
+ *   channels?:list<string>,
+ *   sender_ids?:list<string>,
+ *   metric_types?:list<string>,
+ *   dimensions?:list<string>,
+ *   phone_number_id?:string,
+ *   settings?:?array
+ * } $opts
+ * @return array{ok:bool,http:int,error:string,usage:list<array>,totals:array{billable_messages:int,billable_tokens:int,cost:float},raw:?array}
+ */
+function sk_meta_ba_usage_insights(string $billableAccountId, int $startTs, int $endTs, array $opts = []): array {
+    $out = [
+        'ok' => false,
+        'http' => 0,
+        'error' => '',
+        'usage' => [],
+        'totals' => ['billable_messages' => 0, 'billable_tokens' => 0, 'cost' => 0.0],
+        'raw' => null,
+    ];
+    $billableAccountId = preg_replace('/\D+/', '', $billableAccountId) ?: '';
+    if ($billableAccountId === '' || $startTs < 1 || $endTs <= $startTs) {
+        $out['error'] = 'Billable account ID and a valid start/end range are required.';
+        return $out;
+    }
+    $granularity = strtoupper(trim((string)($opts['granularity'] ?? 'DAY')));
+    if (!in_array($granularity, ['HOUR', 'DAY', 'MONTH'], true)) {
+        $granularity = 'DAY';
+    }
+    $channels = array_values(array_filter(array_map('strval', (array)($opts['channels'] ?? ['whatsapp']))));
+    if (!$channels) {
+        $channels = ['whatsapp'];
+    }
+    $senderIds = array_values(array_filter(array_map('strval', (array)($opts['sender_ids'] ?? []))));
+    $metricTypes = array_values(array_filter(array_map('strval', (array)($opts['metric_types'] ?? [
+        'billable_messages', 'billable_tokens', 'cost',
+    ]))));
+    $dimensions = array_values(array_filter(array_map('strval', (array)($opts['dimensions'] ?? [
+        'channel', 'sender_id',
+    ]))));
+    $phoneNumberId = trim((string)($opts['phone_number_id'] ?? ''));
+    $settings = is_array($opts['settings'] ?? null) ? $opts['settings'] : null;
+    $token = trim((string)($opts['token'] ?? ''));
+    if ($token === '') {
+        $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    }
+    if ($token === '') {
+        $out['error'] = 'Meta access token is missing for this WhatsApp number.';
+        return $out;
+    }
+
+    $query = [
+        'start' => (string)$startTs,
+        'end' => (string)$endTs,
+        'granularity' => $granularity,
+        'channels' => $channels,
+        'metric_types' => $metricTypes,
+    ];
+    if ($dimensions) {
+        $query['dimensions'] = $dimensions;
+    }
+    if ($senderIds) {
+        $query['sender_ids'] = $senderIds;
+    }
+
+    $res = sk_meta_ba_http(
+        'GET',
+        sk_meta_ba_query_url($billableAccountId, 'business_agent_insights', $query),
+        null,
+        $token,
+        30,
+        '3.0.0'
+    );
+    $out['http'] = (int)($res['http'] ?? 0);
+    $out['raw'] = is_array($res['data'] ?? null) ? $res['data'] : null;
+    if (empty($res['ok'])) {
+        $err = trim((string)($res['error'] ?? 'request failed'));
+        if ($out['http'] === 403) {
+            $out['error'] = 'Meta denied usage insights (needs business_management). '
+                . 'For SaaS, use the shop’s BISU token from Embedded Signup with that permission. '
+                . ($err !== '' ? $err : '');
+        } elseif ($out['http'] === 404) {
+            $out['error'] = 'Billable account not found. Paste the Meta Business Agent account ID from Billing Hub → Accounts.';
+        } else {
+            $out['error'] = $err !== '' ? $err : ('HTTP ' . $out['http']);
+        }
+        return $out;
+    }
+
+    $rows = is_array($res['data']['usage'] ?? null) ? $res['data']['usage'] : [];
+    $usage = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $item = [
+            'start' => (int)($row['start'] ?? 0),
+            'end' => (int)($row['end'] ?? 0),
+            'channel' => (string)($row['channel'] ?? ''),
+            'sender_id' => (string)($row['sender_id'] ?? ''),
+            'billable_messages' => (int)($row['billable_messages'] ?? 0),
+            'billable_tokens' => (int)($row['billable_tokens'] ?? 0),
+            'cost' => (float)($row['cost'] ?? 0),
+        ];
+        $usage[] = $item;
+        $out['totals']['billable_messages'] += $item['billable_messages'];
+        $out['totals']['billable_tokens'] += $item['billable_tokens'];
+        $out['totals']['cost'] += $item['cost'];
+    }
+    $out['totals']['cost'] = round($out['totals']['cost'], 4);
+    $out['usage'] = $usage;
+    $out['ok'] = true;
+    return $out;
+}
+
+/**
  * Meta Business Agent usage, conversation, and tool-call figures for one vendor phone.
  *
+ * @param array{granularity?:string,sender_ids?:list<string>,this_number_only?:bool} $opts
  * @return array<string, mixed>
  */
-function sk_meta_ba_vendor_insights(string $phoneNumberId, string $billableAccountId, string $from, string $to, ?array $settings = null): array {
+function sk_meta_ba_vendor_insights(string $phoneNumberId, string $billableAccountId, string $from, string $to, ?array $settings = null, array $opts = []): array {
     $empty = [
         'ok' => false,
         'error' => '',
@@ -609,6 +744,7 @@ function sk_meta_ba_vendor_insights(string $phoneNumberId, string $billableAccou
         'conversations' => ['ai_threads' => null, 'ai_handoffs' => null],
         'tools' => [],
         'notes' => [],
+        'granularity' => 'DAY',
     ];
     $phoneNumberId = trim($phoneNumberId);
     $billableAccountId = trim($billableAccountId);
@@ -627,6 +763,16 @@ function sk_meta_ba_vendor_insights(string $phoneNumberId, string $billableAccou
         $tz = new DateTimeZone($tzName);
     } catch (Exception $e) {
         $tz = new DateTimeZone('UTC');
+    }
+    $granularity = strtoupper(trim((string)($opts['granularity'] ?? 'DAY')));
+    if (!in_array($granularity, ['HOUR', 'DAY', 'MONTH'], true)) {
+        $granularity = 'DAY';
+    }
+    $empty['granularity'] = $granularity;
+
+    if ($granularity === 'MONTH') {
+        $from = date('Y-m-01', strtotime($from));
+        $to = date('Y-m-t', strtotime($to));
     }
     $startDt = DateTime::createFromFormat('Y-m-d H:i:s', $from . ' 00:00:00', $tz);
     $endDt = DateTime::createFromFormat('Y-m-d H:i:s', $to . ' 00:00:00', $tz);
@@ -649,37 +795,27 @@ function sk_meta_ba_vendor_insights(string $phoneNumberId, string $billableAccou
     $report['ok'] = true;
     $usageEntity = $billableAccountId !== '' ? $billableAccountId : '';
     if ($usageEntity === '') {
-        $report['notes'][] = 'Business Agent account ID is missing. Open billing and click Auto-detect, or set META_BA_BILLABLE_ACCOUNT_ID in .env (Meta has no list API for this ID).';
+        $report['notes'][] = 'Business Agent account ID is missing. Paste it from Billing Hub → Accounts → Meta Business Agent accounts (asset_id), then Save.';
     } else {
-        $usage = sk_meta_ba_http(
-            'GET',
-            sk_meta_ba_query_url($usageEntity, 'business_agent_insights', [
-                'start' => (string)$startDt->getTimestamp(),
-                'end' => (string)$endDt->getTimestamp(),
-                'granularity' => 'DAY',
-                'channels' => ['whatsapp'],
-                'metric_types' => ['billable_messages', 'billable_tokens', 'cost'],
-                'dimensions' => ['channel', 'sender_id'],
-            ]),
-            null,
-            $token,
-            30,
-            '3.0.0'
-        );
+        $senderIds = array_values(array_filter(array_map('strval', (array)($opts['sender_ids'] ?? []))));
+        if (!empty($opts['this_number_only']) && $phoneNumberId !== '' && !$senderIds) {
+            $senderIds = [$phoneNumberId];
+        }
+        $usage = sk_meta_ba_usage_insights($usageEntity, (int)$startDt->getTimestamp(), (int)$endDt->getTimestamp(), [
+            'granularity' => $granularity,
+            'channels' => ['whatsapp'],
+            'sender_ids' => $senderIds,
+            'metric_types' => ['billable_messages', 'billable_tokens', 'cost'],
+            'dimensions' => ['channel', 'sender_id'],
+            'phone_number_id' => $phoneNumberId,
+            'settings' => $settings,
+            'token' => $token,
+        ]);
         if (empty($usage['ok'])) {
             $report['notes'][] = 'Usage insights: ' . (string)($usage['error'] ?? 'request failed');
         } else {
-            $rows = is_array($usage['data']['usage'] ?? null) ? $usage['data']['usage'] : [];
-            $report['usage'] = $rows;
-            foreach ($rows as $row) {
-                if (!is_array($row)) {
-                    continue;
-                }
-                $report['usage_totals']['billable_messages'] += (int)($row['billable_messages'] ?? 0);
-                $report['usage_totals']['billable_tokens'] += (int)($row['billable_tokens'] ?? 0);
-                $report['usage_totals']['cost'] += (float)($row['cost'] ?? 0);
-            }
-            $report['usage_totals']['cost'] = round($report['usage_totals']['cost'], 4);
+            $report['usage'] = $usage['usage'];
+            $report['usage_totals'] = $usage['totals'];
         }
     }
 

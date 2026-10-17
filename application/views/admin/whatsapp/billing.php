@@ -1,38 +1,87 @@
 <?php
 $pages = max(1, (int)ceil(($total ?: 0) / max(1, $limit)));
+$metaFilters = is_array($meta_filters ?? null) ? $meta_filters : ['granularity' => 'DAY', 'sender_mode' => 'this_number'];
 $qs = http_build_query(array_filter([
-    'preset'    => $range['preset'] ?? 'month',
-    'from'      => ($range['preset'] ?? '') === 'custom' ? ($range['from'] ?? '') : null,
-    'to'        => ($range['preset'] ?? '') === 'custom' ? ($range['to'] ?? '') : null,
-    'vendor_id' => !empty($is_super) && !empty($vendor_id) ? $vendor_id : null,
+    'preset'      => $range['preset'] ?? 'month',
+    'from'        => ($range['preset'] ?? '') === 'custom' ? ($range['from'] ?? '') : null,
+    'to'          => ($range['preset'] ?? '') === 'custom' ? ($range['to'] ?? '') : null,
+    'vendor_id'   => !empty($is_super) && !empty($vendor_id) ? $vendor_id : null,
+    'granularity' => $metaFilters['granularity'] ?? 'DAY',
+    'sender_mode' => $metaFilters['sender_mode'] ?? 'this_number',
 ], function ($v) { return $v !== null && $v !== ''; }));
 $money = function ($amount) use ($currency) {
     return htmlspecialchars($currency) . ' ' . number_format((float)$amount, 4);
 };
+$meta = is_array($meta_report ?? null) ? $meta_report : [];
+$metaTotals = is_array($meta['usage_totals'] ?? null) ? $meta['usage_totals'] : [];
+$metaConv = is_array($meta['conversations'] ?? null) ? $meta['conversations'] : [];
+$usageRows = is_array($meta['usage'] ?? null) ? $meta['usage'] : [];
 ?>
 
 <div class="sk-page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h5 class="sk-page-title mb-0">WhatsApp billing and usage</h5>
-    <small class="text-muted">Meta Business Agent charges, conversations, and tool calls. The tables below are the shop’s own message estimate.</small>
+    <small class="text-muted">Meta Business Agent usage insights (messages, tokens, charges) plus the shop’s own message estimate.</small>
   </div>
   <a class="btn btn-sm btn-outline-secondary" href="<?= site_url('admin/whatsapp/billing/export') . ($qs !== '' ? '?' . $qs : '') ?>">Download CSV</a>
 </div>
 
-<?php
-$meta = is_array($meta_report ?? null) ? $meta_report : [];
-$metaTotals = is_array($meta['usage_totals'] ?? null) ? $meta['usage_totals'] : [];
-$metaConv = is_array($meta['conversations'] ?? null) ? $meta['conversations'] : [];
-$returnQs = $qs !== '' ? ('?' . $qs) : '';
-?>
 <div class="card shadow-sm mb-3">
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <span>Meta Business Agent report</span>
-    <?php if (!empty($meta['phone_number_id'])): ?>
-      <small class="text-muted">Phone <?= htmlspecialchars((string)$meta['phone_number_id']) ?></small>
+    <span>Meta Business Agent usage</span>
+    <?php if (!empty($meta['ba_account_id'])): ?>
+      <small class="text-muted">Billable account <?= htmlspecialchars((string)$meta['ba_account_id']) ?></small>
     <?php endif; ?>
   </div>
   <div class="card-body">
+    <form method="get" class="row g-2 align-items-end mb-3">
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Period</label>
+        <select name="preset" class="form-select form-select-sm">
+          <?php foreach (['today' => 'Today', 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'month' => 'This month', 'prev_month' => 'Previous month', 'custom' => 'Custom'] as $key => $label): ?>
+          <option value="<?= $key ?>" <?= ($range['preset'] ?? '') === $key ? 'selected' : '' ?>><?= $label ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">From</label>
+        <input type="date" name="from" class="form-control form-control-sm" value="<?= htmlspecialchars($range['from'] ?? '') ?>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">To</label>
+        <input type="date" name="to" class="form-control form-control-sm" value="<?= htmlspecialchars($range['to'] ?? '') ?>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Bucket</label>
+        <select name="granularity" class="form-select form-select-sm">
+          <?php foreach (['HOUR' => 'Hour', 'DAY' => 'Day', 'MONTH' => 'Month'] as $key => $label): ?>
+          <option value="<?= $key ?>" <?= ($metaFilters['granularity'] ?? 'DAY') === $key ? 'selected' : '' ?>><?= $label ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Sender</label>
+        <select name="sender_mode" class="form-select form-select-sm">
+          <option value="this_number" <?= ($metaFilters['sender_mode'] ?? '') === 'this_number' ? 'selected' : '' ?>>This WhatsApp number</option>
+          <option value="all" <?= ($metaFilters['sender_mode'] ?? '') === 'all' ? 'selected' : '' ?>>All senders on account</option>
+        </select>
+      </div>
+      <?php if (!empty($is_super)): ?>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Vendor</label>
+        <select name="vendor_id" class="form-select form-select-sm">
+          <option value="0">Choose vendor</option>
+          <?php foreach ($vendors as $vendor): ?>
+          <option value="<?= (int)$vendor['id'] ?>" <?= (int)$vendor_id === (int)$vendor['id'] ? 'selected' : '' ?>><?= htmlspecialchars($vendor['business_name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <?php endif; ?>
+      <div class="col-md-2">
+        <button class="btn btn-sm btn-warning w-100">Apply filters</button>
+      </div>
+    </form>
+
     <?php if (!empty($meta['error'])): ?>
       <div class="alert alert-warning py-2 mb-3"><?= htmlspecialchars((string)$meta['error']) ?></div>
     <?php endif; ?>
@@ -45,10 +94,10 @@ $returnQs = $qs !== '' ? ('?' . $qs) : '';
       <input type="hidden" name="<?= $this->security->get_csrf_token_name() ?>" value="<?= $this->security->get_csrf_hash() ?>">
       <input type="hidden" name="vendor_id" value="<?= (int)$vendor_id ?>">
       <div class="col-md-5">
-        <label class="form-label small mb-1">Meta Business Agent account ID</label>
+        <label class="form-label small mb-1">Meta Business Agent billable account ID</label>
         <input type="text" name="ba_account_id" class="form-control form-control-sm" inputmode="numeric"
                value="<?= htmlspecialchars((string)($meta['ba_account_id'] ?? '')) ?>"
-               placeholder="Auto-detect via API, or paste from Billing Hub">
+               placeholder="Billing Hub → Accounts → Meta Business Agent (asset_id)">
       </div>
       <div class="col-md-2">
         <button class="btn btn-sm btn-warning w-100" name="auto_detect" value="0">Save</button>
@@ -57,8 +106,8 @@ $returnQs = $qs !== '' ? ('?' . $qs) : '';
         <button class="btn btn-sm btn-outline-primary w-100" name="auto_detect" value="1"
                 formaction="<?= site_url('admin/whatsapp/billing/sync-account') ?>">Auto-detect &amp; save</button>
       </div>
-      <?php if (!empty($meta['ba_account_source'])): ?>
-      <div class="col-12"><div class="text-muted small">Source: <?= htmlspecialchars((string)$meta['ba_account_source']) ?></div></div>
+      <?php if (!empty($meta['phone_number_id'])): ?>
+      <div class="col-12"><div class="text-muted small">WhatsApp phone <?= htmlspecialchars((string)$meta['phone_number_id']) ?> · uses this shop’s Meta token</div></div>
       <?php endif; ?>
     </form>
     <?php endif; ?>
@@ -68,43 +117,60 @@ $returnQs = $qs !== '' ? ('?' . $qs) : '';
       $metaCards = [
           'Billable messages' => (int)($metaTotals['billable_messages'] ?? 0),
           'Billable tokens' => (int)($metaTotals['billable_tokens'] ?? 0),
+          'Meta charge' => number_format((float)($metaTotals['cost'] ?? 0), 4),
           'AI conversations' => $metaConv['ai_threads'],
-          'Waiting on staff' => $metaConv['ai_handoffs'],
       ];
       foreach ($metaCards as $label => $value): ?>
       <div class="col-md-3">
         <div class="border rounded p-3 h-100">
           <div class="text-muted small"><?= htmlspecialchars($label) ?></div>
-          <div class="fs-4 fw-bold"><?= $value === null ? '—' : number_format((int)$value) ?></div>
+          <div class="fs-4 fw-bold"><?= $value === null ? '—' : (is_string($value) ? htmlspecialchars($value) : number_format((int)$value)) ?></div>
         </div>
       </div>
       <?php endforeach; ?>
     </div>
-    <div class="mb-3">
-      <div class="text-muted small">Meta charges</div>
-      <div class="fs-5 fw-bold"><?= number_format((float)($metaTotals['cost'] ?? 0), 4) ?></div>
-      <div class="text-muted small">Charges are in the Business Agent account currency. Waiting on staff is the current handoff count, not a total for the dates above.</div>
-    </div>
 
     <div class="table-responsive mb-3">
-      <table class="table table-sm mb-0">
-        <thead><tr><th>Bucket start</th><th>Channel</th><th>Sender</th><th>Messages</th><th>Tokens</th><th>Charge</th></tr></thead>
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Start</th>
+            <th>End</th>
+            <th>Channel</th>
+            <th>Sender ID</th>
+            <th class="text-end">Billable messages</th>
+            <th class="text-end">Billable tokens</th>
+            <th class="text-end">Charge</th>
+          </tr>
+        </thead>
         <tbody>
-        <?php if (empty($meta['usage'])): ?>
-          <tr><td colspan="6" class="text-muted">No Meta usage rows for this period.</td></tr>
-        <?php else: foreach ($meta['usage'] as $row): ?>
+        <?php if (!$usageRows): ?>
+          <tr><td colspan="7" class="text-muted">No usage for this filter. Choose a vendor, save the billable account ID, and ensure the shop token has <code>business_management</code>.</td></tr>
+        <?php else: foreach ($usageRows as $row): ?>
           <tr>
             <td><?= !empty($row['start']) ? htmlspecialchars(date('Y-m-d H:i', (int)$row['start'])) : '—' ?></td>
-            <td><?= htmlspecialchars((string)($row['channel'] ?? '—')) ?></td>
-            <td><?= htmlspecialchars((string)($row['sender_id'] ?? '—')) ?></td>
-            <td><?= (int)($row['billable_messages'] ?? 0) ?></td>
-            <td><?= (int)($row['billable_tokens'] ?? 0) ?></td>
-            <td><?= number_format((float)($row['cost'] ?? 0), 4) ?></td>
+            <td><?= !empty($row['end']) ? htmlspecialchars(date('Y-m-d H:i', (int)$row['end'])) : '—' ?></td>
+            <td><?= htmlspecialchars((string)(($row['channel'] ?? '') !== '' ? $row['channel'] : 'whatsapp')) ?></td>
+            <td><code class="small"><?= htmlspecialchars((string)(($row['sender_id'] ?? '') !== '' ? $row['sender_id'] : '—')) ?></code></td>
+            <td class="text-end"><?= number_format((int)($row['billable_messages'] ?? 0)) ?></td>
+            <td class="text-end"><?= number_format((int)($row['billable_tokens'] ?? 0)) ?></td>
+            <td class="text-end"><?= number_format((float)($row['cost'] ?? 0), 4) ?></td>
           </tr>
         <?php endforeach; endif; ?>
         </tbody>
+        <?php if ($usageRows): ?>
+        <tfoot>
+          <tr class="fw-semibold">
+            <td colspan="4">Total</td>
+            <td class="text-end"><?= number_format((int)($metaTotals['billable_messages'] ?? 0)) ?></td>
+            <td class="text-end"><?= number_format((int)($metaTotals['billable_tokens'] ?? 0)) ?></td>
+            <td class="text-end"><?= number_format((float)($metaTotals['cost'] ?? 0), 4) ?></td>
+          </tr>
+        </tfoot>
+        <?php endif; ?>
       </table>
     </div>
+    <div class="text-muted small mb-3">Charges are in the Business Agent account currency from Meta. Empty rows mean no billable usage in the selected range.</div>
 
     <div class="table-responsive">
       <table class="table table-sm mb-0">

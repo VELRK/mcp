@@ -7,25 +7,28 @@ $metaCost = (float)($totals['cost'] ?? 0);
 $rate = (float)($token_rate ?? 2);
 $estimate = (float)($token_estimate ?? 0);
 $typical = $tokens > 0 ? (int)round($tokens / 22500) : 0;
+$metaFilters = is_array($meta_filters ?? null) ? $meta_filters : ['granularity' => 'DAY', 'sender_mode' => 'this_number'];
 $qs = http_build_query(array_filter([
-    'preset'    => $range['preset'] ?? 'month',
-    'from'      => ($range['preset'] ?? '') === 'custom' ? ($range['from'] ?? '') : null,
-    'to'        => ($range['preset'] ?? '') === 'custom' ? ($range['to'] ?? '') : null,
-    'vendor_id' => !empty($is_super) && !empty($vendor_id) ? $vendor_id : null,
+    'preset'      => $range['preset'] ?? 'month',
+    'from'        => ($range['preset'] ?? '') === 'custom' ? ($range['from'] ?? '') : null,
+    'to'          => ($range['preset'] ?? '') === 'custom' ? ($range['to'] ?? '') : null,
+    'vendor_id'   => !empty($is_super) && !empty($vendor_id) ? $vendor_id : null,
+    'granularity' => $metaFilters['granularity'] ?? 'DAY',
+    'sender_mode' => $metaFilters['sender_mode'] ?? 'this_number',
 ], function ($v) { return $v !== null && $v !== ''; }));
 ?>
 
 <div class="sk-page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h5 class="sk-page-title mb-0">Token usage</h5>
-    <small class="text-muted">Meta Business Agent replies are charged per token. The rate is $2.00 USD per 1,000,000 tokens.</small>
+    <small class="text-muted">Meta Business Agent billable tokens and charges from usage insights. Estimate uses $2.00 per 1,000,000 tokens.</small>
   </div>
 </div>
 
 <div class="card shadow-sm mb-3">
   <div class="card-body py-2">
     <form method="get" class="row g-2 align-items-end">
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label small mb-1">Period</label>
         <select name="preset" class="form-select form-select-sm">
           <?php foreach (['today' => 'Today', 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'month' => 'This month', 'prev_month' => 'Previous month', 'custom' => 'Custom'] as $key => $label): ?>
@@ -41,8 +44,23 @@ $qs = http_build_query(array_filter([
         <label class="form-label small mb-1">To</label>
         <input type="date" name="to" class="form-control form-control-sm" value="<?= htmlspecialchars($range['to'] ?? '') ?>">
       </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Bucket</label>
+        <select name="granularity" class="form-select form-select-sm">
+          <?php foreach (['HOUR' => 'Hour', 'DAY' => 'Day', 'MONTH' => 'Month'] as $key => $label): ?>
+          <option value="<?= $key ?>" <?= ($metaFilters['granularity'] ?? 'DAY') === $key ? 'selected' : '' ?>><?= $label ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Sender</label>
+        <select name="sender_mode" class="form-select form-select-sm">
+          <option value="this_number" <?= ($metaFilters['sender_mode'] ?? '') === 'this_number' ? 'selected' : '' ?>>This number</option>
+          <option value="all" <?= ($metaFilters['sender_mode'] ?? '') === 'all' ? 'selected' : '' ?>>All senders</option>
+        </select>
+      </div>
       <?php if (!empty($is_super)): ?>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label small mb-1">Vendor</label>
         <select name="vendor_id" class="form-select form-select-sm">
           <option value="0">Choose a vendor</option>
@@ -53,7 +71,7 @@ $qs = http_build_query(array_filter([
       </div>
       <?php endif; ?>
       <div class="col-md-2">
-        <button class="btn btn-sm btn-warning w-100">Apply</button>
+        <button class="btn btn-sm btn-warning w-100">Apply filters</button>
       </div>
     </form>
   </div>

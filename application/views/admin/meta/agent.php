@@ -45,12 +45,17 @@ $webhook = $webhook_uri ?? '';
             <span class="text-muted">— subscribe <code>messages</code>, <code>standby</code>, <code>messaging_handovers</code></span>
           </div>
         </div>
+        <p class="small text-muted mt-3 mb-0">
+          SaaS: each shop’s Meta token and BA billable account ID are stored on that WhatsApp number
+          (<code>vendor_whatsapp_accounts</code>), not in <code>.env</code>.
+        </p>
         <?php if (!$platform_ready): ?>
           <div class="alert alert-warning mt-3 mb-0 small">
             Copy <code>.env.example</code> to <code>.env</code> and set
-            <code>META_BA_ENABLED=1</code>, <code>META_BA_SYSTEM_USER_TOKEN</code>,
+            <code>META_BA_ENABLED=1</code>,
             <code>META_BA_CONNECTOR_API_KEY</code>, and a public
             <code>META_BA_CONNECTOR_BASE_URL</code> (HTTPS in production).
+            Per-shop WhatsApp tokens come from Meta connect, not <code>META_BA_SYSTEM_USER_TOKEN</code>.
           </div>
         <?php endif; ?>
       </div>

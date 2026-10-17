@@ -47,7 +47,8 @@ class Whatsapp_billing extends Sk_Base {
         $listed = $this->_messages($range, $vendorId, $data['limit'], $data['offset']);
         $data['messages'] = $listed['rows'];
         $data['total'] = $listed['total'];
-        $data['meta_report'] = $this->_meta_report($range, $vendorId);
+        $data['meta_filters'] = $this->_meta_filters();
+        $data['meta_report'] = $this->_meta_report($range, $vendorId, $data['meta_filters']);
         $this->render('whatsapp/billing', $data);
     }
 
@@ -109,7 +110,8 @@ class Whatsapp_billing extends Sk_Base {
     public function tokens() {
         $range = $this->_range();
         $vendorId = $this->_scoped_vendor_id();
-        $report = $this->_meta_report($range, $vendorId);
+        $metaFilters = $this->_meta_filters();
+        $report = $this->_meta_report($range, $vendorId, $metaFilters);
         $tokens = (int)($report['usage_totals']['billable_tokens'] ?? 0);
         $rate = 2.0;
         $days = [];
@@ -132,6 +134,7 @@ class Whatsapp_billing extends Sk_Base {
             'vendor_id' => $vendorId,
             'is_super' => $this->is_super_admin(),
             'vendors' => $this->is_super_admin() ? $this->_vendor_options() : [],
+            'meta_filters' => $metaFilters,
             'meta_report' => $report,
             'token_rate' => $rate,
             'token_estimate' => round($tokens / 1000000 * $rate, 4),
@@ -222,7 +225,25 @@ class Whatsapp_billing extends Sk_Base {
         }
     }
 
-    protected function _meta_report(array $range, int $vendorId): array {
+    /** Filters for Meta business_agent_insights. */
+    protected function _meta_filters(): array {
+        $granularity = strtoupper(trim((string)$this->input->get('granularity', TRUE)));
+        if (!in_array($granularity, ['HOUR', 'DAY', 'MONTH'], true)) {
+            $granularity = 'DAY';
+        }
+        $senderMode = trim((string)$this->input->get('sender_mode', TRUE));
+        if (!in_array($senderMode, ['all', 'this_number'], true)) {
+            $senderMode = 'this_number';
+        }
+        return [
+            'granularity' => $granularity,
+            'sender_mode' => $senderMode,
+            'this_number_only' => $senderMode === 'this_number',
+        ];
+    }
+
+    protected function _meta_report(array $range, int $vendorId, ?array $metaFilters = null): array {
+        $metaFilters = is_array($metaFilters) ? $metaFilters : $this->_meta_filters();
         $report = [
             'ready' => false,
             'error' => $vendorId > 0 ? '' : 'Choose one vendor to load the Meta Business Agent report.',
@@ -233,6 +254,7 @@ class Whatsapp_billing extends Sk_Base {
             'conversations' => ['ai_threads' => null, 'ai_handoffs' => null],
             'tools' => [],
             'notes' => [],
+            'granularity' => (string)($metaFilters['granularity'] ?? 'DAY'),
         ];
         if ($vendorId < 1) {
             return $report;
@@ -248,7 +270,7 @@ class Whatsapp_billing extends Sk_Base {
         $report['phone_number_id'] = (string)$account['phone_number_id'];
         $report['ba_account_id'] = (string)($account['ba_account_id'] ?? '');
         $report['ba_account_source'] = '';
-        // Auto-discover + persist per vendor using Meta Agent system token / WA token.
+        // Auto-discover + persist per vendor using that shop's WhatsApp token.
         if (trim($report['ba_account_id']) === '') {
             $ensured = sk_meta_ba_ensure_billable_account_id($vendorId, false, $settings);
             if (!empty($ensured['ok']) && trim((string)($ensured['account_id'] ?? '')) !== '') {
@@ -266,13 +288,18 @@ class Whatsapp_billing extends Sk_Base {
             $report['ba_account_id'],
             $range['from'],
             $range['to'],
-            $settings
+            $settings,
+            [
+                'granularity' => (string)($metaFilters['granularity'] ?? 'DAY'),
+                'this_number_only' => !empty($metaFilters['this_number_only']),
+            ]
         );
         $report['ready'] = !empty($live['ok']);
         $report['usage'] = $live['usage'] ?? [];
         $report['usage_totals'] = $live['usage_totals'] ?? $report['usage_totals'];
         $report['conversations'] = $live['conversations'] ?? $report['conversations'];
         $report['tools'] = $live['tools'] ?? [];
+        $report['granularity'] = (string)($live['granularity'] ?? $report['granularity']);
         $report['notes'] = array_values(array_unique(array_merge($report['notes'], $live['notes'] ?? [])));
         $report['error'] = (string)($live['error'] ?? '');
         return $report;
