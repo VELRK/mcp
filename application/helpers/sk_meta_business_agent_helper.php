@@ -692,9 +692,12 @@ function sk_meta_ba_usage_insights(string $billableAccountId, int $startTs, int 
     if (empty($res['ok'])) {
         $err = trim((string)($res['error'] ?? 'request failed'));
         if ($out['http'] === 403) {
-            $out['error'] = 'Meta denied usage insights (needs business_management). '
-                . 'For SaaS, use the shop’s BISU token from Embedded Signup with that permission. '
-                . ($err !== '' ? $err : '');
+            $out['error'] = 'Meta blocked exact cost for this shop: the WhatsApp token is not a system user '
+                . 'of the business that owns billable account ' . $billableAccountId . '. '
+                . 'Fix: open that business in Meta Business Settings → Users → System users, add/generate a '
+                . 'token with business_management for THIS business (or re-run Embedded Signup for the shop), '
+                . 'then save the new token on the WhatsApp number. '
+                . ($err !== '' ? '(' . $err . ')' : '');
         } elseif ($out['http'] === 404) {
             $out['error'] = 'Billable account not found. Paste the Meta Business Agent account ID from Billing Hub → Accounts.';
         } else {

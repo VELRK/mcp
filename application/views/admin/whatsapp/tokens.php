@@ -83,6 +83,25 @@ $qs = http_build_query(array_filter([
 <?php foreach (($meta['notes'] ?? []) as $note): ?>
   <div class="alert alert-light border py-2"><?= htmlspecialchars((string)$note) ?></div>
 <?php endforeach; ?>
+<?php
+$notesHay = strtolower(implode(' ', array_map('strval', (array)($meta['notes'] ?? []))));
+$needsBizMgmt = (strpos(strtolower((string)($meta['error'] ?? '')), 'system user') !== false)
+    || (strpos($notesHay, 'system user') !== false)
+    || (strpos($notesHay, 'business_management') !== false);
+if ($needsBizMgmt && (int)($vendor_id ?? 0) > 0):
+?>
+  <div class="alert alert-danger border">
+    <strong>Exact Meta cost needs a client business token.</strong>
+    Account ID <code><?= htmlspecialchars((string)($meta['ba_account_id'] ?? '')) ?></code> is saved,
+    but Meta returns 403 until a <em>system user of that same business</em> calls the API.
+    <ol class="mb-2 mt-2 small">
+      <li>Meta Business Settings → business that owns this BA account → <strong>Users → System users</strong></li>
+      <li>Create/add a system user with Finance/Admin and generate a token including <code>business_management</code></li>
+      <li>Or re-run <a href="<?= site_url('admin/whatsapp_requests') ?>">WhatsApp Embedded Signup</a> for this shop so Meta issues a BISU on that business</li>
+      <li>Store that token on the shop’s WhatsApp number, then reload this page</li>
+    </ol>
+  </div>
+<?php endif; ?>
 
 <?php if ((int)($vendor_id ?? 0) > 0): ?>
 <form method="post" action="<?= site_url('admin/whatsapp/billing/account') ?>" class="card shadow-sm mb-3">
