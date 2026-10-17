@@ -86,6 +86,7 @@ $webhook = $webhook_uri ?? '';
               <th>Number</th>
               <th>Vendor</th>
               <th>Agent</th>
+              <th>BA billable</th>
               <th>Status</th>
               <th style="min-width:280px">Actions</th>
             </tr>
@@ -116,6 +117,13 @@ $webhook = $webhook_uri ?? '';
                 <?php endif; ?>
               </td>
               <td class="small">
+                <?php if (!empty($acct['ba_account_id'])): ?>
+                  <code><?= htmlspecialchars((string)$acct['ba_account_id']) ?></code>
+                <?php else: ?>
+                  <span class="text-muted">—</span>
+                <?php endif; ?>
+              </td>
+              <td class="small">
                 <?php
                   $bits = [];
                   if (!empty($agent['eligible'])) $bits[] = 'eligible';
@@ -131,6 +139,7 @@ $webhook = $webhook_uri ?? '';
               </td>
               <td>
                 <div class="d-flex flex-wrap gap-1">
+                  <button type="button" class="btn btn-sm btn-outline-primary mba-op" data-op="sync_billing">Sync billing ID</button>
                   <button type="button" class="btn btn-sm btn-outline-success mba-op" data-op="sync">Sync tools</button>
                   <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="list_connectors">Connectors</button>
                   <button type="button" class="btn btn-sm btn-outline-secondary mba-op" data-op="connector_logs">Conn. logs</button>

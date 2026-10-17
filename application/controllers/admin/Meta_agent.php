@@ -27,15 +27,23 @@ class Meta_agent extends Sk_Base {
             $accounts = $this->Sk_Vendor_whatsapp_account_model->list_all('active', 300);
         }
 
+        $settings = $this->Sk_Admin_model->get_settings();
         $rows = [];
         foreach ($accounts as $acct) {
             $phoneId = trim((string)($acct['phone_number_id'] ?? ''));
             if ($phoneId === '') {
                 continue;
             }
+            $vid = (int)($acct['vendor_id'] ?? 0);
+            // Per-vendor BA billable ID via Meta Agent system token (not a global SaaS ID).
+            if ($vid > 0 && trim((string)($acct['ba_account_id'] ?? '')) === '' && sk_meta_ba_access_token($phoneId, $settings) !== '') {
+                $ensured = sk_meta_ba_ensure_billable_account_id($vid, false, $settings);
+                if (!empty($ensured['ok']) && !empty($ensured['account_id'])) {
+                    $acct['ba_account_id'] = (string)$ensured['account_id'];
+                }
+            }
             $agent = $this->Sk_Vendor_meta_agent_model->get_by_phone($phoneId);
             $vendor = null;
-            $vid = (int)($acct['vendor_id'] ?? 0);
             if ($vid > 0) {
                 $vendor = $this->Sk_Vendor_model->get_by_id($vid, false);
             }
@@ -141,6 +149,10 @@ class Meta_agent extends Sk_Base {
                 'last_error'     => $res['ok'] ? '' : ($res['error'] ?? 'Onboard failed'),
                 'last_synced_at' => date('Y-m-d H:i:s'),
             ]);
+            // Best-effort: discover Billing Hub BA account ID and store on the WhatsApp row.
+            if ($res['ok'] && $vendorId > 0) {
+                sk_meta_ba_ensure_billable_account_id((int)$vendorId, false, $settings);
+            }
             $setupNotes = [];
             if ($res['ok']) {
                 $ins = sk_meta_ba_upsert_instructions(
@@ -227,6 +239,18 @@ class Meta_agent extends Sk_Base {
                         'op'       => 'prepare',
                         'data'     => $prep['ok'] ? $prep : $fail['data'],
                     ], $prep['ok'] ? 200 : 400);
+
+                case 'sync_billing':
+                    $billing = sk_meta_ba_ensure_billable_account_id($vendorId, true, $settings);
+                    return $this->json([
+                        'success' => !empty($billing['ok']),
+                        'message' => !empty($billing['ok'])
+                            ? ('BA billable account saved: ' . $billing['account_id'] . ' (' . ($billing['source'] ?? 'probe') . ').')
+                            : ((string)($billing['error'] ?? 'Could not detect BA billable account.')),
+                        'op' => 'sync_billing',
+                        'ba_account_id' => (string)($billing['account_id'] ?? ''),
+                        'data' => $billing,
+                    ], !empty($billing['ok']) ? 200 : 400);
 
                 case 'sync':
                     $prep = $ensurePrepared(false);

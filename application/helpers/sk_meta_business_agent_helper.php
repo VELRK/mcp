@@ -18,6 +18,7 @@ function sk_meta_ba_config_array(): array {
             'api_base'            => (string)$CI->config->item('meta_ba_api_base', 'meta_business_agent'),
             'api_version'         => (string)$CI->config->item('meta_ba_api_version', 'meta_business_agent'),
             'system_user_token'   => (string)$CI->config->item('meta_ba_system_user_token', 'meta_business_agent'),
+            'billable_account_id' => preg_replace('/\D+/', '', (string)$CI->config->item('meta_ba_billable_account_id', 'meta_business_agent')) ?: '',
             'connector_api_key'   => (string)$CI->config->item('meta_ba_connector_api_key', 'meta_business_agent'),
             'connector_base_url'  => (string)$CI->config->item('meta_ba_connector_base_url', 'meta_business_agent'),
             'default_audience'    => (string)$CI->config->item('meta_ba_default_audience', 'meta_business_agent'),
@@ -34,6 +35,7 @@ function sk_meta_ba_config_array(): array {
             'api_base'            => rtrim(sk_env('META_BA_API_BASE', 'https://api.facebook.com'), '/'),
             'api_version'         => (string)(sk_env('META_BA_API_VERSION', '2.0.0') ?: '2.0.0'),
             'system_user_token'   => sk_env('META_BA_SYSTEM_USER_TOKEN', ''),
+            'billable_account_id' => preg_replace('/\D+/', '', (string)sk_env('META_BA_BILLABLE_ACCOUNT_ID', '')) ?: '',
             'connector_api_key'   => sk_env('META_BA_CONNECTOR_API_KEY', ''),
             'connector_base_url'  => rtrim(sk_env('META_BA_CONNECTOR_BASE_URL', ''), '/'),
             'default_audience'    => strtoupper(sk_env('META_BA_DEFAULT_AUDIENCE', 'ALLOWLISTED_ONLY')) ?: 'ALLOWLISTED_ONLY',
@@ -252,6 +254,348 @@ function sk_meta_ba_query_url(string $entityId, string $path, array $query): str
 }
 
 /**
+ * Dig nested Meta payloads for a billable / Business Agent account id.
+ */
+function sk_meta_ba_extract_billable_account_id($node): string {
+    if (!is_array($node)) {
+        return '';
+    }
+    $keys = [
+        'billable_account_id', 'ba_account_id', 'business_agent_account_id',
+        'billing_account_id', 'account_id', 'entity_id',
+    ];
+    foreach ($keys as $key) {
+        if (!isset($node[$key])) {
+            continue;
+        }
+        $raw = is_scalar($node[$key]) ? (string)$node[$key] : '';
+        $id = preg_replace('/\D+/', '', $raw) ?: '';
+        if ($id !== '' && strlen($id) >= 5) {
+            return $id;
+        }
+    }
+    foreach ($node as $value) {
+        if (is_array($value)) {
+            $found = sk_meta_ba_extract_billable_account_id($value);
+            if ($found !== '') {
+                return $found;
+            }
+        }
+    }
+    return '';
+}
+
+/**
+ * True when entity_id accepts business_agent_insights (HTTP 200).
+ * Meta has no list API for Billing Hub BA account IDs — we probe candidates instead.
+ */
+function sk_meta_ba_probe_billable_account_id(string $entityId, string $token): bool {
+    $entityId = preg_replace('/\D+/', '', $entityId) ?: '';
+    if ($entityId === '' || $token === '') {
+        return false;
+    }
+    $end = time();
+    $start = $end - (2 * 86400);
+    $res = sk_meta_ba_http(
+        'GET',
+        sk_meta_ba_query_url($entityId, 'business_agent_insights', [
+            'start' => (string)$start,
+            'end' => (string)$end,
+            'granularity' => 'DAY',
+            'metric_types' => ['billable_messages'],
+        ]),
+        null,
+        $token,
+        20,
+        '3.0.0'
+    );
+    return !empty($res['ok']) && (int)($res['http'] ?? 0) >= 200 && (int)($res['http'] ?? 0) < 300;
+}
+
+/**
+ * Fill waba_id / business_id on the WhatsApp account from Graph (uses Meta Agent system token).
+ *
+ * @return array{ok:bool,account:array,error:string}
+ */
+function sk_meta_ba_enrich_whatsapp_account(array $accountRow, ?array $settings = null): array {
+    $out = ['ok' => false, 'account' => $accountRow, 'error' => ''];
+    $phoneNumberId = trim((string)($accountRow['phone_number_id'] ?? ''));
+    if ($phoneNumberId === '') {
+        $out['error'] = 'Missing phone_number_id.';
+        return $out;
+    }
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '') {
+        $out['error'] = 'Meta access token is missing.';
+        return $out;
+    }
+    if (!function_exists('sk_wa_meta_graph')) {
+        if (function_exists('get_instance') && get_instance() !== null) {
+            get_instance()->load->helper('sk_whatsapp_cloud');
+        }
+    }
+    if (!function_exists('sk_wa_meta_graph')) {
+        $out['error'] = 'Graph helper unavailable.';
+        return $out;
+    }
+
+    $needWaba = trim((string)($accountRow['waba_id'] ?? '')) === '';
+    $needBiz = trim((string)($accountRow['business_id'] ?? '')) === '';
+    $patch = [];
+    if ($needWaba || $needBiz) {
+        $phone = sk_wa_meta_graph(
+            'GET',
+            $phoneNumberId,
+            ['fields' => 'id,display_phone_number,whatsapp_business_account{id,name,owner_business_info}'],
+            null,
+            $token,
+            $settings
+        );
+        if (!empty($phone['ok']) && is_array($phone['data'] ?? null)) {
+            $waba = is_array($phone['data']['whatsapp_business_account'] ?? null)
+                ? $phone['data']['whatsapp_business_account']
+                : [];
+            $wabaId = trim((string)($waba['id'] ?? ''));
+            $ownerBiz = $waba['owner_business_info'] ?? null;
+            if (is_array($ownerBiz)) {
+                $bizId = trim((string)($ownerBiz['id'] ?? ''));
+            } else {
+                $bizId = trim((string)($ownerBiz ?? ''));
+            }
+            $bizId = preg_replace('/\D+/', '', $bizId) ?: '';
+            if ($needWaba && $wabaId !== '') {
+                $patch['waba_id'] = $wabaId;
+            }
+            if ($needBiz && $bizId !== '') {
+                $patch['business_id'] = $bizId;
+            }
+            $display = trim((string)($phone['data']['display_phone_number'] ?? ''));
+            if ($display !== '' && trim((string)($accountRow['display_phone'] ?? '')) === '') {
+                $patch['display_phone'] = $display;
+            }
+        }
+    }
+    if ($needBiz && empty($patch['business_id'])) {
+        $biz = sk_wa_meta_graph('GET', 'me/businesses', ['fields' => 'id,name', 'limit' => '5'], null, $token, $settings);
+        $first = is_array($biz['data']['data'][0] ?? null) ? $biz['data']['data'][0] : [];
+        $bizId = trim((string)($first['id'] ?? ''));
+        if ($bizId !== '') {
+            $patch['business_id'] = $bizId;
+        }
+    }
+
+    if ($patch && function_exists('get_instance') && get_instance() !== null) {
+        $CI =& get_instance();
+        $rowId = (int)($accountRow['id'] ?? 0);
+        if ($rowId > 0 && isset($CI->db)) {
+            $patch['updated_at'] = date('Y-m-d H:i:s');
+            $CI->db->where('id', $rowId)->update('vendor_whatsapp_accounts', $patch);
+            $accountRow = array_merge($accountRow, $patch);
+        }
+    }
+    $out['ok'] = true;
+    $out['account'] = $accountRow;
+    return $out;
+}
+
+/**
+ * Candidate IDs that may be the Billing Hub Business Agent account (per WhatsApp / business).
+ *
+ * @return list<string>
+ */
+function sk_meta_ba_candidate_billable_ids(string $phoneNumberId, ?array $accountRow = null, string $token = ''): array {
+    $candidates = [];
+    $push = static function (string $id) use (&$candidates): void {
+        $id = preg_replace('/\D+/', '', $id) ?: '';
+        if ($id !== '' && !in_array($id, $candidates, true)) {
+            $candidates[] = $id;
+        }
+    };
+
+    // SaaS order: per-account IDs first. Global .env is last-resort only.
+    if (is_array($accountRow)) {
+        $push((string)($accountRow['ba_account_id'] ?? ''));
+        $push((string)($accountRow['business_id'] ?? ''));
+        $push((string)($accountRow['waba_id'] ?? ''));
+        $push((string)($accountRow['phone_number_id'] ?? ''));
+    }
+    $push($phoneNumberId);
+
+    if (function_exists('get_instance') && get_instance() !== null) {
+        $CI =& get_instance();
+        if (!isset($CI->Sk_Vendor_meta_agent_model)) {
+            $CI->load->model('Sk_Vendor_meta_agent_model');
+        }
+        $agent = $CI->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
+        if ($agent) {
+            $push((string)($agent['agent_id'] ?? ''));
+            $fromJson = sk_meta_ba_extract_billable_account_id(
+                json_decode((string)($agent['eligibility_json'] ?? ''), true)
+            );
+            $push($fromJson);
+        }
+    }
+
+    if ($token !== '') {
+        if (!function_exists('sk_wa_meta_graph')) {
+            if (function_exists('get_instance') && get_instance() !== null) {
+                get_instance()->load->helper('sk_whatsapp_cloud');
+            }
+        }
+        if (function_exists('sk_wa_meta_graph')) {
+            $biz = sk_wa_meta_graph('GET', 'me/businesses', ['fields' => 'id,name', 'limit' => '25'], null, $token, null);
+            $rows = is_array($biz['data']['data'] ?? null) ? $biz['data']['data'] : [];
+            foreach ($rows as $row) {
+                if (is_array($row)) {
+                    $push((string)($row['id'] ?? ''));
+                }
+            }
+        }
+    }
+
+    $cfgId = (string)(sk_meta_ba_config_array()['billable_account_id'] ?? '');
+    $push($cfgId);
+
+    $priority = [];
+    if (is_array($accountRow) && trim((string)($accountRow['ba_account_id'] ?? '')) !== '') {
+        $priority[] = preg_replace('/\D+/', '', (string)$accountRow['ba_account_id']) ?: '';
+    }
+    if (is_array($accountRow) && trim((string)($accountRow['business_id'] ?? '')) !== '') {
+        $priority[] = preg_replace('/\D+/', '', (string)$accountRow['business_id']) ?: '';
+    }
+    if (is_array($accountRow) && trim((string)($accountRow['waba_id'] ?? '')) !== '') {
+        $priority[] = preg_replace('/\D+/', '', (string)$accountRow['waba_id']) ?: '';
+    }
+    $ordered = [];
+    foreach (array_merge($priority, $candidates) as $id) {
+        $id = preg_replace('/\D+/', '', (string)$id) ?: '';
+        if ($id !== '' && !in_array($id, $ordered, true)) {
+            $ordered[] = $id;
+        }
+    }
+    return $ordered;
+}
+
+/**
+ * Discover Meta Business Agent billable account ID and optionally persist it.
+ *
+ * Meta documents that this ID cannot be listed via API; we auto-probe known IDs
+ * (env, business, WABA, phone, agent) and store the first that accepts insights.
+ *
+ * @return array{ok:bool,account_id:string,source:string,error:string,tried:list<string>}
+ */
+function sk_meta_ba_discover_billable_account_id(string $phoneNumberId, ?array $accountRow = null, ?array $settings = null): array {
+    $phoneNumberId = trim($phoneNumberId);
+    $out = ['ok' => false, 'account_id' => '', 'source' => '', 'error' => '', 'tried' => []];
+    if ($phoneNumberId === '') {
+        $out['error'] = 'Missing WhatsApp phone number id.';
+        return $out;
+    }
+    $token = sk_meta_ba_access_token($phoneNumberId, $settings);
+    if ($token === '') {
+        $out['error'] = 'Meta access token is missing.';
+        return $out;
+    }
+
+    // Prefer IDs already present in agent settings / onboarding payloads.
+    $settingsRes = sk_meta_ba_get_settings($phoneNumberId, null, $settings);
+    if (!empty($settingsRes['ok'])) {
+        $fromSettings = sk_meta_ba_extract_billable_account_id($settingsRes['data'] ?? null);
+        if ($fromSettings !== '' && sk_meta_ba_probe_billable_account_id($fromSettings, $token)) {
+            $out['ok'] = true;
+            $out['account_id'] = $fromSettings;
+            $out['source'] = 'agent_settings';
+            return $out;
+        }
+    }
+
+    $candidates = sk_meta_ba_candidate_billable_ids($phoneNumberId, $accountRow, $token);
+    foreach ($candidates as $candidate) {
+        $out['tried'][] = $candidate;
+        if (!sk_meta_ba_probe_billable_account_id($candidate, $token)) {
+            continue;
+        }
+        $out['ok'] = true;
+        $out['account_id'] = $candidate;
+        $cfgId = (string)(sk_meta_ba_config_array()['billable_account_id'] ?? '');
+        if ($candidate === $cfgId) {
+            $out['source'] = 'env';
+        } elseif (is_array($accountRow) && $candidate === (preg_replace('/\D+/', '', (string)($accountRow['ba_account_id'] ?? '')) ?: '')) {
+            $out['source'] = 'stored';
+        } elseif ($candidate === $phoneNumberId) {
+            $out['source'] = 'phone_number_id';
+        } elseif (is_array($accountRow) && $candidate === (preg_replace('/\D+/', '', (string)($accountRow['waba_id'] ?? '')) ?: '')) {
+            $out['source'] = 'waba_id';
+        } elseif (is_array($accountRow) && $candidate === (preg_replace('/\D+/', '', (string)($accountRow['business_id'] ?? '')) ?: '')) {
+            $out['source'] = 'business_id';
+        } else {
+            $out['source'] = 'probe';
+        }
+        return $out;
+    }
+
+    $out['error'] = 'Meta does not expose a Business Agent account list API. '
+        . 'No candidate ID accepted usage insights for this WhatsApp number. '
+        . 'Paste the Billing Hub Business Agent account ID once on billing; it is stored per vendor.';
+    return $out;
+}
+
+/**
+ * Resolve BA billable account for a vendor WhatsApp row and store it when found.
+ * Uses META_BA_SYSTEM_USER_TOKEN (same as Admin → Meta Agent) when set.
+ *
+ * @return array{ok:bool,account_id:string,source:string,error:string,saved:bool,tried?:list<string>}
+ */
+function sk_meta_ba_ensure_billable_account_id(int $vendorId, bool $force = false, ?array $settings = null): array {
+    $out = ['ok' => false, 'account_id' => '', 'source' => '', 'error' => '', 'saved' => false];
+    if ($vendorId < 1 || !function_exists('get_instance') || get_instance() === null) {
+        $out['error'] = 'Vendor is required.';
+        return $out;
+    }
+    $CI =& get_instance();
+    if (!isset($CI->Sk_Vendor_whatsapp_account_model)) {
+        $CI->load->model('Sk_Vendor_whatsapp_account_model');
+    }
+    if ($settings === null && isset($CI->Sk_Admin_model)) {
+        $settings = $CI->Sk_Admin_model->get_settings();
+    } elseif ($settings === null) {
+        $CI->load->model('Sk_Admin_model');
+        $settings = $CI->Sk_Admin_model->get_settings();
+    }
+    $account = $CI->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vendorId);
+    if (!$account || trim((string)($account['phone_number_id'] ?? '')) === '') {
+        $out['error'] = 'This vendor has no WhatsApp phone number yet.';
+        return $out;
+    }
+    $enriched = sk_meta_ba_enrich_whatsapp_account($account, $settings);
+    if (!empty($enriched['account'])) {
+        $account = $enriched['account'];
+    }
+    $stored = preg_replace('/\D+/', '', (string)($account['ba_account_id'] ?? '')) ?: '';
+    $token = sk_meta_ba_access_token((string)$account['phone_number_id'], $settings);
+    if (!$force && $stored !== '' && ($token === '' || sk_meta_ba_probe_billable_account_id($stored, $token))) {
+        $out['ok'] = true;
+        $out['account_id'] = $stored;
+        $out['source'] = 'stored';
+        return $out;
+    }
+
+    $found = sk_meta_ba_discover_billable_account_id((string)$account['phone_number_id'], $account, $settings);
+    $out['tried'] = $found['tried'] ?? [];
+    if (empty($found['ok']) || trim((string)$found['account_id']) === '') {
+        $out['error'] = (string)($found['error'] ?? 'Could not discover Business Agent account ID.');
+        return $out;
+    }
+    $accountId = (string)$found['account_id'];
+    $saved = $CI->Sk_Vendor_whatsapp_account_model->set_ba_account_id($vendorId, $accountId);
+    $out['ok'] = true;
+    $out['account_id'] = $accountId;
+    $out['source'] = (string)($found['source'] ?? 'probe');
+    $out['saved'] = (bool)$saved;
+    return $out;
+}
+
+/**
  * Meta Business Agent usage, conversation, and tool-call figures for one vendor phone.
  *
  * @return array<string, mixed>
@@ -305,7 +649,7 @@ function sk_meta_ba_vendor_insights(string $phoneNumberId, string $billableAccou
     $report['ok'] = true;
     $usageEntity = $billableAccountId !== '' ? $billableAccountId : '';
     if ($usageEntity === '') {
-        $report['notes'][] = 'Paste the Meta Business Agent account ID from Billing Hub to load billable messages, tokens, and charges.';
+        $report['notes'][] = 'Business Agent account ID is missing. Open billing and click Auto-detect, or set META_BA_BILLABLE_ACCOUNT_ID in .env (Meta has no list API for this ID).';
     } else {
         $usage = sk_meta_ba_http(
             'GET',

@@ -60,13 +60,46 @@ class Whatsapp_billing extends Sk_Base {
             }
         }
         $accountId = trim((string)$this->input->post('ba_account_id'));
-        $this->load->model('Sk_Vendor_whatsapp_account_model');
-        $ok = $vendorId > 0 && $this->Sk_Vendor_whatsapp_account_model->set_ba_account_id($vendorId, $accountId);
-        $this->session->set_flashdata($ok ? 'success' : 'error', $ok
-            ? 'Meta Business Agent account ID saved.'
-            : 'Choose a vendor that already has a WhatsApp number, then save the account ID.');
+        $this->load->model(['Sk_Vendor_whatsapp_account_model', 'Sk_Admin_model']);
+        $this->load->helper('sk_meta_business_agent');
+        $settings = $this->Sk_Admin_model->get_settings();
+        $auto = (string)$this->input->post('auto_detect') === '1' || $accountId === '';
+        if ($auto && $vendorId > 0) {
+            $found = sk_meta_ba_ensure_billable_account_id($vendorId, true, $settings);
+            $this->session->set_flashdata(!empty($found['ok']) ? 'success' : 'error', !empty($found['ok'])
+                ? ('Business Agent account ID auto-saved: ' . $found['account_id'] . ' (' . ($found['source'] ?? 'probe') . ').')
+                : ((string)($found['error'] ?? 'Auto-detect failed.')));
+        } else {
+            $ok = $vendorId > 0 && $this->Sk_Vendor_whatsapp_account_model->set_ba_account_id($vendorId, $accountId);
+            $this->session->set_flashdata($ok ? 'success' : 'error', $ok
+                ? 'Meta Business Agent account ID saved.'
+                : 'Choose a vendor that already has a WhatsApp number, then save the account ID.');
+        }
         $qs = $vendorId > 0 ? ('?vendor_id=' . $vendorId) : '';
         $back = $this->input->post('return') === 'tokens' ? 'admin/whatsapp/tokens' : 'admin/whatsapp/billing';
+        redirect($back . $qs);
+    }
+
+    /** Force Meta API probe + store Business Agent billable account ID. */
+    public function sync_account() {
+        $vendorId = $this->_scoped_vendor_id();
+        if ($this->is_super_admin()) {
+            $posted = (int)($this->input->post('vendor_id') ?: $this->input->get('vendor_id'));
+            if ($posted > 0) {
+                $vendorId = $posted;
+            }
+        }
+        $this->load->helper('sk_meta_business_agent');
+        $this->load->model('Sk_Admin_model');
+        $settings = $this->Sk_Admin_model->get_settings();
+        $found = $vendorId > 0
+            ? sk_meta_ba_ensure_billable_account_id($vendorId, true, $settings)
+            : ['ok' => false, 'error' => 'Choose a vendor first.'];
+        $this->session->set_flashdata(!empty($found['ok']) ? 'success' : 'error', !empty($found['ok'])
+            ? ('Business Agent account ID auto-saved: ' . $found['account_id'] . ' (' . ($found['source'] ?? 'probe') . ').')
+            : ((string)($found['error'] ?? 'Auto-detect failed.')));
+        $qs = $vendorId > 0 ? ('?vendor_id=' . $vendorId) : '';
+        $back = $this->input->get_post('return') === 'tokens' ? 'admin/whatsapp/tokens' : 'admin/whatsapp/billing';
         redirect($back . $qs);
     }
 
@@ -204,8 +237,9 @@ class Whatsapp_billing extends Sk_Base {
         if ($vendorId < 1) {
             return $report;
         }
-        $this->load->model('Sk_Vendor_whatsapp_account_model');
+        $this->load->model(['Sk_Vendor_whatsapp_account_model', 'Sk_Admin_model']);
         $this->load->helper('sk_meta_business_agent');
+        $settings = $this->Sk_Admin_model->get_settings();
         $account = $this->Sk_Vendor_whatsapp_account_model->resolve_for_vendor($vendorId);
         if (!$account || trim((string)($account['phone_number_id'] ?? '')) === '') {
             $report['error'] = 'This vendor has no WhatsApp phone number yet.';
@@ -213,18 +247,33 @@ class Whatsapp_billing extends Sk_Base {
         }
         $report['phone_number_id'] = (string)$account['phone_number_id'];
         $report['ba_account_id'] = (string)($account['ba_account_id'] ?? '');
+        $report['ba_account_source'] = '';
+        // Auto-discover + persist per vendor using Meta Agent system token / WA token.
+        if (trim($report['ba_account_id']) === '') {
+            $ensured = sk_meta_ba_ensure_billable_account_id($vendorId, false, $settings);
+            if (!empty($ensured['ok']) && trim((string)($ensured['account_id'] ?? '')) !== '') {
+                $report['ba_account_id'] = (string)$ensured['account_id'];
+                $report['ba_account_source'] = (string)($ensured['source'] ?? 'probe');
+                if (!empty($ensured['saved'])) {
+                    $report['notes'][] = 'Business Agent account ID was detected via API and saved automatically.';
+                }
+            } elseif (!empty($ensured['error'])) {
+                $report['notes'][] = (string)$ensured['error'];
+            }
+        }
         $live = sk_meta_ba_vendor_insights(
             $report['phone_number_id'],
             $report['ba_account_id'],
             $range['from'],
-            $range['to']
+            $range['to'],
+            $settings
         );
         $report['ready'] = !empty($live['ok']);
         $report['usage'] = $live['usage'] ?? [];
         $report['usage_totals'] = $live['usage_totals'] ?? $report['usage_totals'];
         $report['conversations'] = $live['conversations'] ?? $report['conversations'];
         $report['tools'] = $live['tools'] ?? [];
-        $report['notes'] = $live['notes'] ?? [];
+        $report['notes'] = array_values(array_unique(array_merge($report['notes'], $live['notes'] ?? [])));
         $report['error'] = (string)($live['error'] ?? '');
         return $report;
     }

@@ -44,15 +44,22 @@ $returnQs = $qs !== '' ? ('?' . $qs) : '';
     <form method="post" action="<?= site_url('admin/whatsapp/billing/account') ?>" class="row g-2 align-items-end mb-3">
       <input type="hidden" name="<?= $this->security->get_csrf_token_name() ?>" value="<?= $this->security->get_csrf_hash() ?>">
       <input type="hidden" name="vendor_id" value="<?= (int)$vendor_id ?>">
-      <div class="col-md-6">
+      <div class="col-md-5">
         <label class="form-label small mb-1">Meta Business Agent account ID</label>
         <input type="text" name="ba_account_id" class="form-control form-control-sm" inputmode="numeric"
                value="<?= htmlspecialchars((string)($meta['ba_account_id'] ?? '')) ?>"
-               placeholder="Billing Hub → Accounts → Meta Business Agent accounts">
+               placeholder="Auto-detect via API, or paste from Billing Hub">
       </div>
       <div class="col-md-2">
-        <button class="btn btn-sm btn-warning">Save account</button>
+        <button class="btn btn-sm btn-warning w-100" name="auto_detect" value="0">Save</button>
       </div>
+      <div class="col-md-3">
+        <button class="btn btn-sm btn-outline-primary w-100" name="auto_detect" value="1"
+                formaction="<?= site_url('admin/whatsapp/billing/sync-account') ?>">Auto-detect &amp; save</button>
+      </div>
+      <?php if (!empty($meta['ba_account_source'])): ?>
+      <div class="col-12"><div class="text-muted small">Source: <?= htmlspecialchars((string)$meta['ba_account_source']) ?></div></div>
+      <?php endif; ?>
     </form>
     <?php endif; ?>
 

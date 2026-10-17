@@ -73,17 +73,24 @@ $qs = http_build_query(array_filter([
     <input type="hidden" name="vendor_id" value="<?= (int)$vendor_id ?>">
     <input type="hidden" name="return" value="tokens">
     <div class="row g-2 align-items-end">
-      <div class="col-md-6">
+      <div class="col-md-5">
         <label class="form-label small mb-1">Meta Business Agent account ID</label>
         <input type="text" name="ba_account_id" class="form-control form-control-sm" inputmode="numeric"
                value="<?= htmlspecialchars((string)($meta['ba_account_id'] ?? '')) ?>"
-               placeholder="Billing Hub → Accounts → Meta Business Agent accounts">
+               placeholder="Auto-detect via API, or paste from Billing Hub">
       </div>
       <div class="col-md-2">
-        <button class="btn btn-sm btn-warning">Save account</button>
+        <button class="btn btn-sm btn-warning w-100" name="auto_detect" value="0">Save</button>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-sm btn-outline-primary w-100" name="auto_detect" value="1"
+                formaction="<?= site_url('admin/whatsapp/billing/sync-account') ?>">Auto-detect &amp; save</button>
       </div>
     </div>
-    <div class="text-muted small mt-2">Token totals come from this Billing Hub account. Without it, Meta does not return billable tokens.</div>
+    <div class="text-muted small mt-2">
+      Admin tries Meta API automatically (env, business, WABA, phone). Meta has no official list endpoint for this ID.
+      <?php if (!empty($meta['ba_account_source'])): ?> Source: <?= htmlspecialchars((string)$meta['ba_account_source']) ?>.<?php endif; ?>
+    </div>
   </div>
 </form>
 <?php endif; ?>
