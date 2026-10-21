@@ -442,6 +442,13 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
 
         $trimBody = trim(mb_strtolower($body));
+        $msgType = (string)($m['type'] ?? $raw['type'] ?? '');
+
+        // Native WhatsApp catalog cart (customer added products in the catalog and sent the order).
+        if ($msgType === 'order' || !empty($raw['order']['product_items']) || !empty($m['order']['product_items'])) {
+            $this->_handle_whatsapp_catalog_order($raw, $m, $peer, $vendorId, $waCloud, $shopName, $conv);
+            return;
+        }
 
         $agentState = !empty($conv['agent_state']) ? json_decode((string)$conv['agent_state'], true) : [];
         $isWaitingAddress = is_array($agentState) && (($agentState['step'] ?? '') === 'waiting_for_address');
@@ -459,49 +466,30 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         if ($isGreeting) {
             $headerText = function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : substr($shopName, 0, 60);
             $interactive = [
-                'type'   => 'list',
+                'type'   => 'button',
                 'header' => [
                     'type' => 'text',
                     'text' => $headerText,
                 ],
                 'body'   => [
-                    'text' => "Welcome to {$shopName}! 👋\nHow can I help you today? Please choose an option below:",
+                    'text' => "Welcome to {$shopName}! 👋\nShop from the catalog — photos, price, and cart are inside WhatsApp. No need to chat for products.",
                 ],
                 'footer' => [
-                    'text' => 'Select an option to proceed',
+                    'text' => 'Open the catalog to order',
                 ],
                 'action' => [
-                    'button'   => 'View Menu',
-                    'sections' => [
+                    'buttons' => [
                         [
-                            'title' => 'Main Menu',
-                            'rows'  => [
-                                [
-                                    'id'          => 'browse_products',
-                                    'title'       => '🛍️ Browse sarees',
-                                    'description' => 'Explore collections & saree catalog',
-                                ],
-                                [
-                                    'id'          => 'offers_deals',
-                                    'title'       => '🏷️ Offers & Deals',
-                                    'description' => "Today's discounts & promo codes",
-                                ],
-                                [
-                                    'id'          => 'search_product',
-                                    'title'       => '🔎 Search a product',
-                                    'description' => 'Find by name, style, or color',
-                                ],
-                                [
-                                    'id'          => 'track_order',
-                                    'title'       => '📦 Track my order',
-                                    'description' => 'Check order & shipment status',
-                                ],
-                                [
-                                    'id'          => 'talk_to_team',
-                                    'title'       => '🙋 Talk to our team',
-                                    'description' => 'Chat with our support team',
-                                ],
-                            ],
+                            'type'  => 'reply',
+                            'reply' => ['id' => 'browse_products', 'title' => 'View catalog'],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => ['id' => 'track_order', 'title' => 'Track order'],
+                        ],
+                        [
+                            'type'  => 'reply',
+                            'reply' => ['id' => 'talk_to_team', 'title' => 'Talk to team'],
                         ],
                     ],
                 ],
@@ -517,7 +505,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             || preg_match('/^(browse|browse sarees?|sarees?|sari|saris|catalog|view catalog|show sarees?|collections?|categories|category)$/iu', $trimBody);
 
         if ($isBrowse) {
-            $this->_send_saree_catalog($peer, $vendorId, $waCloud, $shopName);
+            $this->_send_saree_catalog($peer, $vendorId, $waCloud, $shopName, $phoneNumberId);
             return;
         }
 
@@ -545,6 +533,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             }
 
             if (!empty($discounted)) {
+                if ($this->_send_catalog_product_list($peer, $vendorId, $phoneNumberId, $waCloud, $shopName, $discounted, $shopName . ' Offers')) {
+                    return;
+                }
                 $rows = [];
                 foreach ($discounted as $idx => $p) {
                     $origPrice = (float)($p['price'] ?? 0);
@@ -662,11 +653,14 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             $prods = $this->db->where('vendor_id', $vendorId)
                               ->where('category_id', $catId)
                               ->where('status', 'active')
-                              ->limit(10)
+                              ->limit(30)
                               ->get('products')
                               ->result_array();
 
             if (!empty($prods)) {
+                if ($this->_send_catalog_product_list($peer, $vendorId, $phoneNumberId, $waCloud, $shopName, $prods, $catName)) {
+                    return;
+                }
                 $footer = function_exists('sk_mcp_tool_delivery_footer') ? sk_mcp_tool_delivery_footer($vendorId) : 'Free delivery over ₹999';
                 $interactive = function_exists('sk_mcp_tool_build_product_interactive_list')
                     ? sk_mcp_tool_build_product_interactive_list($prods, $catName, $footer)
@@ -871,31 +865,23 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
 
-        // 16. ROBUST PRODUCT SEARCH (e.g. user typed "Cotton saree do u have", "Kanjivaram saree do u have", "Handloom do u have", "silk", "blue", etc.)
+        // 16. Free text opens the WhatsApp catalog (or a catalog product list), not an AI chat.
         if (strlen($trimBody) >= 2) {
-            $prods = $this->_search_catalog($body, $vendorId, 10);
+            $prods = $this->_search_catalog($body, $vendorId, 30);
+            if (!empty($prods) && $this->_send_catalog_product_list($peer, $vendorId, $phoneNumberId, $waCloud, $shopName, $prods, $shopName)) {
+                return;
+            }
+            if ($this->_send_native_whatsapp_catalog($peer, $vendorId, $phoneNumberId, $waCloud, $shopName)) {
+                return;
+            }
             if (!empty($prods)) {
                 $footer = function_exists('sk_mcp_tool_delivery_footer') ? sk_mcp_tool_delivery_footer($vendorId) : 'Free delivery over ₹999';
                 $interactive = function_exists('sk_mcp_tool_build_product_interactive_list')
-                    ? sk_mcp_tool_build_product_interactive_list($prods, $shopName, $footer)
+                    ? sk_mcp_tool_build_product_interactive_list(array_slice($prods, 0, 10), $shopName, $footer)
                     : null;
                 if ($interactive) {
                     $waCloud->send_interactive($peer, $interactive);
                     return;
-                }
-            } else {
-                // If specific search had no matches, show friendly message with popular sarees
-                $fallbackProds = $this->_search_catalog('', $vendorId, 8);
-                if (!empty($fallbackProds)) {
-                    $waCloud->send_text($peer, "We couldn't find exact matches for *{$body}* at {$shopName} 😊\nHere are our most popular saree collections you might love:");
-                    $footer = function_exists('sk_mcp_tool_delivery_footer') ? sk_mcp_tool_delivery_footer($vendorId) : 'Free delivery over ₹999';
-                    $interactive = function_exists('sk_mcp_tool_build_product_interactive_list')
-                        ? sk_mcp_tool_build_product_interactive_list($fallbackProds, $shopName, $footer)
-                        : null;
-                    if ($interactive) {
-                        $waCloud->send_interactive($peer, $interactive);
-                        return;
-                    }
                 }
             }
         }
@@ -1473,9 +1459,160 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     }
 
     /**
-     * Send rich Saree Catalog list with direct product selection and category browsing.
+     * Open the Meta catalog linked to this WhatsApp number.
+     * Customers browse photos, variants, and cart inside WhatsApp.
      */
-    private function _send_saree_catalog(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName): void {
+    private function _vendor_whatsapp_catalog_id(int $vendorId, string $phoneNumberId): string {
+        $this->load->model('Sk_Vendor_meta_agent_model');
+        $this->Sk_Vendor_meta_agent_model->ensure_schema();
+        $row = null;
+        if ($phoneNumberId !== '') {
+            $row = $this->Sk_Vendor_meta_agent_model->get_by_phone($phoneNumberId);
+        }
+        if (!$row && $vendorId > 0 && $this->db->table_exists('vendor_meta_agents')) {
+            $row = $this->db->where('vendor_id', $vendorId)
+                ->where('catalog_id IS NOT NULL', null, false)
+                ->where('catalog_id !=', '')
+                ->order_by('id', 'DESC')
+                ->get('vendor_meta_agents')
+                ->row_array();
+        }
+        return trim((string)($row['catalog_id'] ?? ''));
+    }
+
+    private function _send_native_whatsapp_catalog(string $peer, int $vendorId, string $phoneNumberId, Whatsapp_cloud $waCloud, string $shopName): bool {
+        if ($this->_vendor_whatsapp_catalog_id($vendorId, $phoneNumberId) === '') {
+            return false;
+        }
+        $interactive = [
+            'type' => 'catalog_message',
+            'body' => [
+                'text' => "Tap View catalog to see {$shopName} products, prices, and photos.\nAdd items to the WhatsApp cart and send the order.",
+            ],
+            'action' => [
+                'name' => 'catalog_message',
+            ],
+        ];
+        $res = $waCloud->send_interactive($peer, $interactive);
+        return !empty($res['success']);
+    }
+
+    /**
+     * @param list<array<string,mixed>> $prods
+     */
+    private function _send_catalog_product_list(string $peer, int $vendorId, string $phoneNumberId, Whatsapp_cloud $waCloud, string $shopName, array $prods, string $header): bool {
+        $catalogId = $this->_vendor_whatsapp_catalog_id($vendorId, $phoneNumberId);
+        if ($catalogId === '' || $prods === []) {
+            return false;
+        }
+        $items = [];
+        foreach ($prods as $p) {
+            $pid = (int)($p['id'] ?? 0);
+            if ($pid < 1) {
+                continue;
+            }
+            $items[] = ['product_retailer_id' => 'product_' . $pid];
+            if (count($items) >= 30) {
+                break;
+            }
+        }
+        if ($items === []) {
+            return false;
+        }
+        $title = function_exists('mb_substr') ? mb_substr($header !== '' ? $header : $shopName, 0, 60) : substr($header !== '' ? $header : $shopName, 0, 60);
+        $interactive = [
+            'type'   => 'product_list',
+            'header' => ['type' => 'text', 'text' => $title !== '' ? $title : 'Catalog'],
+            'body'   => [
+                'text' => 'Pick a product from the catalog. Add it to your WhatsApp cart and send the order.',
+            ],
+            'action' => [
+                'catalog_id' => $catalogId,
+                'sections'   => [[
+                    'title'         => 'Products',
+                    'product_items' => $items,
+                ]],
+            ],
+        ];
+        $res = $waCloud->send_interactive($peer, $interactive);
+        return !empty($res['success']);
+    }
+
+    /**
+     * @return array{product_id:int,variant_id:int}
+     */
+    private function _parse_catalog_retailer_id(string $retailerId, int $vendorId): array {
+        $retailerId = trim($retailerId);
+        if (preg_match('/^product_(\d+)_v_(\d+)$/', $retailerId, $m)) {
+            return ['product_id' => (int)$m[1], 'variant_id' => (int)$m[2]];
+        }
+        if (preg_match('/^product_(\d+)$/', $retailerId, $m)) {
+            return ['product_id' => (int)$m[1], 'variant_id' => 0];
+        }
+        if ($retailerId !== '' && $vendorId > 0) {
+            $prod = $this->db->where('vendor_id', $vendorId)->where('sku', $retailerId)->get('products')->row_array();
+            if ($prod) {
+                return ['product_id' => (int)$prod['id'], 'variant_id' => 0];
+            }
+            $var = $this->db->where('sku', $retailerId)->get('product_variants')->row_array();
+            if ($var && !empty($var['product_id'])) {
+                return ['product_id' => (int)$var['product_id'], 'variant_id' => (int)($var['id'] ?? 0)];
+            }
+        }
+        return ['product_id' => 0, 'variant_id' => 0];
+    }
+
+    /**
+     * WhatsApp catalog "Send cart" arrives as type=order with product_items.
+     */
+    private function _handle_whatsapp_catalog_order(array $raw, array $m, string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
+        $order = is_array($raw['order'] ?? null) ? $raw['order'] : [];
+        if ($order === [] && is_array($m['order'] ?? null)) {
+            $order = $m['order'];
+        }
+        $items = is_array($order['product_items'] ?? null) ? $order['product_items'] : [];
+        $sessionId = 'wa_' . $peer;
+        $this->db->where('session_id', $sessionId)->where('vendor_id', $vendorId)->delete('cart');
+        $now = date('Y-m-d H:i:s');
+        $added = 0;
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $parsed = $this->_parse_catalog_retailer_id((string)($item['product_retailer_id'] ?? ''), $vendorId);
+            if ($parsed['product_id'] < 1) {
+                continue;
+            }
+            $prod = $this->db->where('id', $parsed['product_id'])->where('vendor_id', $vendorId)->get('products')->row_array();
+            if (!$prod) {
+                continue;
+            }
+            $qty = max(1, (int)($item['quantity'] ?? 1));
+            $this->db->insert('cart', [
+                'vendor_id'  => $vendorId,
+                'session_id' => $sessionId,
+                'product_id' => $parsed['product_id'],
+                'variant_id' => $parsed['variant_id'] > 0 ? $parsed['variant_id'] : null,
+                'quantity'   => $qty,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+            $added++;
+        }
+        if ($added < 1) {
+            $waCloud->send_text($peer, "We received the cart, but those catalog items are not linked to {$shopName} yet. Open the catalog again after products are synced.");
+            return;
+        }
+        $this->_initiate_checkout_address_flow($peer, $vendorId, $waCloud, $shopName, $conv);
+    }
+
+    /**
+     * Open the native WhatsApp catalog. Fall back to a text list if no catalog is linked.
+     */
+    private function _send_saree_catalog(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, string $phoneNumberId = ''): void {
+        if ($this->_send_native_whatsapp_catalog($peer, $vendorId, $phoneNumberId, $waCloud, $shopName)) {
+            return;
+        }
         $prods = $this->db->where('vendor_id', $vendorId)
                           ->where('status', 'active')
                           ->order_by('id', 'ASC')

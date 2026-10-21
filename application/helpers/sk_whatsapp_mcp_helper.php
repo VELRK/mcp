@@ -64,6 +64,22 @@ function sk_wa_mcp_parse_inbound(array $m): array {
         $out['id'] = (string)($m['button']['payload'] ?? '');
         $out['title'] = (string)($m['button']['text'] ?? '');
         $out['text'] = $out['title'] !== '' ? $out['title'] : $out['id'];
+    } elseif ($type === 'order') {
+        $order = is_array($m['order'] ?? null) ? $m['order'] : [];
+        $items = is_array($order['product_items'] ?? null) ? $order['product_items'] : [];
+        $bits = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $rid = trim((string)($item['product_retailer_id'] ?? ''));
+            $qty = max(1, (int)($item['quantity'] ?? 1));
+            if ($rid !== '') {
+                $bits[] = $rid . ' x' . $qty;
+            }
+        }
+        $out['type'] = 'order';
+        $out['text'] = $bits ? ('Catalog order: ' . implode(', ', $bits)) : 'Catalog order';
     } elseif ($type === 'image') {
         $out['text'] = trim((string)($m['image']['caption'] ?? 'Image'));
     } elseif ($type === 'video') {
