@@ -1543,7 +1543,6 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
         $items = is_array($order['product_items'] ?? null) ? $order['product_items'] : [];
         $sessionId = 'wa_' . $peer;
-        $this->db->where('session_id', $sessionId)->where('vendor_id', $vendorId)->delete('cart');
         $now = date('Y-m-d H:i:s');
         $added = 0;
         foreach ($items as $item) {
@@ -1559,21 +1558,39 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 continue;
             }
             $qty = max(1, (int)($item['quantity'] ?? 1));
-            $this->db->insert('cart', [
-                'vendor_id'  => $vendorId,
-                'session_id' => $sessionId,
-                'product_id' => $parsed['product_id'],
-                'variant_id' => $parsed['variant_id'] > 0 ? $parsed['variant_id'] : null,
-                'quantity'   => $qty,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+            $variantId = (int)$parsed['variant_id'];
+            $this->db->where('session_id', $sessionId)
+                     ->where('vendor_id', $vendorId)
+                     ->where('product_id', $parsed['product_id']);
+            if ($variantId > 0) {
+                $this->db->where('variant_id', $variantId);
+            } else {
+                $this->db->where('(variant_id IS NULL OR variant_id = 0)', null, false);
+            }
+            $existing = $this->db->get('cart')->row_array();
+            if ($existing) {
+                $this->db->where('id', (int)$existing['id'])->update('cart', [
+                    'quantity'   => (int)$existing['quantity'] + $qty,
+                    'updated_at' => $now,
+                ]);
+            } else {
+                $this->db->insert('cart', [
+                    'vendor_id'  => $vendorId,
+                    'session_id' => $sessionId,
+                    'product_id' => $parsed['product_id'],
+                    'variant_id' => $variantId > 0 ? $variantId : null,
+                    'quantity'   => $qty,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
             $added++;
         }
         if ($added < 1) {
             $waCloud->send_text($peer, "We received the cart, but those catalog items are not linked to {$shopName} yet. Open the catalog again after products are synced.");
             return;
         }
+        $this->_send_cart_view($peer, $vendorId, $waCloud, $shopName);
         $this->_initiate_checkout_address_flow($peer, $vendorId, $waCloud, $shopName, $conv, $phoneNumberId);
     }
 
