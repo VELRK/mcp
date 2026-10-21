@@ -496,7 +496,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $isBrowse = $interactiveId === 'browse_products'
             || $interactiveId === 'browse_sarees'
             || $trimBody === '1'
-            || preg_match('/^(browse|browse sarees?|sarees?|sari|saris|catalog|view catalog|show sarees?|collections?|categories|category)$/iu', $trimBody);
+            || preg_match('/^(browse|browse sarees?|sarees?|sari|saris|catalog|view catalog|show sarees?|add sarees?|collections?|categories|category)$/iu', $trimBody);
 
         if ($isBrowse) {
             $this->_send_saree_catalog($peer, $vendorId, $waCloud, $shopName, $phoneNumberId);
@@ -770,16 +770,23 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             }
         }
 
-        // 13. VIEW CART / SHOPPING BAG:
+        // 12b. REMOVE ONE CART LINE (cart_remove_{product}_{variant})
+        if (strpos($interactiveId, 'cart_remove_') === 0) {
+            $parts = explode('_', substr($interactiveId, 12));
+            $this->_remove_cart_item($peer, $vendorId, (int)($parts[0] ?? 0), (int)($parts[1] ?? 0), $waCloud, $shopName);
+            return;
+        }
+
+        // 13. VIEW CART
         if (in_array($interactiveId, ['cart_view', 'cart'], true) || preg_match('/^(cart|bag|my cart|my bag|view cart|view bag)$/iu', $trimBody)) {
             $this->_send_cart_view($peer, $vendorId, $waCloud, $shopName);
             return;
         }
 
-        // 14. CLEAR CART / EMPTY BAG:
-        if ($interactiveId === 'cart_clear' || preg_match('/^(clear cart|empty cart|clear bag)$/iu', $trimBody)) {
-            $this->db->where('session_id', 'wa_' . $peer)->delete('cart');
-            $waCloud->send_text($peer, "🗑️ Your shopping bag has been emptied.\nReply with *1* or tap View Menu to browse our sarees!");
+        // 14. CLEAR CART
+        if ($interactiveId === 'cart_clear' || preg_match('/^(clear cart|empty cart|clear bag|clear my cart)$/iu', $trimBody)) {
+            $this->db->where('session_id', 'wa_' . $peer)->where('vendor_id', $vendorId)->delete('cart');
+            $this->_send_cart_view($peer, $vendorId, $waCloud, $shopName);
             return;
         }
 
@@ -884,7 +891,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                         'type'  => 'reply',
                         'reply' => [
                             'id'    => 'cart_view',
-                            'title' => '🛒 View Bag',
+                            'title' => '🛒 View cart',
                         ],
                     ],
                     [
@@ -1156,6 +1163,11 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'description' => "{$subTotStr} · {$info['tag']}",
             ];
         }
+        $rows[] = [
+            'id'          => "cart_remove_{$prodId}_{$varId}",
+            'title'       => 'Remove from cart',
+            'description' => 'Take this item out of the cart',
+        ];
 
         $interactive = [
             'type'   => 'list',
@@ -1167,7 +1179,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'text' => $body,
             ],
             'footer' => [
-                'text' => 'Select quantity to update bag',
+                'text' => 'Select quantity to update cart',
             ],
             'action' => [
                 'button'   => 'Select Quantity',
@@ -1241,99 +1253,44 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             'updated_at'  => $now,
         ]);
 
-        // Compute full cart items & total
-        $cartItems = $this->db->select('c.*, p.name as product_name, p.price as prod_price, p.sale_price as prod_sale, pv.label as variant_label, pv.price as var_price, pv.sale_price as var_sale')
-                              ->from('cart c')
-                              ->join('products p', 'p.id = c.product_id')
-                              ->join('product_variants pv', 'pv.id = c.variant_id', 'left')
-                              ->where('c.session_id', $sessionId)
-                              ->where('c.vendor_id', $vendorId)
-                              ->get()->result_array();
-
-        $totalItems = 0;
-        $totalVal = 0.0;
-        foreach ($cartItems as $ci) {
-            $q = (int)$ci['quantity'];
-            $price = $ci['var_price'] !== null && (float)$ci['var_price'] > 0
-                ? (float)($ci['var_sale'] && (float)$ci['var_sale'] > 0 ? $ci['var_sale'] : $ci['var_price'])
-                : (float)($ci['prod_sale'] && (float)$ci['prod_sale'] > 0 ? $ci['prod_sale'] : $ci['prod_price']);
-            $totalItems += $q;
-            $totalVal += ($price * $q);
-        }
-
         $pName = (string)$prod['name'];
         $vLabel = $var ? (string)($var['label'] ?? '') : '';
         $lineTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($unitPrice * $qty) : "₹" . ($unitPrice * $qty);
-        $cartTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($totalVal) : "₹{$totalVal}";
 
-        $varText = $vLabel !== '' ? "• *Variant:* {$vLabel}\n" : '';
-        $msg = "✅ *Shopping Bag Updated!*\n\n"
-             . "🛍️ *{$pName}*\n"
-             . $varText
-             . "• *Quantity:* {$qty} piece(s)\n"
-             . "• *Subtotal:* {$lineTot}\n\n"
-             . "🛒 *Your Bag Summary ({$totalItems} item" . ($totalItems > 1 ? 's' : '') . "):*\n"
-             . "• *Bag Total:* {$cartTot}\n"
-             . "• *Delivery:* FREE Delivery 🚚\n\n"
-             . "What would you like to do next?";
-
-        $waCloud->send_text($peer, $msg);
-
-        // Send Next Steps interactive list
-        $interactive = [
-            'type'   => 'list',
-            'header' => [
-                'type' => 'text',
-                'text' => function_exists('mb_substr') ? mb_substr("{$shopName} Bag", 0, 60) : "Shopping Bag",
-            ],
-            'body'   => [
-                'text' => "Your bag total is {$cartTot} ({$totalItems} items). Please select an action below:",
-            ],
-            'footer' => [
-                'text' => 'Free delivery applied',
-            ],
-            'action' => [
-                'button'   => 'Bag Options',
-                'sections' => [
-                    [
-                        'title' => 'Actions',
-                        'rows'  => [
-                            [
-                                'id'          => 'cart_checkout',
-                                'title'       => '💳 Place Order & Pay',
-                                'description' => "Complete order ({$cartTot})",
-                            ],
-                            [
-                                'id'          => 'cart_view',
-                                'title'       => '🛒 View Shopping Bag',
-                                'description' => "Review {$totalItems} item(s) in bag",
-                            ],
-                            [
-                                'id'          => "cart_change_qty_{$productId}_{$variantId}",
-                                'title'       => '🔄 Change Quantity',
-                                'description' => "Update pieces for {$pName}",
-                            ],
-                            [
-                                'id'          => 'browse_products',
-                                'title'       => '➕ Add More Sarees',
-                                'description' => 'Explore more collections',
-                            ],
-                            [
-                                'id'          => 'main_menu',
-                                'title'       => '🏠 Main Menu',
-                                'description' => 'Return to main options',
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-        ];
-
-        $waCloud->send_interactive($peer, $interactive);
+        $varText = $vLabel !== '' ? " ({$vLabel})" : '';
+        $waCloud->send_text($peer, "✅ *{$pName}*{$varText} is now {$qty} in your cart.\nSubtotal: {$lineTot}");
+        $this->_send_cart_view($peer, $vendorId, $waCloud, $shopName);
     }
 
     /**
-     * Send full itemized view of customer's shopping bag with actions.
+     * Remove one product from the WhatsApp cart and show what is left.
+     */
+    private function _remove_cart_item(string $peer, int $vendorId, int $productId, int $variantId, Whatsapp_cloud $waCloud, string $shopName): void {
+        $this->db->where('session_id', 'wa_' . $peer)
+                 ->where('vendor_id', $vendorId)
+                 ->where('product_id', $productId);
+        if ($variantId > 0) {
+            $this->db->where('variant_id', $variantId);
+        } else {
+            $this->db->where('(variant_id IS NULL OR variant_id = 0)', null, false);
+        }
+        $this->db->delete('cart');
+        $waCloud->send_text($peer, "Removed from your cart.");
+        $this->_send_cart_view($peer, $vendorId, $waCloud, $shopName);
+    }
+
+    private function _wa_list_title(string $text, int $max = 24): string {
+        $text = trim((string)preg_replace('/\s+/', ' ', $text));
+        $len = function_exists('mb_strlen') ? mb_strlen($text) : strlen($text);
+        if ($len <= $max) {
+            return $text;
+        }
+        $cut = function_exists('mb_substr') ? mb_substr($text, 0, $max - 3) : substr($text, 0, $max - 3);
+        return rtrim($cut) . '...';
+    }
+
+    /**
+     * Show every item already in the cart, with add, update, and remove.
      */
     private function _send_cart_view(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName): void {
         $sessionId = 'wa_' . $peer;
@@ -1346,13 +1303,27 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                               ->get()->result_array();
 
         if (empty($cartItems)) {
-            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* to browse our sarees or send a saree name to search!");
+            $empty = $waCloud->send_interactive($peer, [
+                'type'   => 'button',
+                'header' => ['type' => 'text', 'text' => 'Your cart'],
+                'body'   => ['text' => "Your cart is empty.\nAdd a saree to start an order."],
+                'action' => [
+                    'buttons' => [
+                        ['type' => 'reply', 'reply' => ['id' => 'browse_products', 'title' => 'Add saree']],
+                        ['type' => 'reply', 'reply' => ['id' => 'main_menu', 'title' => 'Main menu']],
+                    ],
+                ],
+            ]);
+            if (empty($empty['success'])) {
+                $waCloud->send_text($peer, "Your cart is empty. Reply 1 or send saree to add one.");
+            }
             return;
         }
 
         $totalItems = 0;
         $totalVal = 0.0;
         $lines = [];
+        $itemRows = [];
 
         foreach ($cartItems as $idx => $ci) {
             $q = (int)$ci['quantity'];
@@ -1364,69 +1335,77 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             $totalVal += $itemTot;
 
             $pName = (string)$ci['product_name'];
-            $vLabel = !empty($ci['variant_label']) ? " ({$ci['variant_label']})" : '';
+            $vLabel = trim((string)($ci['variant_label'] ?? ''));
+            $shown = $vLabel !== '' ? $pName . ' ' . $vLabel : $pName;
             $priceStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($price) : "₹{$price}";
             $totStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($itemTot) : "₹{$itemTot}";
+            $lines[] = ($idx + 1) . ". *{$pName}*" . ($vLabel !== '' ? " ({$vLabel})" : '') . "\n   Qty: {$q} × {$priceStr} = *{$totStr}*";
 
-            $lines[] = ($idx + 1) . ". *{$pName}*{$vLabel}\n   Qty: {$q} × {$priceStr} = *{$totStr}*";
+            $productId = (int)$ci['product_id'];
+            $variantId = (int)($ci['variant_id'] ?? 0);
+            $itemRows[] = [
+                'id'          => "cart_change_qty_{$productId}_{$variantId}",
+                'title'       => $this->_wa_list_title('Update ' . $shown),
+                'description' => $this->_wa_list_title("Qty {$q} · tap to change", 72),
+            ];
+            $itemRows[] = [
+                'id'          => "cart_remove_{$productId}_{$variantId}",
+                'title'       => $this->_wa_list_title('Remove ' . $shown),
+                'description' => 'Remove this item from the cart',
+            ];
         }
 
         $cartTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($totalVal) : "₹{$totalVal}";
         $itemsText = implode("\n\n", $lines);
+        $body = "Your cart ({$totalItems} items)\n\n{$itemsText}\n\nCart total: {$cartTot}\nDelivery: Free\n\nAdd a saree, or update and remove items below.";
+        if (function_exists('mb_strlen') && mb_strlen($body) > 1024) {
+            $body = mb_substr($body, 0, 1020) . '...';
+        } elseif (strlen($body) > 1024) {
+            $body = substr($body, 0, 1020) . '...';
+        }
 
-        $msg = "🛒 *Your Shopping Bag ({$totalItems} items)*\n\n"
-             . "{$itemsText}\n\n"
-             . "--------------------------------\n"
-             . "💰 *Bag Total: {$cartTot}*\n"
-             . "🚚 *Delivery: FREE Delivery*\n";
-
-        $waCloud->send_text($peer, $msg);
-
-        $interactive = [
-            'type'   => 'list',
-            'header' => [
-                'type' => 'text',
-                'text' => 'Shopping Bag Actions',
+        $actionRows = [
+            [
+                'id'          => 'browse_products',
+                'title'       => 'Add saree',
+                'description' => 'Open the catalog and add another saree',
             ],
-            'body'   => [
-                'text' => "Total payable is {$cartTot}. Choose an action below:",
-            ],
-            'footer' => [
-                'text' => 'Free delivery on all orders',
-            ],
-            'action' => [
-                'button'   => 'Bag Actions',
-                'sections' => [
-                    [
-                        'title' => 'Actions',
-                        'rows'  => [
-                            [
-                                'id'          => 'cart_checkout',
-                                'title'       => '💳 Place Order & Pay',
-                                'description' => "Checkout now ({$cartTot})",
-                            ],
-                            [
-                                'id'          => 'browse_products',
-                                'title'       => '➕ Add More Sarees',
-                                'description' => 'Browse more collections',
-                            ],
-                            [
-                                'id'          => 'cart_clear',
-                                'title'       => '🗑️ Clear Shopping Bag',
-                                'description' => 'Remove all items from bag',
-                            ],
-                            [
-                                'id'          => 'main_menu',
-                                'title'       => '🏠 Main Menu',
-                                'description' => 'Return to main options',
-                            ],
-                        ],
-                    ],
-                ],
+            [
+                'id'          => 'cart_checkout',
+                'title'       => 'Place order',
+                'description' => "Checkout now ({$cartTot})",
             ],
         ];
+        $room = 10 - count($actionRows) - 1;
+        if (count($itemRows) > $room) {
+            $itemRows = array_slice($itemRows, 0, $room);
+        }
+        $actionRows[] = [
+            'id'          => 'cart_clear',
+            'title'       => 'Clear cart',
+            'description' => 'Remove every item from the cart',
+        ];
 
-        $waCloud->send_interactive($peer, $interactive);
+        $sections = [
+            ['title' => 'Cart', 'rows' => $actionRows],
+        ];
+        if ($itemRows !== []) {
+            $sections[] = ['title' => 'Update or remove', 'rows' => $itemRows];
+        }
+
+        $sent = $waCloud->send_interactive($peer, [
+            'type'   => 'list',
+            'header' => ['type' => 'text', 'text' => 'Your cart'],
+            'body'   => ['text' => $body],
+            'footer' => ['text' => 'Free delivery'],
+            'action' => [
+                'button'   => 'Cart actions',
+                'sections' => $sections,
+            ],
+        ]);
+        if (empty($sent['success'])) {
+            $waCloud->send_text($peer, $body);
+        }
     }
 
     /**
@@ -1909,7 +1888,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'buttons' => [
                     ['type' => 'reply', 'reply' => ['id' => 'addr_proceed_' . $addressId, 'title' => 'Proceed to pay']],
                     ['type' => 'reply', 'reply' => ['id' => 'addr_change', 'title' => 'Edit address']],
-                    ['type' => 'reply', 'reply' => ['id' => 'cart_view', 'title' => 'View bag']],
+                    ['type' => 'reply', 'reply' => ['id' => 'cart_view', 'title' => 'View cart']],
                 ],
             ],
         ]);
@@ -1922,7 +1901,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $sessionId = 'wa_' . $peer;
         $cartCount = $this->db->where('session_id', $sessionId)->where('vendor_id', $vendorId)->count_all_results('cart');
         if ($cartCount === 0) {
-            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* or send *saree* to browse our collections before placing an order!");
+            $waCloud->send_text($peer, "Your cart is empty 😊\nReply with *1* or send *saree* to browse our collections before placing an order!");
             return;
         }
 
@@ -1979,7 +1958,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                             'type'  => 'reply',
                             'reply' => [
                                 'id'    => 'cart_view',
-                                'title' => '🛒 View Bag',
+                                'title' => '🛒 View cart',
                             ],
                         ],
                     ],
@@ -2041,7 +2020,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                         'type'  => 'reply',
                         'reply' => [
                             'id'    => 'cart_view',
-                            'title' => '🛒 Return to Bag',
+                            'title' => '🛒 View cart',
                         ],
                     ],
                     [
@@ -2172,7 +2151,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                         'type'  => 'reply',
                         'reply' => [
                             'id'    => 'cart_view',
-                            'title' => '🛒 View Bag',
+                            'title' => '🛒 View cart',
                         ],
                     ],
                 ],
@@ -2366,7 +2345,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                               ->get()->result_array();
 
         if (empty($cartItems)) {
-            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* or send *saree* to browse our collections before placing an order!");
+            $waCloud->send_text($peer, "Your cart is empty 😊\nReply with *1* or send *saree* to browse our collections before placing an order!");
             return;
         }
 
@@ -2408,7 +2387,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             ],
             'body'   => [
                 'text' => "🛍️ *Ready to Place Your Order!*\n\n"
-                        . "• *Items in Bag:* {$totalItems} piece(s)\n"
+                        . "• *Items in cart:* {$totalItems} piece(s)\n"
                         . "• *Subtotal:* {$cartTot}\n"
                         . "• *Shipping:* FREE Delivery across India 🚚\n"
                         . "• *Total Payable:* *{$cartTot}*\n"
@@ -2557,7 +2536,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                               ->get()->result_array();
 
         if (empty($cartItems)) {
-            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* to browse our sarees!");
+            $waCloud->send_text($peer, "Your cart is empty 😊\nReply with *1* to browse our sarees!");
             return;
         }
 
@@ -2597,7 +2576,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                               ->get()->result_array();
 
         if (empty($cartItems)) {
-            $waCloud->send_text($peer, "Your shopping bag is empty 😊\nReply with *1* to browse our sarees!");
+            $waCloud->send_text($peer, "Your cart is empty 😊\nReply with *1* to browse our sarees!");
             return;
         }
 
