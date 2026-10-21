@@ -865,45 +865,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
 
         // 17. Helpful Conversational Fallback (Never release to Meta AI to prevent Hindi handoff)
-        $interactive = [
-            'type'   => 'button',
-            'header' => [
-                'type' => 'text',
-                'text' => function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : $shopName,
-            ],
-            'body'   => [
-                'text' => "How can we help you today? 😊\n\n"
-                        . "You can browse our saree collections, search for a style (e.g. *Silk*, *Cotton*, *Red*), or chat with our team:",
-            ],
-            'footer' => [
-                'text' => 'Select an option below',
-            ],
-            'action' => [
-                'buttons' => [
-                    [
-                        'type'  => 'reply',
-                        'reply' => [
-                            'id'    => 'browse_products',
-                            'title' => '🛍️ Browse Sarees',
-                        ],
-                    ],
-                    [
-                        'type'  => 'reply',
-                        'reply' => [
-                            'id'    => 'cart_view',
-                            'title' => '🛒 View cart',
-                        ],
-                    ],
-                    [
-                        'type'  => 'reply',
-                        'reply' => [
-                            'id'    => 'talk_to_team',
-                            'title' => '🙋 Talk to Team',
-                        ],
-                    ],
-                ],
-            ],
-        ];
+        $this->load->helper('sk_wa_address_flow');
+        $interactive = sk_wa_shop_welcome_interactive($vendorId, $shopName);
         $waCloud->send_interactive($peer, $interactive);
         return;
     }
@@ -1450,7 +1413,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     /**
      * @param list<array<string,mixed>> $prods
      */
-    private function _send_catalog_product_list(string $peer, int $vendorId, string $phoneNumberId, Whatsapp_cloud $waCloud, string $shopName, array $prods, string $header): bool {
+    private function _send_catalog_product_list(string $peer, int $vendorId, string $phoneNumberId, Whatsapp_cloud $waCloud, string $shopName, array $prods, string $header, string $bodyText = ''): bool {
         $catalogId = $this->_vendor_whatsapp_catalog_id($vendorId, $phoneNumberId);
         if ($catalogId === '' || $prods === []) {
             return false;
@@ -1472,14 +1435,14 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $title = function_exists('mb_substr') ? mb_substr($header !== '' ? $header : $shopName, 0, 60) : substr($header !== '' ? $header : $shopName, 0, 60);
         $interactive = [
             'type'   => 'product_list',
-            'header' => ['type' => 'text', 'text' => $title !== '' ? $title : 'Catalog'],
+            'header' => ['type' => 'text', 'text' => $title !== '' ? $title : 'All products'],
             'body'   => [
-                'text' => 'Pick a product from the catalog. Add it to your WhatsApp cart and send the order.',
+                'text' => $bodyText !== '' ? $bodyText : 'Pick a product. Add it to your cart and send the order.',
             ],
             'action' => [
                 'catalog_id' => $catalogId,
                 'sections'   => [[
-                    'title'         => 'Products',
+                    'title'         => $header === 'All products' ? 'All products' : 'Products',
                     'product_items' => $items,
                 ]],
             ],
@@ -1577,84 +1540,53 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
      * Open the native WhatsApp catalog. Fall back to a text list if no catalog is linked.
      */
     private function _send_saree_catalog(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, string $phoneNumberId = ''): void {
-        if ($this->_send_native_whatsapp_catalog($peer, $vendorId, $phoneNumberId, $waCloud, $shopName)) {
-            return;
-        }
         $prods = $this->db->where('vendor_id', $vendorId)
                           ->where('status', 'active')
                           ->order_by('id', 'ASC')
-                          ->limit(7)
+                          ->limit(30)
                           ->get('products')
                           ->result_array();
-
-        $cats = $this->db->query("SELECT c.id, c.name, COUNT(p.id) as product_count 
-                                 FROM categories c 
-                                 INNER JOIN products p ON p.category_id = c.id 
-                                 WHERE p.vendor_id = ? AND p.status = 'active' 
-                                 GROUP BY c.id HAVING product_count > 0 
-                                 ORDER BY c.name ASC LIMIT 3", [$vendorId])->result_array();
+        if ($prods === []) {
+            $waCloud->send_text($peer, "No products are available right now.");
+            return;
+        }
+        if ($this->_send_catalog_product_list(
+            $peer,
+            $vendorId,
+            $phoneNumberId,
+            $waCloud,
+            $shopName,
+            $prods,
+            'All products',
+            "All products from {$shopName}. Tap one to see the price and add it to your cart."
+        )) {
+            return;
+        }
 
         $prodRows = [];
-        foreach ($prods as $p) {
+        foreach (array_slice($prods, 0, 10) as $p) {
             $pName = trim((string)$p['name']);
             $salePrice = isset($p['sale_price']) && (float)$p['sale_price'] > 0 ? (float)$p['sale_price'] : (float)$p['price'];
             $priceStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($salePrice) : "₹{$salePrice}";
-            $fabric = !empty($p['fabric']) ? " · " . $p['fabric'] : '';
-            $desc = "{$priceStr}{$fabric} · In Stock";
-
             $prodRows[] = [
                 'id'          => 'prod_' . $p['id'],
-                'title'       => function_exists('mb_substr') ? mb_substr("🥻 {$pName}", 0, 24) : substr("🥻 {$pName}", 0, 24),
-                'description' => function_exists('mb_substr') ? mb_substr($desc, 0, 72) : substr($desc, 0, 72),
+                'title'       => function_exists('mb_substr') ? mb_substr($pName, 0, 24) : substr($pName, 0, 24),
+                'description' => function_exists('mb_substr') ? mb_substr($priceStr . ' · In stock', 0, 72) : substr($priceStr . ' · In stock', 0, 72),
             ];
         }
-
-        $catRows = [];
-        $catIcons = ['🧵', '✨', '🌸'];
-        foreach ($cats as $i => $cat) {
-            $cName = trim((string)$cat['name']);
-            $cnt = (int)($cat['product_count'] ?? 0);
-            $icon = $catIcons[$i % count($catIcons)];
-            $catRows[] = [
-                'id'          => 'cat_' . $cat['id'],
-                'title'       => function_exists('mb_substr') ? mb_substr("{$icon} {$cName}", 0, 24) : substr("{$icon} {$cName}", 0, 24),
-                'description' => "{$cnt} saree designs available",
-            ];
-        }
-
-        $sections = [];
-        if (!empty($prodRows)) {
-            $sections[] = [
-                'title' => '🌟 Saree Catalog (Select to View)',
-                'rows'  => $prodRows,
-            ];
-        }
-        if (!empty($catRows)) {
-            $sections[] = [
-                'title' => '📂 Browse by Category',
-                'rows'  => $catRows,
-            ];
-        }
-
-        $interactive = [
+        $waCloud->send_interactive($peer, [
             'type'   => 'list',
-            'header' => [
-                'type' => 'text',
-                'text' => function_exists('mb_substr') ? mb_substr("{$shopName} Saree Catalog", 0, 60) : "Saree Catalog",
-            ],
-            'body'   => [
-                'text' => "Welcome to our handcrafted saree collection! ✨\nTap below to open the catalog, view rates, specifications, and place your order:",
-            ],
-            'footer' => [
-                'text' => 'Free delivery across India 🚚',
-            ],
+            'header' => ['type' => 'text', 'text' => 'All products'],
+            'body'   => ['text' => "All products from {$shopName}. Tap one to see details and add it to your cart."],
+            'footer' => ['text' => 'Free delivery'],
             'action' => [
-                'button'   => '🛍️ Saree Catalog',
-                'sections' => $sections,
+                'button'   => 'All products',
+                'sections' => [[
+                    'title' => 'All products',
+                    'rows'  => $prodRows,
+                ]],
             ],
-        ];
-
-        $waCloud->send_interactive($peer, $interactive);
+        ]);
     }
 
     /**

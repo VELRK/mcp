@@ -2,10 +2,11 @@
 $rules = is_array($rules ?? null) ? $rules : [];
 $steps = is_array($rules['steps'] ?? null) ? $rules['steps'] : [];
 $labels = [
-    'catalog' => 'Catalog view',
-    'search'  => 'Search a product',
-    'track'   => 'Track an order',
-    'human'   => 'Talk to the shop team',
+    'catalog' => 'Browse Products',
+    'offers'  => 'Offers & Deals',
+    'search'  => 'Search Product',
+    'track'   => 'Track Order',
+    'human'   => 'Talk to Team',
     'address' => 'Ask for a delivery address before payment',
     'payment' => 'Ask for payment after the address is saved',
 ];
@@ -59,7 +60,7 @@ $labels = [
           <input type="text" name="step_title[<?= htmlspecialchars($key) ?>]" class="form-control form-control-sm mt-2" maxlength="24" value="<?= htmlspecialchars((string)($step['title'] ?? '')) ?>">
         </div>
         <?php endforeach; ?>
-        <div class="form-text">Catalog, search, track order, and talk to team appear in the welcome menu. Search, track, and talk open a WhatsApp form. Address and payment stay in checkout.</div>
+        <div class="form-text">Browse Products, Offers &amp; Deals, Search Product, Track Order, and Talk to Team appear in the main menu. Browse Products shows all products. Address and payment stay in checkout.</div>
       </div>
       <button class="btn btn-warning" <?= (int)($vendor_id ?? 0) < 1 ? 'disabled' : '' ?>>Save steps</button>
     </form>

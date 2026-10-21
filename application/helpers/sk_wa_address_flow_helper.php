@@ -12,10 +12,11 @@ function sk_wa_shop_rules_defaults(): array {
         'product_label' => 'products',
         'welcome_text'  => '',
         'steps' => [
-            ['key' => 'catalog', 'title' => 'Catalog view', 'enabled' => 1],
-            ['key' => 'search',  'title' => 'Search product', 'enabled' => 1],
-            ['key' => 'track',   'title' => 'Track order', 'enabled' => 1],
-            ['key' => 'human',   'title' => 'Talk to team', 'enabled' => 1],
+            ['key' => 'catalog', 'title' => 'Browse Products', 'enabled' => 1],
+            ['key' => 'offers',  'title' => 'Offers & Deals', 'enabled' => 1],
+            ['key' => 'search',  'title' => 'Search Product', 'enabled' => 1],
+            ['key' => 'track',   'title' => 'Track Order', 'enabled' => 1],
+            ['key' => 'human',   'title' => 'Talk to Team', 'enabled' => 1],
             ['key' => 'address', 'title' => 'Delivery address', 'enabled' => 1],
             ['key' => 'payment', 'title' => 'Payment', 'enabled' => 1],
         ],
@@ -148,10 +149,11 @@ function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array 
         ? $rules['welcome_text']
         : "Welcome to {$shopName}.\nChoose an option.";
     $ids = [
-        'catalog' => ['id' => 'browse_products', 'description' => 'Open the shop catalog'],
-        'search'  => ['id' => 'search_product', 'description' => 'Type a product name in a form'],
-        'track'   => ['id' => 'track_order', 'description' => 'Check an order in a form'],
-        'human'   => ['id' => 'talk_to_team', 'description' => 'Write a message to the shop owner'],
+        'catalog' => ['id' => 'browse_products', 'title' => 'Browse Products', 'description' => 'See all products'],
+        'offers'  => ['id' => 'offers_deals', 'title' => 'Offers & Deals', 'description' => 'Today\'s discounts'],
+        'search'  => ['id' => 'search_product', 'title' => 'Search Product', 'description' => 'Find a product by name'],
+        'track'   => ['id' => 'track_order', 'title' => 'Track Order', 'description' => 'Check an order'],
+        'human'   => ['id' => 'talk_to_team', 'title' => 'Talk to Team', 'description' => 'Message the shop team'],
     ];
     $rows = [];
     foreach ($rules['steps'] as $step) {
@@ -159,19 +161,14 @@ function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array 
         if (!isset($ids[$key]) || empty($step['enabled'])) {
             continue;
         }
-        $title = trim((string)($step['title'] ?? ''));
-        if ($title === '') {
-            continue;
-        }
-        $title = function_exists('mb_substr') ? mb_substr($title, 0, 24) : substr($title, 0, 24);
         $rows[] = [
             'id'          => $ids[$key]['id'],
-            'title'       => $title,
+            'title'       => $ids[$key]['title'],
             'description' => $ids[$key]['description'],
         ];
     }
     if ($rows === []) {
-        $rows[] = ['id' => 'browse_products', 'title' => 'Catalog view', 'description' => 'Open the shop catalog'];
+        $rows[] = ['id' => 'browse_products', 'title' => 'Browse Products', 'description' => 'See all products'];
     }
     $header = function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : substr($shopName, 0, 60);
     return [
@@ -180,9 +177,9 @@ function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array 
         'body'   => ['text' => $text],
         'footer' => ['text' => 'Choose an option'],
         'action' => [
-            'button'   => 'View menu',
+            'button'   => 'Main menu',
             'sections' => [[
-                'title' => 'Menu',
+                'title' => 'Main menu',
                 'rows'  => $rows,
             ]],
         ],
