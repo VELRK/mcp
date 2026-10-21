@@ -1400,7 +1400,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $interactive = [
             'type' => 'catalog_message',
             'body' => [
-                'text' => "Tap View catalog to see {$shopName} products, prices, and photos.\nAdd items to the WhatsApp cart and send the order.",
+                'text' => "All products from {$shopName} are in the catalog.\nTap View catalog to see photos and prices, then add items and send the order.",
             ],
             'action' => [
                 'name' => 'catalog_message',
@@ -1539,6 +1539,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
      * Open the native WhatsApp catalog. Fall back to a text list if no catalog is linked.
      */
     private function _send_saree_catalog(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, string $phoneNumberId = ''): void {
+        if ($this->_send_native_whatsapp_catalog($peer, $vendorId, $phoneNumberId, $waCloud, $shopName)) {
+            return;
+        }
         $prods = $this->db->where('vendor_id', $vendorId)
                           ->where('status', 'active')
                           ->order_by('id', 'ASC')

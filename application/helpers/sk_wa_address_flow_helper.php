@@ -149,7 +149,7 @@ function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array 
         ? $rules['welcome_text']
         : "Welcome to {$shopName}.\nChoose an option.";
     $ids = [
-        'catalog' => ['id' => 'browse_products', 'title' => 'Browse Products', 'description' => 'See all products'],
+        'catalog' => ['id' => 'browse_products', 'title' => 'Browse Products', 'description' => 'Open the catalog'],
         'offers'  => ['id' => 'offers_deals', 'title' => 'Offers & Deals', 'description' => 'Today\'s discounts'],
         'search'  => ['id' => 'search_product', 'title' => 'Search Product', 'description' => 'Find a product by name'],
         'track'   => ['id' => 'track_order', 'title' => 'Track Order', 'description' => 'Check an order'],
@@ -168,7 +168,7 @@ function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array 
         ];
     }
     if ($rows === []) {
-        $rows[] = ['id' => 'browse_products', 'title' => 'Browse Products', 'description' => 'See all products'];
+        $rows[] = ['id' => 'browse_products', 'title' => 'Browse Products', 'description' => 'Open the catalog'];
     }
     $header = function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : substr($shopName, 0, 60);
     return [
