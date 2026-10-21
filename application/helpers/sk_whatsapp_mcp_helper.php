@@ -56,6 +56,11 @@ function sk_wa_mcp_parse_inbound(array $m): array {
             $out['id'] = (string)($inter['list_reply']['id'] ?? '');
             $out['title'] = (string)($inter['list_reply']['title'] ?? '');
             $out['text'] = $out['title'] !== '' ? $out['title'] : $out['id'];
+        } elseif ($itype === 'nfm_reply') {
+            $out['type'] = 'nfm_reply';
+            $reply = is_array($inter['nfm_reply'] ?? null) ? $inter['nfm_reply'] : [];
+            $json = trim((string)($reply['response_json'] ?? ''));
+            $out['text'] = $json !== '' ? ('Address form: ' . $json) : 'Address form submitted';
         } else {
             $out['text'] = $itype !== '' ? $itype : 'interactive';
         }

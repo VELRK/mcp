@@ -673,6 +673,9 @@ $route['shopkart-api/order/(:num)/invoice/download']['GET'] = 'api/Sk_Order/invo
 $route['shopkart-api/shipping/track']['POST'] = 'api/Sk_Shipping/track';
 $route['shopkart-api/whatsapp/webhook']['GET']  = 'api/Sk_Whatsapp_webhook/index';
 $route['shopkart-api/whatsapp/webhook']['POST'] = 'api/Sk_Whatsapp_webhook/index';
+$route['shopkart-api/whatsapp/flow/address']['POST'] = 'api/Sk_Whatsapp_flow/address';
+$route['admin/whatsapp/shop-steps'] = 'admin/Whatsapp/shop_steps';
+$route['shopkart/whatsapp/shop-steps'] = 'admin/Whatsapp/shop_steps';
 // Meta Business Agent commerce connectors (API key auth; tenant from phone_number_id)
 // Base connector status endpoint (e.g. https://talkaipilot.com/shopkart-api/meta-agent/connectors/1389144424278347)
 $route['shopkart-api/meta-agent/connectors/(:any)']['GET']                          = 'api/Sk_Meta_agent_connectors/index/$1';

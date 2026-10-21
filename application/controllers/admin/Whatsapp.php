@@ -657,6 +657,42 @@ class Whatsapp extends Sk_Base {
         $this->render('whatsapp/order_templates', $data);
     }
 
+    /** Per-shop chat steps. Product wording is not limited to sarees. */
+    public function shop_steps() {
+        $this->load->helper('sk_wa_address_flow');
+        $vid = $this->_resolve_ops_vendor_id();
+        if ($this->input->method(true) === 'POST' && $vid > 0) {
+            $enabled = (array)$this->input->post('step_enabled');
+            $titles = (array)$this->input->post('step_title');
+            $steps = [];
+            foreach (sk_wa_shop_rules_defaults()['steps'] as $step) {
+                $key = $step['key'];
+                $steps[] = [
+                    'key'     => $key,
+                    'title'   => (string)($titles[$key] ?? $step['title']),
+                    'enabled' => in_array($key, $enabled, true) ? 1 : 0,
+                ];
+            }
+            sk_wa_shop_rules_save($vid, [
+                'product_label' => (string)$this->input->post('product_label', true),
+                'welcome_text'  => (string)$this->input->post('welcome_text', true),
+                'steps'         => $steps,
+            ]);
+            $this->session->set_flashdata('success', 'Shop chat steps saved.');
+            redirect('admin/whatsapp/shop-steps' . ($this->is_super_admin() ? '?vendor_id=' . $vid : ''));
+        }
+        $vendors = [];
+        if ($this->is_super_admin()) {
+            $vendors = $this->Sk_Vendor_model->get_master_shop_summary();
+        }
+        $data['title'] = 'Shop chat steps';
+        $data['vendor_id'] = $vid;
+        $data['vendors'] = $vendors;
+        $data['is_super'] = $this->is_super_admin();
+        $data['rules'] = sk_wa_shop_rules($vid);
+        $this->render('whatsapp/shop_steps', $data);
+    }
+
     /**
      * Vendor scope for WA ops: query → session ops → logged-in vendor.
      */

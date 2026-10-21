@@ -446,7 +446,13 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
         // Native WhatsApp catalog cart (customer added products in the catalog and sent the order).
         if ($msgType === 'order' || !empty($raw['order']['product_items']) || !empty($m['order']['product_items'])) {
-            $this->_handle_whatsapp_catalog_order($raw, $m, $peer, $vendorId, $waCloud, $shopName, $conv);
+            $this->_handle_whatsapp_catalog_order($raw, $m, $peer, $vendorId, $waCloud, $shopName, $conv, $phoneNumberId);
+            return;
+        }
+
+        $flowReply = $raw['interactive']['nfm_reply']['response_json'] ?? ($m['interactive']['nfm_reply']['response_json'] ?? null);
+        if ($flowReply !== null || (($raw['interactive']['type'] ?? '') === 'nfm_reply')) {
+            $this->_handle_address_flow_reply($peer, $vendorId, $waCloud, $shopName, $conv, (string)$flowReply);
             return;
         }
 
@@ -464,37 +470,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
 
         if ($isGreeting) {
-            $headerText = function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : substr($shopName, 0, 60);
-            $interactive = [
-                'type'   => 'button',
-                'header' => [
-                    'type' => 'text',
-                    'text' => $headerText,
-                ],
-                'body'   => [
-                    'text' => "Welcome to {$shopName}! 👋\nShop from the catalog — photos, price, and cart are inside WhatsApp. No need to chat for products.",
-                ],
-                'footer' => [
-                    'text' => 'Open the catalog to order',
-                ],
-                'action' => [
-                    'buttons' => [
-                        [
-                            'type'  => 'reply',
-                            'reply' => ['id' => 'browse_products', 'title' => 'View catalog'],
-                        ],
-                        [
-                            'type'  => 'reply',
-                            'reply' => ['id' => 'track_order', 'title' => 'Track order'],
-                        ],
-                        [
-                            'type'  => 'reply',
-                            'reply' => ['id' => 'talk_to_team', 'title' => 'Talk to team'],
-                        ],
-                    ],
-                ],
-            ];
-            $waCloud->send_interactive($peer, $interactive);
+            $this->load->helper('sk_wa_address_flow');
+            $waCloud->send_interactive($peer, sk_wa_shop_welcome_interactive($vendorId, $shopName));
             return;
         }
 
@@ -814,7 +791,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
         // 15. CHECKOUT / PLACE ORDER: ASK DELIVERY ADDRESS FIRST!
         if (in_array($interactiveId, ['cart_checkout', 'checkout', 'buy_now'], true) || preg_match('/^(checkout|buy now|place order|order now|order)$/iu', $trimBody)) {
-            $this->_initiate_checkout_address_flow($peer, $vendorId, $waCloud, $shopName, $conv);
+            $this->_initiate_checkout_address_flow($peer, $vendorId, $waCloud, $shopName, $conv, $phoneNumberId);
             return;
         }
 
@@ -827,7 +804,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
         // 15b. CHANGE / ENTER DELIVERY ADDRESS (addr_change)
         if ($interactiveId === 'addr_change') {
-            $this->_prompt_for_delivery_address($peer, $vendorId, $waCloud, $shopName, $conv);
+            $this->_prompt_for_delivery_address($peer, $vendorId, $waCloud, $shopName, $conv, $phoneNumberId, 'edit');
             return;
         }
 
@@ -1565,7 +1542,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     /**
      * WhatsApp catalog "Send cart" arrives as type=order with product_items.
      */
-    private function _handle_whatsapp_catalog_order(array $raw, array $m, string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
+    private function _handle_whatsapp_catalog_order(array $raw, array $m, string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, string $phoneNumberId = ''): void {
         $order = is_array($raw['order'] ?? null) ? $raw['order'] : [];
         if ($order === [] && is_array($m['order'] ?? null)) {
             $order = $m['order'];
@@ -1603,7 +1580,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             $waCloud->send_text($peer, "We received the cart, but those catalog items are not linked to {$shopName} yet. Open the catalog again after products are synced.");
             return;
         }
-        $this->_initiate_checkout_address_flow($peer, $vendorId, $waCloud, $shopName, $conv);
+        $this->_initiate_checkout_address_flow($peer, $vendorId, $waCloud, $shopName, $conv, $phoneNumberId);
     }
 
     /**
@@ -1745,9 +1722,54 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
     }
 
     /**
+     * WhatsApp Flow completion. The endpoint already saved the customer and address.
+     */
+    private function _handle_address_flow_reply(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, string $responseJson): void {
+        $payload = json_decode($responseJson, true);
+        $addressId = (int)(is_array($payload) ? ($payload['address_id'] ?? 0) : 0);
+        $addr = $addressId > 0 ? $this->db->where('id', $addressId)->get('addresses')->row_array() : null;
+        if (!$addr) {
+            $addr = $this->_get_latest_customer_address($peer);
+            $addressId = (int)($addr['id'] ?? 0);
+        }
+        if (!$addr || $addressId < 1) {
+            $waCloud->send_text($peer, "We could not read the saved address. Tap Edit address and submit the form again.");
+            return;
+        }
+        $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
+            'agent_state' => json_encode(['address_id' => $addressId], JSON_UNESCAPED_UNICODE),
+            'updated_at'  => date('Y-m-d H:i:s'),
+        ]);
+        $name = (string)($addr['full_name'] ?? '');
+        $phone = (string)($addr['phone'] ?? $peer);
+        $line1 = (string)($addr['line1'] ?? '');
+        $city = (string)($addr['city'] ?? '');
+        $state = (string)($addr['state'] ?? '');
+        $pin = (string)($addr['pincode'] ?? '');
+        $text = "Address saved for {$shopName}.\n\n"
+            . "Name: {$name}\n"
+            . "Phone: {$phone}\n"
+            . "Address: {$line1}\n"
+            . "City / State: {$city}, {$state}\n"
+            . "Pincode: {$pin}\n\n"
+            . "Tap Proceed to pay.";
+        $waCloud->send_interactive($peer, [
+            'type'   => 'button',
+            'body'   => ['text' => $text],
+            'action' => [
+                'buttons' => [
+                    ['type' => 'reply', 'reply' => ['id' => 'addr_proceed_' . $addressId, 'title' => 'Proceed to pay']],
+                    ['type' => 'reply', 'reply' => ['id' => 'addr_change', 'title' => 'Edit address']],
+                    ['type' => 'reply', 'reply' => ['id' => 'cart_view', 'title' => 'View bag']],
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Step 1 of Checkout: Verify or ask for delivery address before sale.
      */
-    private function _initiate_checkout_address_flow(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
+    private function _initiate_checkout_address_flow(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, string $phoneNumberId = ''): void {
         $sessionId = 'wa_' . $peer;
         $cartCount = $this->db->where('session_id', $sessionId)->where('vendor_id', $vendorId)->count_all_results('cart');
         if ($cartCount === 0) {
@@ -1819,14 +1841,13 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         }
 
         // If no saved address found, prompt customer to enter address
-        $this->_prompt_for_delivery_address($peer, $vendorId, $waCloud, $shopName, $conv);
+        $this->_prompt_for_delivery_address($peer, $vendorId, $waCloud, $shopName, $conv, $phoneNumberId, 'create');
     }
 
     /**
-     * Prompt customer to type or share their delivery address.
+     * Open the WhatsApp address Flow. Fall back to typed address if the Flow is not published yet.
      */
-    private function _prompt_for_delivery_address(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv): void {
-        // Set conversation state to waiting_for_address
+    private function _prompt_for_delivery_address(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, string $phoneNumberId = '', string $mode = 'create'): void {
         $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
             'agent_state' => json_encode([
                 'step'      => 'waiting_for_address',
@@ -1834,6 +1855,16 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             ], JSON_UNESCAPED_UNICODE),
             'updated_at'  => date('Y-m-d H:i:s'),
         ]);
+
+        $this->load->helper('sk_wa_address_flow');
+        $addressId = 0;
+        if ($mode === 'edit') {
+            $existing = $this->_get_latest_customer_address($peer);
+            $addressId = (int)($existing['id'] ?? 0);
+        }
+        if (sk_wa_address_flow_send($waCloud, $peer, $vendorId, $phoneNumberId, $shopName, $mode, $addressId)) {
+            return;
+        }
 
         $promptText = "📍 *Enter Delivery Address*\n\n"
                     . "Please reply with your shipping address in this easy format:\n\n"
