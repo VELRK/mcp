@@ -577,7 +577,6 @@ class Sk_User_model extends CI_Model {
             'addresses',
             'wishlist',
             'cart',
-            'sk_device_tokens',
             'jwt_blacklist',
             'promo_usage',
             'password_resets',

@@ -37,8 +37,6 @@ composer.lock
 # ── Secrets (never commit) ────────────────────────────────────
 application/config/database.php
 application/config/deploy_webhook_secret.php
-application/config/firebase.php
-application/config/firebase-service-account.json
 .env
 .env.*
 *.env
@@ -53,7 +51,6 @@ id_rsa.pub
 !.env.example
 !application/config/database.php.example
 !application/config/database.php.server
-!application/config/firebase.php.example
 !application/config/deploy_webhook_secret.php.example
 
 # ── User uploads (live only) ──────────────────────────────────

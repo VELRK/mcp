@@ -185,9 +185,6 @@ $route['api/auth/delete_account'] = 'Auth/delete_account';
 $route['api/auth/delete-account'] = 'Auth/delete_account';
 $route['test-update'] = 'TestUpdate/index';
 
-// Service Worker routes
-$route['firebase-messaging-sw.js'] = 'ServiceWorker/firebase_messaging_sw';
-
 // API routes
 $route['api/enquiry_store'] = 'Api/enquiry_store';
 $route['api/enquiry/store'] = 'Api/enquiry_store';
@@ -538,16 +535,6 @@ $route['cron/saas_daily_bills'] = 'Cron/saas_daily_bills';
 $route['shopkart-api/saas/ai-requests']['POST'] = 'api/Sk_Saas_Billing/ai_requests';
 $route['api/saas/ai-requests']['POST'] = 'api/Sk_Saas_Billing/ai_requests';
 
-$route['shopkart/notifications'] = 'admin/Notifications/index';
-$route['shopkart/notifications/create'] = 'admin/Notifications/create';
-$route['shopkart/notifications/store'] = 'admin/Notifications/store';
-$route['shopkart/notifications/view/(:num)'] = 'admin/Notifications/view/$1';
-$route['shopkart/notifications/send/(:num)'] = 'admin/Notifications/send/$1';
-$route['admin/notifications'] = 'admin/Notifications/index';
-$route['admin/notifications/create'] = 'admin/Notifications/create';
-$route['admin/notifications/store'] = 'admin/Notifications/store';
-$route['admin/notifications/view/(:num)'] = 'admin/Notifications/view/$1';
-$route['admin/notifications/send/(:num)'] = 'admin/Notifications/send/$1';
 // Settings
 $route['shopkart/settings'] = 'admin/Settings/index';
 $route['shopkart/settings/update'] = 'admin/Settings/update';
@@ -775,10 +762,6 @@ $route['shopkart-api/user/change-password']['POST']       = 'api/Sk_User/change_
 $route['shopkart-api/user/addresses']['GET']              = 'api/Sk_User/addresses';
 $route['shopkart-api/user/addresses']['POST']             = 'api/Sk_User/save_address';
 $route['shopkart-api/user/addresses/(:num)']['DELETE']    = 'api/Sk_User/delete_address/$1';
-$route['shopkart-api/user/device-token']['POST']            = 'api/Sk_User/register_device_token';
-$route['shopkart-api/user/device-token']['DELETE']          = 'api/Sk_User/unregister_device_token';
-$route['shopkart-api/user/device-token/remove']['POST']     = 'api/Sk_User/unregister_device_token';
-$route['shopkart-api/notifications']['GET']                 = 'api/Sk_Notification/index';
 $route['shopkart-api/payment/toyyibpay-return']['GET']      = 'api/Sk_Payment/toyyibpay_return';
 $route['shopkart-api/payment/toyyibpay-callback']['POST']   = 'api/Sk_Payment/toyyibpay_callback';
 $route['shopkart-api/payment/toyyibpay-callback']['GET']    = 'api/Sk_Payment/toyyibpay_callback';

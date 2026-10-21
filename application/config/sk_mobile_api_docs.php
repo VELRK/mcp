@@ -35,7 +35,6 @@ $config['groups'] = [
     'orders'     => '8. Orders & Checkout',
     'shipping'   => '9. Shipping',
     'payment'    => '10. Payment',
-    'notifications' => '10b. Push Notifications',
     'reviews'    => '11. Reviews',
     'content'    => '12. Content & SEO',
     'affiliate'  => '13. Affiliate (Enquiry + Portal)',
@@ -1001,76 +1000,6 @@ $config['catalog'] = [
         ],
     ],
 
-
-    /* ========== PUSH NOTIFICATIONS ========== */
-    [
-        'id' => 'device-token-register',
-        'group' => 'notifications',
-        'name' => 'Register FCM Device Token',
-        'method' => 'POST',
-        'path' => 'user/device-token',
-        'auth' => true,
-        'verified' => true,
-        'how' => 'JWT required. Call after Firebase Messaging getToken(). platform: android|ios|web.',
-        'query' => [],
-        'headers' => ['Content-Type' => 'application/json'],
-        'body' => ['token' => 'fcm_device_token_here', 'platform' => 'android'],
-        'sample_response' => [
-            'success' => true,
-            'message' => 'Device token registered.',
-            'data' => ['token' => 'fcm_device_token_here', 'platform' => 'android'],
-        ],
-    ],
-    [
-        'id' => 'device-token-remove',
-        'group' => 'notifications',
-        'name' => 'Unregister FCM Device Token',
-        'method' => 'POST',
-        'path' => 'user/device-token/remove',
-        'auth' => true,
-        'verified' => true,
-        'how' => 'JWT required. Call on logout. DELETE /user/device-token also works with same body.',
-        'query' => [],
-        'headers' => ['Content-Type' => 'application/json'],
-        'body' => ['token' => 'fcm_device_token_here'],
-        'sample_response' => [
-            'success' => true,
-            'message' => 'Device token removed.',
-            'data' => [],
-        ],
-    ],
-    [
-        'id' => 'notifications-list',
-        'group' => 'notifications',
-        'name' => 'Notification Inbox',
-        'method' => 'GET',
-        'path' => 'notifications',
-        'auth' => true,
-        'verified' => true,
-        'how' => 'JWT required. Recent sent campaigns with media_type none|image|video|both and absolute media URLs.',
-        'query' => ['limit' => '20'],
-        'headers' => [],
-        'body' => null,
-        'sample_response' => [
-            'success' => true,
-            'message' => 'Success',
-            'data' => [
-                'notifications' => [
-                    [
-                        'id' => 1,
-                        'title' => 'Flash sale',
-                        'body' => 'Tonight only',
-                        'media_type' => 'image',
-                        'image_url' => 'https://example.com/banner.jpg',
-                        'video_url' => null,
-                        'click_url' => null,
-                        'sent_at' => '2026-08-04 12:00:00',
-                    ],
-                ],
-                'total' => 1,
-            ],
-        ],
-    ],
 
     /* ========== PROMO ========== */
     [
