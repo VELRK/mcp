@@ -336,11 +336,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 $this->Sk_Vendor_meta_agent_model->set_conversation_owner((int)$conv['id'], 'meta_agent', 'message_echo');
             }
             if ($direction === 'in' && $vendorId > 0) {
-                if (!empty($conv['handoff_at'])) {
-                    sk_whatsapp_notify_handoff($vendorId, $peer, $body, $names[$peer] ?? '', true);
-                } else {
-                    $this->_handle_inbound_customer_message($raw, $m, $conv, $peer, $body, $vendorId, $phoneNumberId, $settings);
-                }
+                $this->_handle_inbound_customer_message($raw, $m, $conv, $peer, $body, $vendorId, $phoneNumberId, $settings);
             }
         }
     }
@@ -473,6 +469,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             $this->load->helper('sk_wa_address_flow');
             $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
                 'agent_state' => null,
+                'handoff_at'  => null,
                 'updated_at'  => date('Y-m-d H:i:s'),
             ]);
             $waCloud->send_interactive($peer, sk_wa_shop_welcome_interactive($vendorId, $shopName));

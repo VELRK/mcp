@@ -1196,10 +1196,10 @@ function sk_ai_human_handoff(array $context = [], ?int $tenantId = null): array 
             );
             $conversationId = (int)($conv['id'] ?? 0);
             if ($conversationId > 0) {
-                // Soft handoff: flag inbox for staff but keep Meta BA as thread owner so AI keeps chatting.
+                // Notify staff only. handoff_at used to freeze the bot, so later hi/hello got no reply.
                 $CI->db->where('id', $conversationId)->update('wa_cloud_conversations', [
                     'thread_owner'   => 'meta_agent',
-                    'handoff_at'     => date('Y-m-d H:i:s'),
+                    'handoff_at'     => null,
                     'handoff_reason' => mb_substr($reason, 0, 500),
                     'unread'         => (int)($conv['unread'] ?? 0) + 1,
                     'last_message'   => 'Handoff (AI still active): ' . mb_substr($reason, 0, 160),
