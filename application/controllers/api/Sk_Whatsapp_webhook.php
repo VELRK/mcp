@@ -1533,7 +1533,6 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
         $this->_send_cart_view($peer, $vendorId, $waCloud, $shopName);
-        $this->_initiate_checkout_address_flow($peer, $vendorId, $waCloud, $shopName, $conv, $phoneNumberId);
     }
 
     /**
@@ -1833,7 +1832,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         $sessionId = 'wa_' . $peer;
         $cartCount = $this->db->where('session_id', $sessionId)->where('vendor_id', $vendorId)->count_all_results('cart');
         if ($cartCount === 0) {
-            $waCloud->send_text($peer, "Your cart is empty 😊\nReply with *1* or send *saree* to browse our collections before placing an order!");
+            $this->_send_cart_view($peer, $vendorId, $waCloud, $shopName);
             return;
         }
 
@@ -2553,9 +2552,6 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                 'notes' => 'Razorpay Link: ' . $paymentLink . ' (ID: ' . ($rzpRes['id'] ?? '') . ')',
             ]);
 
-            // Empty cart
-            $this->db->where('session_id', $sessionId)->delete('cart');
-
             $interactive = [
                 'type'   => 'button',
                 'header' => [
@@ -2593,8 +2589,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
                         [
                             'type'  => 'reply',
                             'reply' => [
-                                'id'    => 'main_menu',
-                                'title' => '🏠 Main Menu',
+                                'id'    => 'cart_view',
+                                'title' => 'View cart',
                             ],
                         ],
                     ],
@@ -2684,6 +2680,8 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             'status'            => 'captured',
         ]);
 
+        $this->db->where('session_id', 'wa_' . $peer)->where('vendor_id', $vendorId)->delete('cart');
+
         $items = $this->Sk_Order_model->get_items($orderId);
         $this->_send_invoice_message($order, $items, 'razorpay', $peer, $waCloud, $shopName, true);
     }
@@ -2709,6 +2707,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             'notes'             => 'Customer switched payment to Cash on Delivery (COD)',
         ]);
 
+        $this->db->where('session_id', 'wa_' . $peer)->where('vendor_id', $vendorId)->delete('cart');
         $order = $this->Sk_Order_model->get_by_id($orderId);
         $items = $this->Sk_Order_model->get_items($orderId);
         $this->_send_invoice_message($order, $items, 'cod', $peer, $waCloud, $shopName, false);
