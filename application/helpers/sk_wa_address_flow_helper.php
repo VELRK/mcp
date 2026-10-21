@@ -191,14 +191,21 @@ function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array 
 
 function sk_wa_address_flow_json(): array {
     $field = static function (string $name, string $label, bool $required, string $input = 'text'): array {
-        return [
+        $node = [
             'type'       => 'TextInput',
             'name'       => $name,
             'label'      => $label,
             'required'   => $required,
             'input-type' => $input,
-            'init-value' => '${data.' . $name . '}',
         ];
+        if ($name === 'pincode') {
+            $node['min-chars'] = 4;
+            $node['max-chars'] = 6;
+            $node['helper-text'] = 'Required';
+        } elseif ($required) {
+            $node['helper-text'] = 'Required';
+        }
+        return $node;
     };
     return [
         'version'          => '7.0',
@@ -222,9 +229,19 @@ function sk_wa_address_flow_json(): array {
                 'layout' => [
                     'type'     => 'SingleColumnLayout',
                     'children' => [[
-                        'type'     => 'Form',
-                        'name'     => 'address_form',
-                        'children' => [
+                    'type'     => 'Form',
+                    'name'     => 'address_form',
+                    'init-values' => [
+                        'full_name' => '${data.full_name}',
+                        'phone'     => '${data.phone}',
+                        'email'     => '${data.email}',
+                        'line1'     => '${data.line1}',
+                        'line2'     => '${data.line2}',
+                        'city'      => '${data.city}',
+                        'state'     => '${data.state}',
+                        'pincode'   => '${data.pincode}',
+                    ],
+                    'children' => [
                             ['type' => 'TextBody', 'text' => '${data.error_message}'],
                             $field('full_name', 'Full name', true),
                             $field('phone', 'Phone', true, 'phone'),
@@ -233,7 +250,7 @@ function sk_wa_address_flow_json(): array {
                             $field('line2', 'Address line 2', false),
                             $field('city', 'City', true),
                             $field('state', 'State', true),
-                            $field('pincode', 'Pincode', true, 'number'),
+                            $field('pincode', 'Pincode', true),
                             [
                                 'type'            => 'Footer',
                                 'label'           => 'Save address',
@@ -289,6 +306,14 @@ function sk_wa_address_flow_json(): array {
 function sk_wa_flow_private_key() {
     $path = APPPATH . 'config/wa_flow_private.pem';
     if (!is_file($path)) {
+        if (getenv('OPENSSL_CONF') === false || getenv('OPENSSL_CONF') === '') {
+            foreach (['/etc/ssl/openssl.cnf', '/usr/lib/ssl/openssl.cnf'] as $cnf) {
+                if (is_file($cnf)) {
+                    putenv('OPENSSL_CONF=' . $cnf);
+                    break;
+                }
+            }
+        }
         $res = openssl_pkey_new([
             'private_key_bits' => 2048,
             'private_key_type' => OPENSSL_KEYTYPE_RSA,
@@ -301,8 +326,10 @@ function sk_wa_flow_private_key() {
         if ($pem === '') {
             return null;
         }
-        @file_put_contents($path, $pem);
-        @chmod($path, 0600);
+        if (@file_put_contents($path, $pem) === false) {
+            return null;
+        }
+        @chmod($path, 0640);
     }
     $pem = (string)@file_get_contents($path);
     $key = openssl_pkey_get_private($pem);
