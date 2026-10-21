@@ -12,8 +12,9 @@ function sk_wa_shop_rules_defaults(): array {
         'product_label' => 'products',
         'welcome_text'  => '',
         'steps' => [
-            ['key' => 'catalog', 'title' => 'View catalog', 'enabled' => 1],
-            ['key' => 'track',   'title' => 'Track order',  'enabled' => 1],
+            ['key' => 'catalog', 'title' => 'Catalog view', 'enabled' => 1],
+            ['key' => 'search',  'title' => 'Search product', 'enabled' => 1],
+            ['key' => 'track',   'title' => 'Track order', 'enabled' => 1],
             ['key' => 'human',   'title' => 'Talk to team', 'enabled' => 1],
             ['key' => 'address', 'title' => 'Delivery address', 'enabled' => 1],
             ['key' => 'payment', 'title' => 'Payment', 'enabled' => 1],
@@ -30,9 +31,21 @@ function sk_wa_shop_rules_ensure_schema(): void {
             `welcome_text` VARCHAR(500) NOT NULL DEFAULT '',
             `steps_json` TEXT NULL,
             `address_flow_id` VARCHAR(64) NULL,
+            `menu_flow_id` VARCHAR(255) NULL,
             `updated_at` DATETIME NULL,
             PRIMARY KEY (`vendor_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        return;
+    }
+    if (!$CI->db->field_exists('menu_flow_id', 'vendor_wa_bot_rules')) {
+        $CI->db->query("ALTER TABLE `vendor_wa_bot_rules` ADD COLUMN `menu_flow_id` VARCHAR(255) NULL");
+        return;
+    }
+    foreach ($CI->db->field_data('vendor_wa_bot_rules') as $field) {
+        if (($field->name ?? '') === 'menu_flow_id' && (int)($field->max_length ?? 0) < 255) {
+            $CI->db->query("ALTER TABLE `vendor_wa_bot_rules` MODIFY `menu_flow_id` VARCHAR(255) NULL");
+            break;
+        }
     }
 }
 
@@ -47,9 +60,28 @@ function sk_wa_shop_rules(int $vendorId): array {
     if (!$row) {
         return $defaults;
     }
-    $steps = json_decode((string)($row['steps_json'] ?? ''), true);
-    if (!is_array($steps) || $steps === []) {
-        $steps = $defaults['steps'];
+    $saved = json_decode((string)($row['steps_json'] ?? ''), true);
+    $byKey = [];
+    if (is_array($saved)) {
+        foreach ($saved as $step) {
+            if (is_array($step) && !empty($step['key'])) {
+                $byKey[(string)$step['key']] = $step;
+            }
+        }
+    }
+    $steps = [];
+    foreach ($defaults['steps'] as $step) {
+        $incoming = $byKey[$step['key']] ?? null;
+        if (is_array($incoming)) {
+            $title = trim((string)($incoming['title'] ?? $step['title']));
+            $steps[] = [
+                'key'     => $step['key'],
+                'title'   => $title !== '' ? $title : $step['title'],
+                'enabled' => !empty($incoming['enabled']) ? 1 : 0,
+            ];
+        } else {
+            $steps[] = $step;
+        }
     }
     $label = trim((string)($row['product_label'] ?? ''));
     return [
@@ -57,6 +89,7 @@ function sk_wa_shop_rules(int $vendorId): array {
         'welcome_text'    => trim((string)($row['welcome_text'] ?? '')),
         'steps'           => $steps,
         'address_flow_id' => trim((string)($row['address_flow_id'] ?? '')),
+        'menu_flow_id'    => trim((string)($row['menu_flow_id'] ?? '')),
     ];
 }
 
@@ -85,7 +118,7 @@ function sk_wa_shop_rules_save(int $vendorId, array $rules): void {
         $key = $step['key'];
         $incoming = $byKey[$key] ?? [];
         $title = trim((string)($incoming['title'] ?? $step['title']));
-        $title = function_exists('mb_substr') ? mb_substr($title, 0, 20) : substr($title, 0, 20);
+        $title = function_exists('mb_substr') ? mb_substr($title, 0, 24) : substr($title, 0, 24);
         $steps[] = [
             'key'     => $key,
             'title'   => $title !== '' ? $title : $step['title'],
@@ -111,16 +144,16 @@ function sk_wa_shop_rules_save(int $vendorId, array $rules): void {
 
 function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array {
     $rules = sk_wa_shop_rules($vendorId);
-    $label = $rules['product_label'];
     $text = $rules['welcome_text'] !== ''
         ? $rules['welcome_text']
-        : "Welcome to {$shopName}! 👋\nBrowse {$label} in the catalog. Photos, price, and cart stay inside WhatsApp.";
+        : "Welcome to {$shopName}.\nChoose an option.";
     $ids = [
-        'catalog' => 'browse_products',
-        'track'   => 'track_order',
-        'human'   => 'talk_to_team',
+        'catalog' => ['id' => 'browse_products', 'description' => 'Open the shop catalog'],
+        'search'  => ['id' => 'search_product', 'description' => 'Type a product name in a form'],
+        'track'   => ['id' => 'track_order', 'description' => 'Check an order in a form'],
+        'human'   => ['id' => 'talk_to_team', 'description' => 'Write a message to the shop owner'],
     ];
-    $buttons = [];
+    $rows = [];
     foreach ($rules['steps'] as $step) {
         $key = (string)($step['key'] ?? '');
         if (!isset($ids[$key]) || empty($step['enabled'])) {
@@ -130,24 +163,29 @@ function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array 
         if ($title === '') {
             continue;
         }
-        $buttons[] = [
-            'type'  => 'reply',
-            'reply' => ['id' => $ids[$key], 'title' => $title],
+        $title = function_exists('mb_substr') ? mb_substr($title, 0, 24) : substr($title, 0, 24);
+        $rows[] = [
+            'id'          => $ids[$key]['id'],
+            'title'       => $title,
+            'description' => $ids[$key]['description'],
         ];
-        if (count($buttons) >= 3) {
-            break;
-        }
     }
-    if ($buttons === []) {
-        $buttons[] = ['type' => 'reply', 'reply' => ['id' => 'browse_products', 'title' => 'View catalog']];
+    if ($rows === []) {
+        $rows[] = ['id' => 'browse_products', 'title' => 'Catalog view', 'description' => 'Open the shop catalog'];
     }
     $header = function_exists('mb_substr') ? mb_substr($shopName, 0, 60) : substr($shopName, 0, 60);
     return [
-        'type'   => 'button',
+        'type'   => 'list',
         'header' => ['type' => 'text', 'text' => $header !== '' ? $header : 'Shop'],
         'body'   => ['text' => $text],
-        'footer' => ['text' => 'Open the catalog to order'],
-        'action' => ['buttons' => $buttons],
+        'footer' => ['text' => 'Choose an option'],
+        'action' => [
+            'button'   => 'View menu',
+            'sections' => [[
+                'title' => 'Menu',
+                'rows'  => $rows,
+            ]],
+        ],
     ];
 }
 
@@ -693,5 +731,171 @@ function sk_wa_address_flow_send($waCloud, string $peer, int $vendorId, string $
         ],
     ];
     $res = $waCloud->send_interactive($peer, $interactive);
+    return !empty($res['success']);
+}
+
+function sk_wa_menu_flow_specs(): array {
+    return [
+        'SEARCH' => ['title' => 'Search product', 'field' => 'query', 'label' => 'Product name', 'input' => 'text', 'button' => 'Search', 'step' => 'search'],
+        'TRACK'  => ['title' => 'Track order', 'field' => 'order_number', 'label' => 'Order number', 'input' => 'text', 'button' => 'Track', 'step' => 'track'],
+        'TALK'   => ['title' => 'Talk to team', 'field' => 'message', 'label' => 'Message to the shop', 'input' => 'area', 'button' => 'Send', 'step' => 'human'],
+    ];
+}
+
+function sk_wa_menu_flow_json(string $screen): array {
+    $specs = sk_wa_menu_flow_specs();
+    $spec = $specs[$screen];
+    $inputNode = [
+        'type'     => $spec['input'] === 'area' ? 'TextArea' : 'TextInput',
+        'name'     => $spec['field'],
+        'label'    => $spec['label'],
+        'required' => true,
+    ];
+    if ($spec['input'] !== 'area') {
+        $inputNode['input-type'] = 'text';
+    }
+    return [
+        'version'       => '7.0',
+        'routing_model' => [$screen => []],
+        'screens'       => [[
+            'id'       => $screen,
+            'title'    => $spec['title'],
+            'terminal' => true,
+            'success'  => true,
+            'layout'   => [
+                'type'     => 'SingleColumnLayout',
+                'children' => [[
+                    'type'     => 'Form',
+                    'name'     => 'form',
+                    'children' => [
+                        $inputNode,
+                        [
+                            'type'            => 'Footer',
+                            'label'           => $spec['button'],
+                            'on-click-action' => [
+                                'name'    => 'complete',
+                                'payload' => [
+                                    'step'          => $spec['step'],
+                                    $spec['field']  => '${form.' . $spec['field'] . '}',
+                                ],
+                            ],
+                        ],
+                    ],
+                ]],
+            ],
+        ]],
+    ];
+}
+
+function sk_wa_menu_flow_ids(int $vendorId): array {
+    $rules = sk_wa_shop_rules($vendorId);
+    $raw = trim((string)($rules['menu_flow_id'] ?? ''));
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+    $ids = [];
+    foreach (['SEARCH', 'TRACK', 'TALK'] as $screen) {
+        $id = trim((string)($decoded[$screen] ?? ''));
+        if ($id !== '') {
+            $ids[$screen] = $id;
+        }
+    }
+    return $ids;
+}
+
+function sk_wa_menu_flow_store_ids(int $vendorId, array $ids): void {
+    if ($vendorId < 1) {
+        return;
+    }
+    sk_wa_shop_rules_ensure_schema();
+    $CI =& get_instance();
+    $stored = json_encode($ids, JSON_UNESCAPED_UNICODE);
+    $existing = $CI->db->where('vendor_id', $vendorId)->get('vendor_wa_bot_rules')->row_array();
+    $now = date('Y-m-d H:i:s');
+    if ($existing) {
+        $CI->db->where('vendor_id', $vendorId)->update('vendor_wa_bot_rules', [
+            'menu_flow_id' => $stored,
+            'updated_at'   => $now,
+        ]);
+        return;
+    }
+    $defaults = sk_wa_shop_rules_defaults();
+    $CI->db->insert('vendor_wa_bot_rules', [
+        'vendor_id'     => $vendorId,
+        'product_label' => $defaults['product_label'],
+        'welcome_text'  => '',
+        'steps_json'    => json_encode($defaults['steps'], JSON_UNESCAPED_UNICODE),
+        'menu_flow_id'  => $stored,
+        'updated_at'    => $now,
+    ]);
+}
+
+function sk_wa_menu_flow_ensure(int $vendorId, string $phoneNumberId, string $screen): array {
+    $ids = sk_wa_menu_flow_ids($vendorId);
+    if (!empty($ids[$screen])) {
+        return ['ok' => true, 'flow_id' => $ids[$screen]];
+    }
+    $CI =& get_instance();
+    $CI->load->helper('sk_whatsapp_cloud');
+    $CI->load->model('Sk_Admin_model');
+    $settings = $CI->Sk_Admin_model->get_settings();
+    $settings['vendor_id'] = $vendorId;
+    if ($phoneNumberId !== '') {
+        $settings['_wa_phone_number_id'] = $phoneNumberId;
+    }
+    $cfg = sk_wa_cloud_config($settings, $vendorId);
+    $token = trim((string)($cfg['access_token'] ?? ''));
+    $waba = trim((string)($cfg['waba_id'] ?? ''));
+    if ($token === '' || $waba === '') {
+        return ['ok' => false, 'error' => 'WhatsApp token or WABA id is missing.'];
+    }
+    $create = sk_wa_meta_graph('POST', $waba . '/flows', [], json_encode([
+        'name'       => 'Shop ' . strtolower($screen) . ' ' . $vendorId,
+        'categories' => ['OTHER'],
+        'flow_json'  => json_encode(sk_wa_menu_flow_json($screen), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'publish'    => true,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $token, $settings);
+    $flowId = trim((string)($create['data']['id'] ?? ''));
+    if ($flowId === '') {
+        $err = trim((string)($create['error'] ?? ''));
+        return ['ok' => false, 'error' => $err !== '' ? $err : 'Meta did not return a menu Flow id.'];
+    }
+    $ids[$screen] = $flowId;
+    sk_wa_menu_flow_store_ids($vendorId, $ids);
+    return ['ok' => true, 'flow_id' => $flowId];
+}
+
+function sk_wa_menu_flow_send($waCloud, string $peer, int $vendorId, string $phoneNumberId, string $screen): bool {
+    $screen = strtoupper($screen);
+    if (!in_array($screen, ['SEARCH', 'TRACK', 'TALK'], true)) {
+        return false;
+    }
+    $ensured = sk_wa_menu_flow_ensure($vendorId, $phoneNumberId, $screen);
+    if (empty($ensured['ok']) || empty($ensured['flow_id'])) {
+        return false;
+    }
+    $copy = [
+        'SEARCH' => ['Search product', 'Enter the product name. The catalog opens with matches.', 'Search'],
+        'TRACK'  => ['Track order', 'Enter the order number from the shop.', 'Track'],
+        'TALK'   => ['Talk to team', 'Write your message. It is sent to the shop owner, then this chat stays open.', 'Write message'],
+    ];
+    [$header, $body, $cta] = $copy[$screen];
+    $res = $waCloud->send_interactive($peer, [
+        'type'   => 'flow',
+        'header' => ['type' => 'text', 'text' => $header],
+        'body'   => ['text' => $body],
+        'action' => [
+            'name'       => 'flow',
+            'parameters' => [
+                'flow_message_version' => '3',
+                'flow_token'           => 'menu-' . $vendorId . '-' . preg_replace('/\D+/', '', $peer),
+                'flow_id'              => (string)$ensured['flow_id'],
+                'flow_cta'             => $cta,
+                'flow_action'          => 'navigate',
+                'flow_action_payload'  => ['screen' => $screen],
+            ],
+        ],
+    ]);
     return !empty($res['success']);
 }

@@ -2,7 +2,8 @@
 $rules = is_array($rules ?? null) ? $rules : [];
 $steps = is_array($rules['steps'] ?? null) ? $rules['steps'] : [];
 $labels = [
-    'catalog' => 'Open the shop catalog',
+    'catalog' => 'Catalog view',
+    'search'  => 'Search a product',
     'track'   => 'Track an order',
     'human'   => 'Talk to the shop team',
     'address' => 'Ask for a delivery address before payment',
@@ -37,11 +38,11 @@ $labels = [
       <div class="mb-3">
         <label class="form-label">What this shop sells</label>
         <input type="text" name="product_label" class="form-control" maxlength="40" value="<?= htmlspecialchars((string)($rules['product_label'] ?? 'products')) ?>" placeholder="products">
-        <div class="form-text">Used in the welcome message, for example “Browse sarees” or “Browse snacks”.</div>
+        <div class="form-text">Saved with this shop. The welcome menu does not send a product photo, voice note, or product caption.</div>
       </div>
       <div class="mb-3">
         <label class="form-label">Welcome message</label>
-        <textarea name="welcome_text" class="form-control" rows="3" maxlength="500" placeholder="Leave blank to use the default catalog welcome"><?= htmlspecialchars((string)($rules['welcome_text'] ?? '')) ?></textarea>
+        <textarea name="welcome_text" class="form-control" rows="3" maxlength="500" placeholder="Leave blank for: Welcome to the shop. Choose an option."><?= htmlspecialchars((string)($rules['welcome_text'] ?? '')) ?></textarea>
       </div>
 
       <div class="mb-3">
@@ -55,10 +56,10 @@ $labels = [
             <input class="form-check-input" type="checkbox" name="step_enabled[]" value="<?= htmlspecialchars($key) ?>" id="step_<?= htmlspecialchars($key) ?>" <?= !empty($step['enabled']) ? 'checked' : '' ?>>
             <label class="form-check-label" for="step_<?= htmlspecialchars($key) ?>"><?= htmlspecialchars($labels[$key] ?? $key) ?></label>
           </div>
-          <input type="text" name="step_title[<?= htmlspecialchars($key) ?>]" class="form-control form-control-sm mt-2" maxlength="20" value="<?= htmlspecialchars((string)($step['title'] ?? '')) ?>">
+          <input type="text" name="step_title[<?= htmlspecialchars($key) ?>]" class="form-control form-control-sm mt-2" maxlength="24" value="<?= htmlspecialchars((string)($step['title'] ?? '')) ?>">
         </div>
         <?php endforeach; ?>
-        <div class="form-text">The first three enabled steps among catalog, track order, and talk to team appear as WhatsApp buttons. Address and payment stay in checkout.</div>
+        <div class="form-text">Catalog, search, track order, and talk to team appear in the welcome menu. Search, track, and talk open a WhatsApp form. Address and payment stay in checkout.</div>
       </div>
       <button class="btn btn-warning" <?= (int)($vendor_id ?? 0) < 1 ? 'disabled' : '' ?>>Save steps</button>
     </form>

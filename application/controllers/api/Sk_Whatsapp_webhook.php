@@ -452,7 +452,7 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
         $flowReply = $raw['interactive']['nfm_reply']['response_json'] ?? ($m['interactive']['nfm_reply']['response_json'] ?? null);
         if ($flowReply !== null || (($raw['interactive']['type'] ?? '') === 'nfm_reply')) {
-            $this->_handle_address_flow_reply($peer, $vendorId, $waCloud, $shopName, $conv, (string)$flowReply);
+            $this->_handle_flow_reply($peer, $vendorId, $waCloud, $shopName, $conv, (string)$flowReply, $phoneNumberId);
             return;
         }
 
@@ -471,8 +471,28 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
 
         if ($isGreeting) {
             $this->load->helper('sk_wa_address_flow');
+            $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
+                'agent_state' => null,
+                'updated_at'  => date('Y-m-d H:i:s'),
+            ]);
             $waCloud->send_interactive($peer, sk_wa_shop_welcome_interactive($vendorId, $shopName));
             return;
+        }
+
+        $step = is_array($agentState) ? (string)($agentState['step'] ?? '') : '';
+        if ($interactiveId === '' && !$isGreeting) {
+            if ($step === 'waiting_for_search' && $trimBody !== '') {
+                $this->_reply_catalog_search($peer, $vendorId, $waCloud, $shopName, $phoneNumberId, $trimBody);
+                return;
+            }
+            if ($step === 'waiting_for_team_message' && $trimBody !== '') {
+                $this->_forward_team_message($peer, $vendorId, $waCloud, $shopName, $conv, $trimBody);
+                return;
+            }
+            if ($step === 'team_chat' && $trimBody !== '') {
+                $this->_forward_team_message($peer, $vendorId, $waCloud, $shopName, $conv, $trimBody, false);
+                return;
+            }
         }
 
         // 2. BUTTON 1 — 🛍️ BROWSE PRODUCTS / SAREES / CATALOG:
@@ -560,64 +580,41 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
 
-        // 4. BUTTON 3 — 🔎 SEARCH A PRODUCT:
+        // 4. SEARCH A PRODUCT — WhatsApp Flow form, then catalog matches.
         if ($interactiveId === 'search_product' || $trimBody === '3') {
-            $waCloud->send_text($peer, "What product or saree are you looking for? 🔎\n(You can share name, color, style, or fabric like *Kanjivaram*, *Cotton*, *Crepe*, or *Red*)");
+            $this->load->helper('sk_wa_address_flow');
+            if (sk_wa_menu_flow_send($waCloud, $peer, $vendorId, $phoneNumberId, 'SEARCH')) {
+                return;
+            }
+            $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
+                'agent_state' => json_encode(['step' => 'waiting_for_search'], JSON_UNESCAPED_UNICODE),
+                'updated_at'  => date('Y-m-d H:i:s'),
+            ]);
+            $waCloud->send_text($peer, "Type the product name. Matching items open from the catalog.");
             return;
         }
 
-        // 5. BUTTON 4 — 📦 TRACK MY ORDER:
+        // 5. TRACK MY ORDER — WhatsApp Flow form, then order lookup.
         if ($interactiveId === 'track_order' || $trimBody === '4' || preg_match('/^(track|track order|where is my order)$/iu', $trimBody)) {
-            $digits = preg_replace('/\D+/', '', $peer);
-            $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
-
-            $this->db->select('o.*')
-                     ->from('orders o')
-                     ->group_start()
-                       ->like('o.shipping_phone', $last10)
-                       ->or_like('o.billing_phone', $last10)
-                     ->group_end()
-                     ->order_by('o.id', 'DESC')
-                     ->limit(3);
-            $orders = $this->db->get()->result_array();
-
-            $matched = [];
-            foreach ($orders as $o) {
-                if (function_exists('sk_ai_order_in_shop') && sk_ai_order_in_shop($o, $vendorId)) {
-                    $matched[] = $o;
-                }
+            $this->load->helper('sk_wa_address_flow');
+            if (sk_wa_menu_flow_send($waCloud, $peer, $vendorId, $phoneNumberId, 'TRACK')) {
+                return;
             }
-
-            if (!empty($matched)) {
-                $latest = $matched[0];
-                $oNum = (string)($latest['order_number'] ?? $latest['id']);
-                $oStatus = ucfirst((string)($latest['status'] ?? 'pending'));
-                $pStatus = ucfirst((string)($latest['payment_status'] ?? 'pending'));
-                $oTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr((float)($latest['total'] ?? 0)) : "₹" . ($latest['total'] ?? 0);
-                $trackNo = (string)($latest['tracking_number'] ?? $latest['awb_number'] ?? '');
-                $courier = (string)($latest['courier_name'] ?? $latest['shipping_provider'] ?? '');
-
-                $msg = "📦 *Order Status for #{$oNum}*\n\n"
-                    . "• *Status:* {$oStatus}\n"
-                    . "• *Payment:* {$pStatus}\n"
-                    . "• *Total:* {$oTot}\n";
-                if ($trackNo !== '') {
-                    $msg .= "• *Tracking:* {$trackNo} ({$courier})\n";
-                }
-                $msg .= "\nHow else can we help you today?";
-                $waCloud->send_text($peer, $msg);
-            } else {
-                $waCloud->send_text($peer, "We couldn't find any recent orders linked to +{$digits} at {$shopName} 😊\nIf you have an order number, please reply with it (e.g. *#G2D1001*), or reply *1* to browse our products!");
-            }
+            $this->_handle_track_order($peer, $vendorId, $waCloud, $shopName);
             return;
         }
 
-        // 6. BUTTON 5 — 🙋 TALK TO OUR TEAM:
+        // 6. TALK TO OUR TEAM — WhatsApp Flow form, then notify the shop owner.
         if ($interactiveId === 'talk_to_team' || $trimBody === '5' || preg_match('/^(talk to team|human|support|agent)$/iu', $trimBody)) {
-            if (function_exists('sk_ai_human_handoff')) {
-                sk_ai_human_handoff(['phone' => $peer, 'reason' => 'Customer clicked Talk to our team'], $vendorId);
+            $this->load->helper('sk_wa_address_flow');
+            if (sk_wa_menu_flow_send($waCloud, $peer, $vendorId, $phoneNumberId, 'TALK')) {
+                return;
             }
-            $waCloud->send_text($peer, "Of course 😊 I am connecting you with our team.\nPlease wait while our team reviews your message. A teammate will join this chat shortly!");
+            $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
+                'agent_state' => json_encode(['step' => 'waiting_for_team_message'], JSON_UNESCAPED_UNICODE),
+                'updated_at'  => date('Y-m-d H:i:s'),
+            ]);
+            $waCloud->send_text($peer, "Write your message. It is sent to the {$shopName} owner, and you can keep chatting here.");
             return;
         }
 
@@ -1719,6 +1716,144 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
         ];
 
         $waCloud->send_interactive($peer, $interactive);
+    }
+
+    /**
+     * WhatsApp Flow completion. Menu forms and the address form share nfm_reply.
+     */
+    private function _handle_flow_reply(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, string $responseJson, string $phoneNumberId = ''): void {
+        $payload = json_decode($responseJson, true);
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+        $step = (string)($payload['step'] ?? '');
+        if ($step === 'search') {
+            $this->_reply_catalog_search($peer, $vendorId, $waCloud, $shopName, $phoneNumberId, trim((string)($payload['query'] ?? '')));
+            return;
+        }
+        if ($step === 'track') {
+            $this->_handle_track_order($peer, $vendorId, $waCloud, $shopName, trim((string)($payload['order_number'] ?? '')));
+            return;
+        }
+        if ($step === 'human') {
+            $message = trim((string)($payload['message'] ?? ''));
+            if ($message === '') {
+                $waCloud->send_text($peer, "Write a message for the {$shopName} team and send the form again.");
+                return;
+            }
+            $this->_forward_team_message($peer, $vendorId, $waCloud, $shopName, $conv, $message);
+            return;
+        }
+        $this->_handle_address_flow_reply($peer, $vendorId, $waCloud, $shopName, $conv, $responseJson);
+    }
+
+    private function _reply_catalog_search(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, string $phoneNumberId, string $query): void {
+        $query = trim($query);
+        if ($query === '') {
+            $waCloud->send_text($peer, "Type a product name so I can search the {$shopName} catalog.");
+            return;
+        }
+        $items = $this->_search_catalog($query, $vendorId, 10);
+        if ($items === []) {
+            $waCloud->send_text($peer, "No catalog item matches \"{$query}\". Open the catalog and browse, or try another name.");
+            return;
+        }
+        if ($this->_send_catalog_product_list($peer, $vendorId, $phoneNumberId, $waCloud, $shopName, $items, $query)) {
+            return;
+        }
+        $lines = [];
+        foreach (array_slice($items, 0, 8) as $item) {
+            $name = trim((string)($item['name'] ?? 'Product'));
+            if ($name !== '') {
+                $lines[] = '• ' . $name;
+            }
+        }
+        $waCloud->send_text($peer, $lines !== []
+            ? "Matches for \"{$query}\":\n" . implode("\n", $lines) . "\n\nOpen the catalog to order."
+            : "No catalog item matches \"{$query}\".");
+    }
+
+    private function _handle_track_order(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, string $orderNumber = ''): void {
+        $digits = preg_replace('/\D+/', '', $peer);
+        $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+        $number = ltrim(trim($orderNumber), '#');
+
+        $this->db->select('o.*')->from('orders o');
+        if ($number !== '') {
+            $this->db->group_start()
+                ->where('o.order_number', $number)
+                ->or_where('o.order_number', '#' . $number)
+            ->group_end();
+        } else {
+            $this->db->group_start()
+                ->like('o.shipping_phone', $last10)
+                ->or_like('o.billing_phone', $last10)
+            ->group_end();
+        }
+        $orders = $this->db->order_by('o.id', 'DESC')->limit(8)->get()->result_array();
+
+        $matched = [];
+        foreach ($orders as $o) {
+            if (function_exists('sk_ai_order_in_shop') && !sk_ai_order_in_shop($o, $vendorId)) {
+                continue;
+            }
+            $matched[] = $o;
+        }
+
+        if ($matched === [] && $number !== '') {
+            $waCloud->send_text($peer, "No order {$number} was found at {$shopName}. Check the number, or send hi and choose Track order again.");
+            return;
+        }
+        if ($matched === []) {
+            $waCloud->send_text($peer, "No recent order is linked to this WhatsApp number at {$shopName}. Send hi and choose Track order to enter an order number.");
+            return;
+        }
+
+        $chunks = [];
+        foreach (array_slice($matched, 0, 3) as $latest) {
+            $oNum = (string)($latest['order_number'] ?? $latest['id']);
+            $oStatus = ucfirst((string)($latest['status'] ?? 'pending'));
+            $pStatus = ucfirst((string)($latest['payment_status'] ?? 'pending'));
+            $oTot = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr((float)($latest['total'] ?? 0)) : '₹' . ($latest['total'] ?? 0);
+            $trackNo = (string)($latest['tracking_number'] ?? $latest['awb_number'] ?? '');
+            $courier = (string)($latest['courier_name'] ?? $latest['shipping_provider'] ?? '');
+            $msg = "*Order #{$oNum}*\n"
+                . "Status: {$oStatus}\n"
+                . "Payment: {$pStatus}\n"
+                . "Total: {$oTot}";
+            if ($trackNo !== '') {
+                $msg .= "\nTracking: {$trackNo}" . ($courier !== '' ? " ({$courier})" : '');
+            }
+            $chunks[] = $msg;
+        }
+        $waCloud->send_text($peer, implode("\n\n", $chunks) . "\n\nSend hi to open the menu.");
+    }
+
+    private function _forward_team_message(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, string $message, bool $first = true): void {
+        $this->load->helper('sk_whatsapp');
+        $this->db->where('id', (int)$conv['id'])->update('wa_cloud_conversations', [
+            'agent_state' => json_encode(['step' => 'team_chat'], JSON_UNESCAPED_UNICODE),
+            'updated_at'  => date('Y-m-d H:i:s'),
+        ]);
+        $note = "{$shopName} customer {$peer} wrote:\n{$message}";
+        $phones = function_exists('sk_whatsapp_owner_phones') ? sk_whatsapp_owner_phones($vendorId) : [];
+        $sent = 0;
+        foreach ($phones as $phone) {
+            $res = $waCloud->send_text($phone, $note);
+            if (!empty($res['success'])) {
+                $sent++;
+            }
+        }
+        if (function_exists('sk_whatsapp_notify_handoff')) {
+            sk_whatsapp_notify_handoff($vendorId, $peer, $message, $shopName);
+        }
+        if ($first) {
+            $waCloud->send_text($peer, $sent > 0
+                ? "Your message was sent to the {$shopName} owner. Keep writing here and each message is forwarded. Send hi to open the menu."
+                : "Your message is saved for the {$shopName} team. Keep writing here. Send hi to open the menu.");
+            return;
+        }
+        $waCloud->send_text($peer, "Sent to the {$shopName} owner.");
     }
 
     /**
