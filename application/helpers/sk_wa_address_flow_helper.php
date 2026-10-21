@@ -672,7 +672,7 @@ function sk_wa_address_flow_save(array $ctx, array $input): array {
         $data['error_message'] = 'Could not save the customer. Try again.';
         return ['ok' => false, 'screen' => 'ADDRESS', 'data' => $data];
     }
-    $CI->db->insert('addresses', [
+    $row = [
         'vendor_id'    => $vendorId,
         'user_id'      => $userId,
         'label'        => 'Home',
@@ -686,9 +686,25 @@ function sk_wa_address_flow_save(array $ctx, array $input): array {
         'country'      => 'India',
         'is_default'   => 1,
         'address_type' => 'shipping',
-        'created_at'   => $now,
-    ]);
-    $addressId = (int)$CI->db->insert_id();
+    ];
+    $editId = ($ctx['mode'] ?? '') === 'edit' ? (int)($ctx['address_id'] ?? 0) : 0;
+    $addressId = 0;
+    if ($editId > 0) {
+        $existing = $CI->db->where('id', $editId)->get('addresses')->row_array();
+        if ($existing) {
+            $CI->db->where('id', $editId)->update('addresses', $row);
+            $addressId = $editId;
+        }
+    }
+    if ($addressId < 1) {
+        $row['created_at'] = $now;
+        $CI->db->insert('addresses', $row);
+        $addressId = (int)$CI->db->insert_id();
+    }
+    if ($addressId < 1) {
+        $data['error_message'] = 'Could not save the address. Try again.';
+        return ['ok' => false, 'screen' => 'ADDRESS', 'data' => $data];
+    }
     return [
         'ok'     => true,
         'screen' => 'SUCCESS',
@@ -706,21 +722,27 @@ function sk_wa_address_flow_handle(array $payload): array {
         $data = sk_wa_address_flow_prefill('', 0);
         $data['error_message'] = 'This address form expired. Ask the shop to send it again.';
         return [
-            'screen' => 'ADDRESS',
-            'data'   => $data,
+            'version' => '3.0',
+            'screen'  => 'ADDRESS',
+            'data'    => $data,
         ];
     }
     if ($action === 'init' || $action === 'back') {
         return [
-            'screen' => 'ADDRESS',
-            'data'   => sk_wa_address_flow_prefill($token['peer'], (int)$token['address_id']),
+            'version' => '3.0',
+            'screen'  => 'ADDRESS',
+            'data'    => sk_wa_address_flow_prefill($token['peer'], (int)$token['address_id']),
         ];
     }
     $input = is_array($payload['data'] ?? null) ? $payload['data'] : $payload;
+    if (isset($input['address_form']) && is_array($input['address_form'])) {
+        $input = array_merge($input, $input['address_form']);
+    }
     $saved = sk_wa_address_flow_save($token, $input);
     return [
-        'screen' => (string)($saved['screen'] ?? 'ADDRESS'),
-        'data'   => is_array($saved['data'] ?? null) ? $saved['data'] : [],
+        'version' => '3.0',
+        'screen'  => (string)($saved['screen'] ?? 'ADDRESS'),
+        'data'    => is_array($saved['data'] ?? null) ? $saved['data'] : [],
     ];
 }
 

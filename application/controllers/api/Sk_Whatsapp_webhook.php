@@ -1720,7 +1720,13 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
      */
     private function _handle_address_flow_reply(string $peer, int $vendorId, Whatsapp_cloud $waCloud, string $shopName, array $conv, string $responseJson): void {
         $payload = json_decode($responseJson, true);
-        $addressId = (int)(is_array($payload) ? ($payload['address_id'] ?? 0) : 0);
+        if (is_string($payload)) {
+            $payload = json_decode($payload, true);
+        }
+        $addressId = 0;
+        if (is_array($payload)) {
+            $addressId = (int)($payload['address_id'] ?? ($payload['data']['address_id'] ?? 0));
+        }
         $addr = $addressId > 0 ? $this->db->where('id', $addressId)->get('addresses')->row_array() : null;
         if (!$addr) {
             $addr = $this->_get_latest_customer_address($peer);
@@ -1734,6 +1740,11 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             'agent_state' => json_encode(['address_id' => $addressId], JSON_UNESCAPED_UNICODE),
             'updated_at'  => date('Y-m-d H:i:s'),
         ]);
+        $cartCount = $this->db->where('session_id', 'wa_' . $peer)->where('vendor_id', $vendorId)->count_all_results('cart');
+        if ($cartCount > 0) {
+            $this->_send_checkout_payment_mode_options($peer, $vendorId, $waCloud, $shopName, $addressId);
+            return;
+        }
         $name = (string)($addr['full_name'] ?? '');
         $phone = (string)($addr['phone'] ?? $peer);
         $line1 = (string)($addr['line1'] ?? '');
