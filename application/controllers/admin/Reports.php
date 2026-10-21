@@ -64,7 +64,7 @@ class Reports extends Sk_Base {
     }
 
     private function _top_products_in_range($from, $to, $limit = 10) {
-        return $this->db->select('oi.product_name, SUM(oi.quantity) as qty_sold, SUM(oi.subtotal) as revenue')
+        return $this->db->select('MAX(oi.product_name) AS product_name, SUM(oi.quantity) AS qty_sold, SUM(oi.subtotal) AS revenue', false)
                         ->from('order_items oi')
                         ->join('orders o', 'o.id = oi.order_id')
                         ->where("DATE(o.created_at) BETWEEN '$from' AND '$to'", null, false)
