@@ -503,77 +503,9 @@ class Sk_Whatsapp_webhook extends Sk_Base_Api {
             return;
         }
 
-        // 3. BUTTON 2 — 🏷️ OFFERS & DEALS:
+        // 3. BUTTON 2 — OFFERS & DEALS opens the same WhatsApp catalog.
         if ($interactiveId === 'offers_deals' || $trimBody === '2' || preg_match('/^(offers|deals|discounts|coupons)$/iu', $trimBody)) {
-            $now = date('Y-m-d H:i:s');
-            $sql = "SELECT p.*, c.name as category_name 
-                    FROM products p 
-                    LEFT JOIN categories c ON c.id = p.category_id 
-                    WHERE p.vendor_id = ? AND p.status = 'active' 
-                      AND p.sale_price IS NOT NULL AND p.sale_price > 0 AND p.sale_price < p.price
-                      AND (p.sale_start_at IS NULL OR p.sale_start_at <= ?)
-                      AND (p.sale_end_at IS NULL OR p.sale_end_at >= ?)
-                    ORDER BY (p.price - p.sale_price) DESC 
-                    LIMIT 8";
-            $discounted = $this->db->query($sql, [$vendorId, $now, $now])->result_array();
-            if (empty($discounted)) {
-                $sqlHot = "SELECT p.*, c.name as category_name 
-                           FROM products p 
-                           LEFT JOIN categories c ON c.id = p.category_id 
-                           WHERE p.vendor_id = ? AND p.status = 'active' 
-                             AND (p.hot_sale = 1 OR p.special_product = 1 OR p.featured = 1)
-                           ORDER BY p.id DESC LIMIT 5";
-                $discounted = $this->db->query($sqlHot, [$vendorId])->result_array();
-            }
-
-            if (!empty($discounted)) {
-                if ($this->_send_catalog_product_list($peer, $vendorId, $phoneNumberId, $waCloud, $shopName, $discounted, $shopName . ' Offers')) {
-                    return;
-                }
-                $rows = [];
-                foreach ($discounted as $idx => $p) {
-                    $origPrice = (float)($p['price'] ?? 0);
-                    $salePrice = isset($p['sale_price']) && (float)$p['sale_price'] > 0 ? (float)$p['sale_price'] : $origPrice;
-                    $savings = max(0, $origPrice - $salePrice);
-                    $pct = $origPrice > 0 && $savings > 0 ? round(($savings / $origPrice) * 100) : 0;
-                    $pName = trim((string)($p['name'] ?? 'Product'));
-                    $priceStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($salePrice) : "₹{$salePrice}";
-                    $origStr = function_exists('sk_mcp_tool_inr') ? sk_mcp_tool_inr($origPrice) : "₹{$origPrice}";
-
-                    $desc = $pct > 0 ? "{$priceStr} (Was {$origStr}, {$pct}% OFF)" : $priceStr;
-                    $rows[] = [
-                        'id'          => (string)($p['sku'] ?? ('prod_' . $p['id'])),
-                        'title'       => function_exists('mb_substr') ? mb_substr($pName, 0, 24) : substr($pName, 0, 24),
-                        'description' => function_exists('mb_substr') ? mb_substr($desc, 0, 72) : substr($desc, 0, 72),
-                    ];
-                }
-
-                $interactive = [
-                    'type'   => 'list',
-                    'header' => [
-                        'type' => 'text',
-                        'text' => function_exists('mb_substr') ? mb_substr("{$shopName} Offers", 0, 60) : substr("{$shopName} Offers", 0, 60),
-                    ],
-                    'body'   => [
-                        'text' => "🎉 Here are today's special discounts and offers at {$shopName}!\nTap below to explore deals:",
-                    ],
-                    'footer' => [
-                        'text' => 'Limited time offers',
-                    ],
-                    'action' => [
-                        'button'   => 'View Offers',
-                        'sections' => [
-                            [
-                                'title' => "Today's Deals",
-                                'rows'  => array_slice($rows, 0, 10),
-                            ],
-                        ],
-                    ],
-                ];
-                $waCloud->send_interactive($peer, $interactive);
-            } else {
-                $waCloud->send_text($peer, "No active offers right now 😊 Would you like to browse our products?\nReply with *1* to browse or send a saree name to search!");
-            }
+            $this->_send_saree_catalog($peer, $vendorId, $waCloud, $shopName, $phoneNumberId);
             return;
         }
 

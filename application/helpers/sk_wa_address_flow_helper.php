@@ -150,7 +150,7 @@ function sk_wa_shop_welcome_interactive(int $vendorId, string $shopName): array 
         : "Welcome to {$shopName}.\nChoose an option.";
     $ids = [
         'catalog' => ['id' => 'browse_products', 'title' => 'Browse Products', 'description' => 'Open the catalog'],
-        'offers'  => ['id' => 'offers_deals', 'title' => 'Offers & Deals', 'description' => 'Today\'s discounts'],
+        'offers'  => ['id' => 'offers_deals', 'title' => 'Offers & Deals', 'description' => 'Open the catalog'],
         'search'  => ['id' => 'search_product', 'title' => 'Search Product', 'description' => 'Find a product by name'],
         'track'   => ['id' => 'track_order', 'title' => 'Track Order', 'description' => 'Check an order'],
         'human'   => ['id' => 'talk_to_team', 'title' => 'Talk to Team', 'description' => 'Message the shop team'],
